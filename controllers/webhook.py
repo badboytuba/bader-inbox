@@ -21,7 +21,14 @@ class BaderInboxWebhook(http.Controller):
         try:
             # Odoo 16 compatibility - get JSON data from request
             data = request.get_json_data() if hasattr(request, 'get_json_data') else (request.jsonrequest if hasattr(request, 'jsonrequest') else kwargs)
-            _logger.info(f"Webhook for channel {channel_id}: {json.dumps(data)[:500]}")
+            _logger.info(f"Webhook for channel {channel_id}: {json.dumps(data)[:2000]}")
+            
+            # DEBUG: Save full payload to file for analysis
+            try:
+                with open(f"/tmp/webhook_debug_{channel_id}.json", "w") as f:
+                    json.dump(data, f, indent=2, default=str)
+            except:
+                pass
             
             channel = request.env["bader.inbox.channel"].sudo().browse(channel_id)
             if not channel.exists():
