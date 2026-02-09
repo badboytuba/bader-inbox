@@ -14,9 +14,9 @@ class BaderInboxConversation(models.Model):
     _description = "Bader Inbox Conversation"
     _order = "last_message_date desc"
     _inherit = ["mail.thread", "mail.activity.mixin"]
+    _rec_name = "computed_name"
 
-    name = fields.Char(compute="_compute_name", store=True)
-    display_name = fields.Char(compute="_compute_display_name", store=True)
+    computed_name = fields.Char(compute="_compute_name", store=True, string="Name")
     
     # Contact info
     phone = fields.Char(string="Phone", required=True, index=True)
@@ -57,20 +57,15 @@ class BaderInboxConversation(models.Model):
     # Tags
     tag_ids = fields.Many2many("bader.inbox.tag", string="Tags")
     
-    @api.depends("contact_name", "phone")
+    @api.depends("contact_name", "phone", "partner_id")
     def _compute_name(self):
         for rec in self:
-            rec.name = rec.contact_name or rec.phone or "Unknown"
-
-    @api.depends("contact_name", "phone", "partner_id")
-    def _compute_display_name(self):
-        for rec in self:
             if rec.partner_id:
-                rec.display_name = rec.partner_id.name
+                rec.computed_name = rec.partner_id.name
             elif rec.contact_name:
-                rec.display_name = rec.contact_name
+                rec.computed_name = rec.contact_name
             else:
-                rec.display_name = rec.phone or "Unknown"
+                rec.computed_name = rec.phone or "Unknown"
 
     @api.model
     def get_or_create(self, channel_id, phone, whatsapp_id=None, contact_name=None):

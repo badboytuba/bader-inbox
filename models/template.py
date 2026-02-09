@@ -81,7 +81,7 @@ class BaderInboxChatbot(models.Model):
             keywords = [k.strip().lower() for k in (self.trigger_keywords or "").split(",")]
             return any(kw in content_lower for kw in keywords if kw)
         elif self.trigger_type == "first_message":
-            return len(conversation.message_ids) == 1
+            return len(conversation.inbox_message_ids) == 1
         elif self.trigger_type == "all":
             return True
         return False

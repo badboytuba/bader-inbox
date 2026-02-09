@@ -110,7 +110,7 @@ class BaderInboxWebhook(http.Controller):
         try:
             payload = {
                 "conversation_id": conversation.id,
-                "contact_name": contact_name or conversation.display_name,
+                "contact_name": contact_name or conversation.computed_name,
                 "phone": phone,
                 "message": {
                     "id": message.id,
