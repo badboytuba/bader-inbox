@@ -7,7 +7,7 @@ import { _t } from "@web/core/l10n/translation";
 
 export class BaderInboxMain extends Component {
     static template = "bader_inbox.InboxMain";
-    static props = {};
+    static props = { "*": true };
 
     setup() {
         this.orm = useService("orm");
