@@ -52,6 +52,14 @@ export class BaderInboxMain extends Component {
         onWillStart(async () => {
             await this.loadChannels();
             await this.loadConversations();
+
+            // Check if we need to open a specific conversation (from PhoneWhatsAppWidget)
+            const params = this.props.action?.params || {};
+            if (params.conversation_id) {
+                await this.openConversationById(params.conversation_id);
+            } else if (params.phone) {
+                await this.openConversationByPhone(params.phone);
+            }
         });
 
         onWillUnmount(() => {
@@ -123,6 +131,48 @@ export class BaderInboxMain extends Component {
         this.state.loadingMessages = false;
     }
 
+    async openConversationById(conversationId) {
+        // Open a specific conversation by ID
+        const conv = this.state.conversations.find(c => c.id === conversationId);
+        if (conv) {
+            this.selectConversation(conv);
+        } else {
+            // Conversation might not be in current list, load it
+            try {
+                const conversations = await this.orm.searchRead(
+                    "bader.inbox.conversation",
+                    [["id", "=", conversationId]],
+                    ["id", "computed_name", "phone", "last_message", "last_message_date",
+                        "unread_count", "state", "assigned_user_id", "partner_id", "channel_id"]
+                );
+                if (conversations.length) {
+                    this.state.conversations.unshift(conversations[0]);
+                    this.selectConversation(conversations[0]);
+                }
+            } catch (e) {
+                console.error("Error loading conversation:", e);
+            }
+        }
+    }
+
+    async openConversationByPhone(phone) {
+        // Open or create conversation by phone number
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.conversation",
+                "open_or_create_by_phone",
+                [phone]
+            );
+            if (result && result.conversation_id) {
+                await this.loadConversations();
+                await this.openConversationById(result.conversation_id);
+            }
+        } catch (e) {
+            console.error("Error opening conversation by phone:", e);
+            this.notification.add(_t("Erro ao abrir conversa: ") + e.message, { type: "danger" });
+        }
+    }
+
     // ==========================================
     // CHANNEL CREATION (PLUG AND PLAY)
     // ==========================================
@@ -188,11 +238,12 @@ export class BaderInboxMain extends Component {
                 const channel = channels[0];
 
                 if (channel.state === "connected") {
-                    // Connected!
+                    // Connected - close modal and go to inbox!
                     this.stopQRPolling();
-                    this.state.channelStep = 3;
-                    this.state.connectedPhone = channel.phone || channel.phone_name || "WhatsApp conectado";
                     this.notification.add(_t("WhatsApp conectado com sucesso!"), { type: "success" });
+                    this.state.showChannelModal = false;
+                    this.loadChannels();
+                    this.loadConversations();
                 } else if (channel.qrcode_base64) {
                     this.state.qrCodeData = channel.qrcode_base64;
                 }

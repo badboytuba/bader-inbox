@@ -48,9 +48,16 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             _logger.error(f"API request failed: {e}")
             return {"success": False, "error": str(e)}
 
-    def create_instance(self, instance_name):
-        """Create new WhatsApp instance"""
+    def create_instance(self, instance_name, webhook_url=None):
+        """Create new WhatsApp instance with webhook configured"""
         data = {"instanceName": instance_name}
+        # Include webhook in creation for Evolution API versions that support it
+        if webhook_url:
+            data["webhook"] = {
+                "url": webhook_url,
+                "enabled": True,
+                "events": ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "QRCODE_UPDATED"]
+            }
         result = self._request("POST", "/instance/create", data)
         return {"success": "instance" in result or "instanceName" in result, **result}
 
@@ -87,7 +94,11 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
 
     def set_webhook(self, instance_name, webhook_url):
         """Configure webhook for instance"""
-        data = {"webhookUrl": webhook_url}
+        data = {
+            "webhookUrl": webhook_url,
+            "enabled": True,
+            "events": ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "QRCODE_UPDATED"]
+        }
         return self._request("POST", f"/webhook/set/{instance_name}", data)
 
     def send_text(self, instance_name, phone, text):

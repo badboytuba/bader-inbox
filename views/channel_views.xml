@@ -44,7 +44,7 @@
                     <div attrs="{'invisible': [('state', '!=', 'qr_ready')]}">
                         <h3>📱 Escaneie o QR Code com seu WhatsApp:</h3>
                         <p>Abra WhatsApp → Dispositivos Vinculados → Vincular Dispositivo</p>
-                        <field name="qrcode_base64" widget="image" class="oe_avatar" style="max-width: 300px;"/>
+                        <field name="qrcode_base64" widget="image" style="width: 256px; height: 256px; border: 2px solid #1abc9c; border-radius: 8px; padding: 10px; background: white;"/>
                     </div>
                 </sheet>
             </form>

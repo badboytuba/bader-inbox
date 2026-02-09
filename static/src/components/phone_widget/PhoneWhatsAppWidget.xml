@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="bader_inbox.PhoneWhatsAppWidget" owl="1">
+        <div class="phone-whatsapp-widget d-flex align-items-center"
+             t-on-mouseenter="onMouseEnter"
+             t-on-mouseleave="onMouseLeave">
+            
+            <!-- Phone Number Display -->
+            <span class="phone-number" 
+                  t-att-class="{ 'text-muted': !hasPhone }"
+                  t-on-click="onPhoneClick"
+                  t-esc="formattedPhone || 'Sem telefone'"/>
+            
+            <!-- WhatsApp Button (appears on hover) -->
+            <t t-if="hasPhone">
+                <button t-att-class="'btn-whatsapp ms-2 ' + (state.showWhatsApp ? 'visible' : '')"
+                        t-on-click="onWhatsAppClick"
+                        t-att-disabled="state.loading"
+                        title="Abrir conversa no WhatsApp">
+                    <t t-if="state.loading">
+                        <i class="fa fa-spinner fa-spin"/>
+                    </t>
+                    <t t-else="">
+                        <i class="fa fa-whatsapp"/>
+                    </t>
+                </button>
+            </t>
+        </div>
+    </t>
+
+</templates>

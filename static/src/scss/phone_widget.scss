@@ -1,0 +1,99 @@
+/* Phone WhatsApp Widget Styles */
+
+.phone-whatsapp-widget {
+    position: relative;
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.5rem;
+
+    .phone-number {
+        cursor: pointer;
+        transition: color 0.2s ease;
+
+        &:hover {
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+    }
+
+    .btn-whatsapp {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: #25D366;
+        color: white;
+        cursor: pointer;
+        opacity: 0;
+        transform: scale(0.8);
+        transition: all 0.2s ease;
+
+        &.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        &:hover {
+            background: #128C7E;
+            transform: scale(1.1);
+            box-shadow: 0 2px 8px rgba(37, 211, 102, 0.4);
+        }
+
+        &:disabled {
+            background: #ccc;
+            cursor: wait;
+        }
+
+        i {
+            font-size: 16px;
+        }
+
+        .fa-whatsapp {
+            font-size: 18px;
+        }
+    }
+}
+
+/* Alternative: Always visible but subtle */
+.o_field_phone_whatsapp {
+    .phone-whatsapp-widget {
+        .btn-whatsapp {
+            opacity: 0.3;
+            transform: scale(0.9);
+
+            &:hover,
+            &.visible {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+    }
+}
+
+/* Form view integration */
+.o_form_view {
+    .phone-whatsapp-widget {
+        .btn-whatsapp {
+            margin-left: 8px;
+        }
+    }
+}
+
+/* Kanban/List view integration */
+.o_kanban_view,
+.o_list_view {
+    .phone-whatsapp-widget {
+        .btn-whatsapp {
+            width: 24px;
+            height: 24px;
+
+            i {
+                font-size: 14px;
+            }
+        }
+    }
+}

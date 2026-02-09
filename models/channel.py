@@ -64,17 +64,21 @@ class BaderInboxChannel(models.Model):
             instance_name = f"bader_{self.id}_{self.name.lower().replace(' ', '_')}"
             self.evolution_instance_name = instance_name
             
-            # Create instance
-            result = api.create_instance(instance_name)
-            if not result.get("success"):
-                raise UserError(_("Failed to create instance: %s") % result.get("error"))
-            
-            # Set webhook
+            # Generate webhook URL BEFORE creating instance
             base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url")
             webhook_url = f"{base_url}/bader-inbox/webhook/{self.id}"
             self.webhook_url = webhook_url
             
-            api.set_webhook(instance_name, webhook_url)
+            # Create instance WITH webhook configured
+            result = api.create_instance(instance_name, webhook_url=webhook_url)
+            if not result.get("success"):
+                raise UserError(_("Failed to create instance: %s") % result.get("error"))
+            
+            # Also try set_webhook as fallback for older API versions
+            try:
+                api.set_webhook(instance_name, webhook_url)
+            except Exception:
+                pass  # Ignore - webhook was already set during creation
             
             # Get QR code
             qr_result = api.get_qrcode(instance_name)

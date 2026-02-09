@@ -91,6 +91,63 @@ class BaderInboxConversation(models.Model):
         
         return conversation
 
+    @api.model
+    def open_or_create_by_phone(self, phone, partner_id=None, contact_name=None, model=None):
+        """Find or create conversation by phone - used by PhoneWhatsAppWidget"""
+        if not phone:
+            return {"success": False, "error": "No phone number provided"}
+        
+        # Clean phone number
+        clean_phone = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        if clean_phone.startswith("+"):
+            clean_phone = clean_phone[1:]
+        
+        # Find existing conversation with this phone
+        conversation = self.search([
+            ("phone", "ilike", clean_phone)
+        ], limit=1)
+        
+        if not conversation:
+            # Get the default/first active channel
+            channel = self.env["bader.inbox.channel"].search([
+                ("state", "=", "connected")
+            ], limit=1)
+            
+            if not channel:
+                channel = self.env["bader.inbox.channel"].search([], limit=1)
+            
+            if not channel:
+                return {"success": False, "error": "No WhatsApp channel available"}
+            
+            # Try to get partner data
+            partner = None
+            if partner_id:
+                partner = self.env["res.partner"].browse(partner_id)
+                if not partner.exists():
+                    partner = None
+            
+            if not partner and phone:
+                partner = self.env["res.partner"].search([
+                    "|", ("phone", "ilike", clean_phone), ("mobile", "ilike", clean_phone)
+                ], limit=1)
+            
+            # Create conversation
+            conversation = self.create({
+                "channel_id": channel.id,
+                "phone": clean_phone,
+                "contact_name": contact_name or (partner.name if partner else ""),
+                "partner_id": partner.id if partner else False,
+            })
+        
+        return {
+            "success": True,
+            "conversation_id": conversation.id,
+            "channel_id": conversation.channel_id.id,
+            "phone": conversation.phone,
+            "contact_name": conversation.contact_name,
+            "partner_id": conversation.partner_id.id if conversation.partner_id else False,
+        }
+
     def action_mark_read(self):
         """Mark all messages as read"""
         self.ensure_one()
