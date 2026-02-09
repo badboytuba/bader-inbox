@@ -1,8 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_bader_inbox_channel_all,bader.inbox.channel.all,model_bader_inbox_channel,base.group_user,1,0,0,0
-access_bader_inbox_channel_manager,bader.inbox.channel.manager,model_bader_inbox_channel,group_bader_inbox_manager,1,1,1,1
-access_bader_inbox_conversation_all,bader.inbox.conversation.all,model_bader_inbox_conversation,base.group_user,1,1,1,0
-access_bader_inbox_conversation_manager,bader.inbox.conversation.manager,model_bader_inbox_conversation,group_bader_inbox_manager,1,1,1,1
-access_bader_inbox_message_all,bader.inbox.message.all,model_bader_inbox_message,base.group_user,1,1,1,0
-access_bader_inbox_message_manager,bader.inbox.message.manager,model_bader_inbox_message,group_bader_inbox_manager,1,1,1,1
+access_bader_inbox_channel_all,bader.inbox.channel.all,model_bader_inbox_channel,base.group_user,1,1,1,1
+access_bader_inbox_conversation_all,bader.inbox.conversation.all,model_bader_inbox_conversation,base.group_user,1,1,1,1
+access_bader_inbox_message_all,bader.inbox.message.all,model_bader_inbox_message,base.group_user,1,1,1,1
 access_bader_inbox_settings_all,bader.inbox.settings.all,model_bader_inbox_settings,base.group_user,1,1,1,1
