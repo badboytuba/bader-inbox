@@ -1,77 +1,254 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="bader_inbox.InboxMain" owl="1">
-        <div class="bader-inbox-container d-flex h-100">
-            <!-- LEFT: Conversations -->
-            <div class="bader-inbox-left d-flex flex-column" style="width: 320px; border-right: 1px solid #dee2e6;">
-                <div class="bader-inbox-header p-3 bg-primary text-white">
-                    <h5 class="mb-0"><i class="fa fa-comments me-2"/>Bader Inbox</h5>
+        <div class="bader-inbox-container">
+            <!-- HEADER BAR -->
+            <div class="bader-inbox-header-bar" style="position: fixed; top: 0; left: 0; right: 0; z-index: 100;">
+                <div class="bader-logo">
+                    <i class="fa fa-comments"/>
+                    <span>Bader Inbox</span>
                 </div>
-                <div class="d-flex border-bottom bg-light">
-                    <button t-attf-class="btn btn-sm flex-fill rounded-0 {{ state.filter === 'all' ? 'btn-primary' : 'btn-light' }}" t-on-click="() => this.setFilter('all')">Todas</button>
-                    <button t-attf-class="btn btn-sm flex-fill rounded-0 {{ state.filter === 'unread' ? 'btn-primary' : 'btn-light' }}" t-on-click="() => this.setFilter('unread')">Não Lidas</button>
-                    <button t-attf-class="btn btn-sm flex-fill rounded-0 {{ state.filter === 'mine' ? 'btn-primary' : 'btn-light' }}" t-on-click="() => this.setFilter('mine')">Minhas</button>
+                <div class="bader-search">
+                    <i class="fa fa-search search-icon"/>
+                    <input type="text" placeholder="Buscar conversas..." t-model="state.searchQuery" t-on-input="onSearch"/>
                 </div>
-                <div class="flex-grow-1 overflow-auto">
-                    <t t-if="state.loadingConversations"><div class="text-center p-4"><i class="fa fa-spinner fa-spin fa-2x"/></div></t>
-                    <t t-elif="!state.conversations.length"><div class="text-center p-4 text-muted"><i class="fa fa-inbox fa-3x mb-3"/><p>Nenhuma conversa</p></div></t>
-                    <t t-else="">
-                        <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
-                            <div t-attf-class="p-3 border-bottom cursor-pointer {{ state.selectedConversation?.id === conv.id ? 'bg-light' : '' }}" t-on-click="() => this.selectConversation(conv)">
-                                <div class="d-flex">
-                                    <div class="bader-inbox-avatar me-3 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                                        <t t-esc="getInitials(conv.display_name)"/>
-                                    </div>
-                                    <div class="flex-grow-1 overflow-hidden">
-                                        <div class="d-flex justify-content-between">
-                                            <strong class="text-truncate" t-esc="conv.display_name"/>
-                                            <small class="text-muted" t-esc="formatTime(conv.last_message_date)"/>
-                                        </div>
-                                        <div class="d-flex justify-content-between">
-                                            <small class="text-muted text-truncate" t-esc="conv.last_message || '-'"/>
-                                            <t t-if="conv.unread_count > 0"><span class="badge bg-success"><t t-esc="conv.unread_count"/></span></t>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </t>
-                    </t>
+                <div class="bader-header-actions">
+                    <button class="btn-header" title="Canais WhatsApp" t-on-click="openChannels">
+                        <i class="fa fa-whatsapp"/>
+                    </button>
+                    <button class="btn-header" title="Templates" t-on-click="openTemplates">
+                        <i class="fa fa-file-text-o"/>
+                    </button>
+                    <button class="btn-header" title="Configurações" t-on-click="openSettings">
+                        <i class="fa fa-cog"/>
+                    </button>
+                    <div class="user-avatar">
+                        <t t-esc="getUserInitials()"/>
+                    </div>
                 </div>
             </div>
-            
-            <!-- CENTER: Chat -->
-            <div class="bader-inbox-center d-flex flex-column flex-grow-1">
-                <t t-if="state.selectedConversation">
-                    <div class="p-3 border-bottom bg-white d-flex align-items-center">
-                        <div class="bader-inbox-avatar me-3 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                            <t t-esc="getInitials(state.selectedConversation.display_name)"/>
-                        </div>
-                        <div>
-                            <h6 class="mb-0" t-esc="state.selectedConversation.display_name"/>
-                            <small class="text-muted" t-esc="state.selectedConversation.phone"/>
+
+            <!-- MAIN CONTENT (below header) -->
+            <div class="d-flex" style="margin-top: 56px; height: calc(100% - 56px);">
+                <!-- LEFT PANEL: Conversations -->
+                <div class="bader-inbox-left">
+                    <div class="panel-header">
+                        <h3>Conversas</h3>
+                        <div class="filter-tabs">
+                            <button t-attf-class="filter-tab {{ state.filter === 'all' ? 'active' : '' }}" t-on-click="() => this.setFilter('all')">
+                                Todas
+                            </button>
+                            <button t-attf-class="filter-tab {{ state.filter === 'unread' ? 'active' : '' }}" t-on-click="() => this.setFilter('unread')">
+                                <i class="fa fa-circle text-success me-1" style="font-size: 8px;"/> Não lidas
+                            </button>
+                            <button t-attf-class="filter-tab {{ state.filter === 'mine' ? 'active' : '' }}" t-on-click="() => this.setFilter('mine')">
+                                Minhas
+                            </button>
                         </div>
                     </div>
-                    <div class="bader-inbox-messages flex-grow-1 overflow-auto p-3" t-ref="messagesContainer">
-                        <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
-                            <div t-attf-class="bader-inbox-message mb-2 {{ msg.direction === 'out' ? 'text-end' : '' }}">
-                                <div t-attf-class="d-inline-block p-2 px-3 rounded-3 {{ msg.direction === 'out' ? 'bg-success' : 'bg-white' }}" style="max-width: 70%;">
-                                    <t t-esc="msg.content"/>
-                                    <div class="small text-muted" style="font-size: 11px;"><t t-esc="formatTime(msg.create_date)"/></div>
-                                </div>
+
+                    <div class="conversations-list">
+                        <t t-if="state.loadingConversations">
+                            <div class="empty-state">
+                                <i class="fa fa-spinner fa-spin"/>
+                                <p>Carregando...</p>
                             </div>
                         </t>
+                        <t t-elif="!filteredConversations.length">
+                            <div class="empty-state">
+                                <i class="fa fa-inbox"/>
+                                <p>Nenhuma conversa</p>
+                            </div>
+                        </t>
+                        <t t-else="">
+                            <t t-foreach="filteredConversations" t-as="conv" t-key="conv.id">
+                                <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }}" 
+                                     t-on-click="() => this.selectConversation(conv)">
+                                    <div t-attf-class="conv-avatar {{ getAvatarColor(conv.id) }}">
+                                        <t t-esc="getInitials(conv.computed_name || conv.phone)"/>
+                                        <div class="status-dot online"/>
+                                    </div>
+                                    <div class="conv-content">
+                                        <div class="conv-header">
+                                            <span class="conv-name" t-esc="conv.computed_name || conv.phone"/>
+                                            <span class="conv-time" t-esc="formatTime(conv.last_message_date)"/>
+                                        </div>
+                                        <div class="conv-preview">
+                                            <span class="conv-message" t-esc="conv.last_message || 'Nova conversa'"/>
+                                            <t t-if="conv.unread_count > 0">
+                                                <span class="conv-badge" t-esc="conv.unread_count"/>
+                                            </t>
+                                        </div>
+                                        <t t-if="conv.tag_ids and conv.tag_ids.length">
+                                            <div class="conv-tags">
+                                                <span class="tag tag-green">WhatsApp</span>
+                                            </div>
+                                        </t>
+                                    </div>
+                                </div>
+                            </t>
+                        </t>
                     </div>
-                    <div class="bader-inbox-composer p-3 border-top bg-white d-flex">
-                        <textarea class="form-control me-2" rows="1" placeholder="Escreva..." t-model="state.composerText" t-on-keydown="(e) => e.key === 'Enter' and !e.shiftKey and (e.preventDefault(), this.sendMessage())"/>
-                        <button class="btn btn-success" t-on-click="sendMessage" t-att-disabled="state.sendingMessage">
-                            <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
-                        </button>
-                    </div>
-                </t>
-                <t t-else="">
-                    <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
-                        <i class="fa fa-comments fa-5x mb-4"/>
-                        <h4>Selecione uma conversa</h4>
+                </div>
+
+                <!-- CENTER PANEL: Chat -->
+                <div class="bader-inbox-center">
+                    <t t-if="state.selectedConversation">
+                        <div class="chat-header">
+                            <div class="chat-contact">
+                                <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
+                                    <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                                </div>
+                                <div class="contact-info">
+                                    <h4 t-esc="state.selectedConversation.computed_name || state.selectedConversation.phone"/>
+                                    <p t-esc="state.selectedConversation.phone"/>
+                                </div>
+                            </div>
+                            <div class="chat-actions">
+                                <button class="btn-chat-action" title="Atribuir" t-on-click="assignConversation">
+                                    <i class="fa fa-user-plus"/>
+                                </button>
+                                <button class="btn-chat-action" title="Adicionar tag" t-on-click="addTag">
+                                    <i class="fa fa-tag"/>
+                                </button>
+                                <button class="btn-chat-action" title="Resolver" t-on-click="resolveConversation">
+                                    <i class="fa fa-check"/>
+                                </button>
+                                <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Esconder detalhes' : 'Ver detalhes'">
+                                    <i class="fa fa-user"/>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="chat-messages" t-ref="messagesContainer">
+                            <t t-if="state.loadingMessages">
+                                <div class="text-center p-4">
+                                    <i class="fa fa-spinner fa-spin fa-2x"/>
+                                </div>
+                            </t>
+                            <t t-else="">
+                                <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
+                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}">
+                                        <div class="message-bubble">
+                                            <div class="message-text" t-esc="msg.content"/>
+                                            <div class="message-meta">
+                                                <span class="message-time" t-esc="formatTime(msg.create_date)"/>
+                                                <t t-if="msg.direction === 'out'">
+                                                    <i t-attf-class="fa fa-check message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : 'sent' }}"/>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </t>
+                            </t>
+                        </div>
+
+                        <div class="chat-composer">
+                            <div class="composer-actions">
+                                <button class="btn-composer" title="Anexar arquivo">
+                                    <i class="fa fa-paperclip"/>
+                                </button>
+                                <button class="btn-composer" title="Templates" t-on-click="showTemplatesPopup">
+                                    <i class="fa fa-bolt"/>
+                                </button>
+                                <button class="btn-composer" title="Emoji">
+                                    <i class="fa fa-smile-o"/>
+                                </button>
+                            </div>
+                            <div class="composer-input">
+                                <textarea rows="1" placeholder="Escreva uma mensagem..." 
+                                    t-model="state.composerText" 
+                                    t-on-keydown="onComposerKeydown"/>
+                            </div>
+                            <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || !state.composerText.trim()">
+                                <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
+                            </button>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="empty-chat">
+                            <div class="empty-icon">
+                                <i class="fa fa-comments"/>
+                            </div>
+                            <h3>Bader Inbox</h3>
+                            <p>Selecione uma conversa para começar</p>
+                        </div>
+                    </t>
+                </div>
+
+                <!-- RIGHT PANEL: Contact Details -->
+                <t t-if="state.showContactPanel and state.selectedConversation">
+                    <div class="bader-inbox-right">
+                        <div class="contact-header">
+                            <div t-attf-class="contact-avatar-large {{ getAvatarColor(state.selectedConversation.id) }}">
+                                <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                            </div>
+                            <h3 t-esc="state.selectedConversation.computed_name || 'Desconhecido'"/>
+                            <p t-esc="state.selectedConversation.phone"/>
+                            <span class="contact-status lead">
+                                <i class="fa fa-circle" style="font-size: 8px;"/> Lead
+                            </span>
+                        </div>
+
+                        <div class="contact-section">
+                            <h4>Informações</h4>
+                            <div class="info-row">
+                                <i class="fa fa-phone"/>
+                                <span class="info-value link" t-esc="state.selectedConversation.phone"/>
+                            </div>
+                            <div class="info-row">
+                                <i class="fa fa-whatsapp"/>
+                                <span class="info-label">Canal</span>
+                                <span class="info-value" t-esc="state.selectedConversation.channel_id?.[1] || 'WhatsApp'"/>
+                            </div>
+                            <div class="info-row">
+                                <i class="fa fa-user"/>
+                                <span class="info-label">Atribuído</span>
+                                <span class="info-value" t-esc="state.selectedConversation.assigned_user_id?.[1] || 'Não atribuído'"/>
+                            </div>
+                            <div class="info-row">
+                                <i class="fa fa-flag"/>
+                                <span class="info-label">Estado</span>
+                                <span class="info-value" t-esc="state.selectedConversation.state || 'Aberta'"/>
+                            </div>
+                        </div>
+
+                        <div class="contact-section">
+                            <h4>Tags</h4>
+                            <div class="tags-list">
+                                <span class="tag tag-primary">whatsapp</span>
+                                <span class="tag">novo</span>
+                            </div>
+                        </div>
+
+                        <div class="contact-actions">
+                            <button class="action-btn primary" t-on-click="createOpportunity">
+                                <i class="fa fa-dollar"/>
+                                <span>Criar Oportunidade</span>
+                                <i class="fa fa-chevron-right chevron"/>
+                            </button>
+                            <button class="action-btn" t-on-click="viewPartner">
+                                <i class="fa fa-user"/>
+                                <span>Ver/Criar Contato</span>
+                                <i class="fa fa-chevron-right chevron"/>
+                            </button>
+                            <button class="action-btn" t-on-click="scheduleActivity">
+                                <i class="fa fa-calendar"/>
+                                <span>Agendar Atividade</span>
+                                <i class="fa fa-chevron-right chevron"/>
+                            </button>
+                            <button class="action-btn" t-on-click="viewHistory">
+                                <i class="fa fa-history"/>
+                                <span>Histórico</span>
+                                <i class="fa fa-chevron-right chevron"/>
+                            </button>
+                        </div>
+
+                        <div class="internal-notes">
+                            <h4>Notas Internas</h4>
+                            <textarea placeholder="Escreva uma nota..." t-model="state.internalNote"/>
+                            <div class="note-hint">Pressione Enter para guardar a nota</div>
+                        </div>
                     </div>
                 </t>
             </div>

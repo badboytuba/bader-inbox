@@ -120,7 +120,13 @@
         </field>
     </record>
 
-    <!-- Actions -->
+    <!-- Client Action for OWL Inbox -->
+    <record id="action_bader_inbox_main" model="ir.actions.client">
+        <field name="name">Bader Inbox</field>
+        <field name="tag">bader_inbox_main</field>
+    </record>
+
+    <!-- Window Actions -->
     <record id="action_bader_inbox_conversation" model="ir.actions.act_window">
         <field name="name">📥 Inbox</field>
         <field name="res_model">bader.inbox.conversation</field>
