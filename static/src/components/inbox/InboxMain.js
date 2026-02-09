@@ -65,12 +65,12 @@ export class BaderInboxMain extends Component {
         });
 
         onMounted(() => {
-            // Poll conversations every 5 seconds for real-time sync
+            // Silent poll: conversations every 5s, messages every 3s
+            // These use _refresh methods that do NOT show loading spinners
             this.conversationPollInterval = setInterval(() => {
-                this.loadConversations();
+                this._refreshConversations();
             }, 5000);
 
-            // Poll messages every 3 seconds when a conversation is open
             this.messagePollInterval = setInterval(() => {
                 if (this.state.selectedConversation) {
                     this._refreshMessages(this.state.selectedConversation.id);
@@ -124,6 +124,45 @@ export class BaderInboxMain extends Component {
             console.error("Error loading conversations:", e);
         }
         this.state.loadingConversations = false;
+    }
+
+    async _refreshConversations() {
+        // Silent refresh - NO loading indicator, NO flicker
+        try {
+            let domain = [];
+            if (this.state.filter === "unread") {
+                domain.push(["unread_count", ">", 0]);
+            } else if (this.state.filter === "mine") {
+                domain.push(["assigned_user_id", "=", this.user.userId]);
+            }
+
+            const freshConvs = await this.orm.searchRead(
+                "bader.inbox.conversation",
+                domain,
+                [
+                    "id", "computed_name", "phone", "last_message", "last_message_date",
+                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id"
+                ],
+                { order: "last_message_date desc", limit: 100 }
+            );
+
+            // Smart merge: only update if data actually changed
+            const currentIds = this.state.conversations.map(c => c.id).join(',');
+            const freshIds = freshConvs.map(c => c.id).join(',');
+            const currentSnippets = this.state.conversations.map(c => c.last_message + c.unread_count).join('|');
+            const freshSnippets = freshConvs.map(c => c.last_message + c.unread_count).join('|');
+
+            if (currentIds !== freshIds || currentSnippets !== freshSnippets) {
+                // Preserve selected conversation reference
+                const selectedId = this.state.selectedConversation?.id;
+                this.state.conversations = freshConvs;
+                if (selectedId) {
+                    this.state.selectedConversation = freshConvs.find(c => c.id === selectedId) || this.state.selectedConversation;
+                }
+            }
+        } catch (e) {
+            // Silent fail for polling
+        }
     }
 
     async loadMessages(conversationId) {
