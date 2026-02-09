@@ -172,7 +172,7 @@ export class BaderInboxMain extends Component {
             this.state.messages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename"],
                 { order: "create_date asc" }
             );
 
@@ -195,7 +195,7 @@ export class BaderInboxMain extends Component {
             const newMessages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename"],
                 { order: "create_date asc" }
             );
             // Only update if there are new messages
