@@ -58,14 +58,19 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         """Delete WhatsApp instance"""
         return self._request("DELETE", f"/instance/delete/{instance_name}")
 
+
     def get_qrcode(self, instance_name):
         """Get QR code for instance"""
-        result = self._request("GET", f"/instance/qrcode/{instance_name}")
+        result = self._request("GET", f"/instance/connect/{instance_name}")
         # Handle different response formats
         qr = result.get("qrcode") or result.get("base64")
         if isinstance(qr, dict):
             qr = qr.get("base64") or qr.get("qrcode")
+        # Strip data-uri prefix if present (Odoo image widget needs pure base64)
+        if qr and qr.startswith("data:"):
+            qr = qr.split(",", 1)[1] if "," in qr else qr
         return {"qrcode": qr, "status": result.get("status", "unknown")}
+
 
     def get_instance_status(self, instance_name):
         """Get instance connection status"""
