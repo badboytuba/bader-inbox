@@ -121,12 +121,34 @@ class BaderInboxWebhook(http.Controller):
             from_me = key.get("fromMe", False)
             direction = "out" if from_me else "in"
             
+            # Extract phone number - handle multiple jid formats:
+            # - Standard: "34651659176@s.whatsapp.net" 
+            # - Newsletter/LID: "221208599625931@lid"
+            # - Group: "34651659176@g.us"
+            # Use senderPn or participant as fallback for the actual phone
             remote_jid = key.get("remoteJid", "")
-            phone = remote_jid.replace("@s.whatsapp.net", "").replace("@g.us", "")
+            sender_pn = key.get("senderPn", "")  # e.g. "34651659176@s.whatsapp.net"
+            participant = key.get("participant", "")
             
-            if not phone or "@" in phone:
-                _logger.warning(f"Invalid phone: {remote_jid}")
-                return _json_error("Invalid phone")
+            # Try to get a clean phone number
+            # Priority: senderPn > participant > remoteJid
+            phone_source = ""
+            if sender_pn and "@s.whatsapp.net" in sender_pn:
+                phone_source = sender_pn
+            elif participant and "@s.whatsapp.net" in participant:
+                phone_source = participant
+            else:
+                phone_source = remote_jid
+            
+            # Strip any @ suffix to get just the number
+            phone = phone_source.split("@")[0] if "@" in phone_source else phone_source
+            whatsapp_id = remote_jid or phone_source
+            
+            if not phone:
+                _logger.warning(f"No phone extracted from: remoteJid={remote_jid}, senderPn={sender_pn}")
+                return _json_error("No phone number")
+            
+            _logger.info(f"Phone extracted: {phone} from source={phone_source} (remoteJid={remote_jid})")
             
             _logger.info(f"Processing message from {phone} (direction={direction})")
             
@@ -134,7 +156,7 @@ class BaderInboxWebhook(http.Controller):
             conversation = Conversation.get_or_create(
                 channel_id=channel.id,
                 phone=phone,
-                whatsapp_id=remote_jid,
+                whatsapp_id=whatsapp_id,
                 contact_name=push_name
             )
             
