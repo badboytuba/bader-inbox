@@ -18,18 +18,25 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         """Get API configuration"""
         params = self.env["ir.config_parameter"].sudo()
         return {
-            "url": params.get_param("bader_inbox.evolution_url", "http://localhost:8080"),
+            "url": params.get_param("bader_inbox.evolution_url", "https://whatsapp.odontowave.com"),
             "key": params.get_param("bader_inbox.evolution_key", ""),
         }
 
     def _request(self, method, endpoint, data=None):
         """Make API request"""
         config = self._get_config()
-        url = f"{config['url'].rstrip('/')}/{endpoint.lstrip('/')}"
+        # Normalize URL and ensure /api prefix
+        base_url = config['url'].rstrip('/')
+        if not endpoint.startswith('/api'):
+            endpoint = '/api' + endpoint
+        url = f"{base_url}{endpoint}"
+        
         headers = {
             "apikey": config["key"],
             "Content-Type": "application/json",
         }
+        
+        _logger.info(f"Evolution API: {method} {url}")
         
         try:
             response = requests.request(
@@ -43,13 +50,9 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
 
     def create_instance(self, instance_name):
         """Create new WhatsApp instance"""
-        data = {
-            "instanceName": instance_name,
-            "qrcode": True,
-            "integration": "WHATSAPP-BAILEYS",
-        }
+        data = {"instanceName": instance_name}
         result = self._request("POST", "/instance/create", data)
-        return {"success": "instance" in result, **result}
+        return {"success": "instance" in result or "instanceName" in result, **result}
 
     def delete_instance(self, instance_name):
         """Delete WhatsApp instance"""
@@ -58,35 +61,28 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     def get_qrcode(self, instance_name):
         """Get QR code for instance"""
         result = self._request("GET", f"/instance/qrcode/{instance_name}")
-        qr = result.get("qrcode", {})
+        # Handle different response formats
+        qr = result.get("qrcode") or result.get("base64")
         if isinstance(qr, dict):
-            return {"qrcode": qr.get("base64")}
-        return {"qrcode": qr}
+            qr = qr.get("base64") or qr.get("qrcode")
+        return {"qrcode": qr, "status": result.get("status", "unknown")}
 
     def get_instance_status(self, instance_name):
         """Get instance connection status"""
-        result = self._request("GET", f"/instance/connectionState/{instance_name}")
-        state = result.get("instance", {})
+        result = self._request("GET", f"/instance/status/{instance_name}")
+        # Extract connection info
+        connected = result.get("status") == "connected" or result.get("state") == "open"
+        instance = result.get("instance", {})
         return {
-            "connected": state.get("state") == "open",
-            "phone": state.get("wuid", "").replace("@s.whatsapp.net", ""),
-            "name": state.get("profileName"),
+            "connected": connected,
+            "status": result.get("status", "unknown"),
+            "phone": instance.get("wuid", "").replace("@s.whatsapp.net", "") if instance else "",
+            "name": instance.get("profileName", ""),
         }
 
     def set_webhook(self, instance_name, webhook_url):
         """Configure webhook for instance"""
-        data = {
-            "webhook": {
-                "enabled": True,
-                "url": webhook_url,
-                "events": [
-                    "MESSAGES_UPSERT",
-                    "MESSAGES_UPDATE", 
-                    "CONNECTION_UPDATE",
-                    "QRCODE_UPDATED",
-                ],
-            }
-        }
+        data = {"webhookUrl": webhook_url}
         return self._request("POST", f"/webhook/set/{instance_name}", data)
 
     def send_text(self, instance_name, phone, text):
@@ -95,33 +91,40 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "number": phone,
             "text": text,
         }
-        result = self._request("POST", f"/message/sendText/{instance_name}", data)
+        result = self._request("POST", f"/message/text/{instance_name}", data)
         return {
-            "success": "key" in result,
-            "message_id": result.get("key", {}).get("id"),
+            "success": "key" in result or result.get("status") == "sent",
+            "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
         }
 
-    def send_media(self, instance_name, phone, media_type, media_data, filename=None, caption=None):
-        """Send media message"""
+    def send_media(self, instance_name, phone, media_type, media_url, filename=None, caption=None):
+        """Send media message via URL"""
         endpoint_map = {
-            "image": "sendImage",
-            "audio": "sendWhatsAppAudio",
-            "video": "sendVideo",
-            "document": "sendDocument",
+            "image": "/message/image",
+            "audio": "/message/audio",
+            "video": "/message/video",
+            "document": "/message/document",
         }
-        endpoint = endpoint_map.get(media_type, "sendDocument")
+        endpoint = endpoint_map.get(media_type, "/message/document")
         
+        # Use URL-based endpoints per Evolution API docs
+        url_key = f"{media_type}Url" if media_type != "document" else "documentUrl"
         data = {
             "number": phone,
-            "media": f"data:application/octet-stream;base64,{media_data}",
+            url_key: media_url,
         }
         if caption:
             data["caption"] = caption
         if filename:
             data["fileName"] = filename
         
-        result = self._request("POST", f"/message/{endpoint}/{instance_name}", data)
+        result = self._request("POST", f"{endpoint}/{instance_name}", data)
         return {
-            "success": "key" in result,
-            "message_id": result.get("key", {}).get("id"),
+            "success": "key" in result or result.get("status") == "sent",
+            "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
         }
+
+    def list_instances(self):
+        """List all instances"""
+        result = self._request("GET", "/instance/list")
+        return result.get("instances", []) if isinstance(result, dict) else result

@@ -1055,3 +1055,147 @@ $shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 .cursor-pointer {
     cursor: pointer;
 }
+
+// ========================================
+// CHANNEL MODAL (QR CODE)
+// ========================================
+.bader-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: fadeIn 0.2s ease;
+}
+
+.bader-modal {
+    background: white;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    animation: slideUp 0.3s ease;
+
+    .bader-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 24px;
+        border-bottom: 1px solid $bader-border;
+        background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+        border-radius: 16px 16px 0 0;
+        color: white;
+
+        h4 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+
+            i {
+                margin-right: 10px;
+            }
+        }
+
+        .btn-close {
+            filter: brightness(0) invert(1);
+            opacity: 0.8;
+
+            &:hover {
+                opacity: 1;
+            }
+        }
+    }
+
+    .bader-modal-body {
+        padding: 24px;
+
+        .form-label {
+            font-weight: 600;
+            color: $bader-text;
+            margin-bottom: 8px;
+        }
+
+        .form-control-lg {
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 2px solid $bader-border;
+            font-size: 16px;
+
+            &:focus {
+                border-color: #25D366;
+                box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.15);
+            }
+        }
+
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+            background: white;
+            border-radius: 12px;
+            border: 2px solid $bader-border;
+            margin: 16px 0;
+        }
+
+        .qr-code-img {
+            width: 256px;
+            height: 256px;
+            image-rendering: pixelated;
+        }
+
+        .qr-loading {
+            padding: 60px 20px;
+            text-align: center;
+            color: $bader-text-muted;
+        }
+
+        .success-icon {
+            font-size: 64px;
+            animation: bounceIn 0.5s ease;
+
+            i {
+                color: #25D366;
+            }
+        }
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        transform: scale(0);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+// Channel status badges
+.channel-status {
+    .badge {
+        font-size: 11px;
+        font-weight: 500;
+        padding: 4px 8px;
+    }
+}

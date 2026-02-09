@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, useRef, onMounted } from "@odoo/owl";
+import { Component, useState, onWillStart, useRef, onMounted, onWillUnmount } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { _t } from "@web/core/l10n/translation";
@@ -14,13 +14,6 @@ export class BaderInboxMain extends Component {
         this.notification = useService("notification");
         this.action = useService("action");
         this.user = useService("user");
-
-        // Try to get bus service if available
-        try {
-            this.bus = useService("bus_service");
-        } catch (e) {
-            this.bus = null;
-        }
 
         this.state = useState({
             // Conversations
@@ -38,25 +31,31 @@ export class BaderInboxMain extends Component {
 
             // UI
             showContactPanel: true,
-            showTemplates: false,
-            templates: [],
-            internalNote: "",
 
             // Channels
             channels: [],
+
+            // Channel Creation Modal
+            showChannelModal: false,
+            channelStep: 1,
+            newChannelName: "",
+            creatingChannel: false,
+            qrCodeData: null,
+            currentChannelId: null,
+            connectedPhone: "",
         });
 
         this.messagesRef = useRef("messagesContainer");
         this.avatarColors = ["green", "blue", "purple", "orange", "pink", "red"];
+        this.qrPollInterval = null;
 
         onWillStart(async () => {
             await this.loadChannels();
             await this.loadConversations();
-            await this.loadTemplates();
         });
 
-        onMounted(() => {
-            this.setupBusSubscription();
+        onWillUnmount(() => {
+            this.stopQRPolling();
         });
     }
 
@@ -68,8 +67,8 @@ export class BaderInboxMain extends Component {
         try {
             this.state.channels = await this.orm.searchRead(
                 "bader.inbox.channel",
-                [["state", "=", "connected"]],
-                ["id", "name", "phone"]
+                [],
+                ["id", "name", "phone", "state", "evolution_instance_name"]
             );
         } catch (e) {
             console.error("Error loading channels:", e);
@@ -91,7 +90,7 @@ export class BaderInboxMain extends Component {
                 domain,
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
-                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id", "tag_ids"
+                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -108,14 +107,12 @@ export class BaderInboxMain extends Component {
             this.state.messages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url"],
+                ["id", "direction", "message_type", "content", "status", "create_date"],
                 { order: "create_date asc" }
             );
 
-            // Mark as read
             await this.orm.call("bader.inbox.conversation", "mark_as_read", [conversationId]);
 
-            // Scroll to bottom
             setTimeout(() => {
                 const container = this.messagesRef.el;
                 if (container) container.scrollTop = container.scrollHeight;
@@ -126,50 +123,108 @@ export class BaderInboxMain extends Component {
         this.state.loadingMessages = false;
     }
 
-    async loadTemplates() {
-        try {
-            this.state.templates = await this.orm.searchRead(
-                "bader.inbox.template",
-                [],
-                ["id", "name", "shortcut", "content", "category"]
-            );
-        } catch (e) {
-            console.error("Error loading templates:", e);
-        }
-    }
-
     // ==========================================
-    // REAL-TIME UPDATES
+    // CHANNEL CREATION (PLUG AND PLAY)
     // ==========================================
 
-    setupBusSubscription() {
-        if (this.bus) {
-            this.bus.addChannel("bader_inbox");
-            this.bus.addEventListener("notification", this.onBusNotification.bind(this));
-        }
+    openAddChannelModal() {
+        this.state.showChannelModal = true;
+        this.state.channelStep = 1;
+        this.state.newChannelName = "";
+        this.state.qrCodeData = null;
+        this.state.currentChannelId = null;
     }
 
-    onBusNotification(event) {
-        const { type, payload } = event.detail || {};
-        if (type === "bader_inbox_new_message") {
-            this.onNewMessage(payload);
-        }
-    }
-
-    onNewMessage(payload) {
-        // Refresh conversations
+    closeChannelModal() {
+        this.stopQRPolling();
+        this.state.showChannelModal = false;
+        this.loadChannels();
         this.loadConversations();
+    }
 
-        // If current conversation, refresh messages
-        if (this.state.selectedConversation?.id === payload.conversation_id) {
-            this.loadMessages(payload.conversation_id);
+    async createChannel() {
+        if (!this.state.newChannelName.trim()) return;
+
+        this.state.creatingChannel = true;
+        try {
+            // Create channel record
+            const channelId = await this.orm.create("bader.inbox.channel", [{
+                name: this.state.newChannelName.trim()
+            }]);
+
+            this.state.currentChannelId = channelId;
+
+            // Connect to Evolution API (this creates instance and gets QR)
+            await this.orm.call("bader.inbox.channel", "action_connect", [channelId]);
+
+            // Move to step 2
+            this.state.channelStep = 2;
+
+            // Get QR code
+            await this.fetchQRCode();
+
+            // Start polling for connection
+            this.startQRPolling();
+
+        } catch (e) {
+            console.error("Error creating channel:", e);
+            this.notification.add(_t("Erro ao criar canal: " + e.message), { type: "danger" });
         }
+        this.state.creatingChannel = false;
+    }
 
-        // Show notification
-        this.notification.add(
-            `📱 ${payload.contact_name}: ${payload.message?.content?.substring(0, 50) || "Nova mensagem"}`,
-            { type: "info", sticky: false }
-        );
+    async fetchQRCode() {
+        if (!this.state.currentChannelId) return;
+
+        try {
+            // Get updated channel with QR code
+            const channels = await this.orm.searchRead(
+                "bader.inbox.channel",
+                [["id", "=", this.state.currentChannelId]],
+                ["qrcode_base64", "state", "phone", "phone_name"]
+            );
+
+            if (channels.length) {
+                const channel = channels[0];
+
+                if (channel.state === "connected") {
+                    // Connected!
+                    this.stopQRPolling();
+                    this.state.channelStep = 3;
+                    this.state.connectedPhone = channel.phone || channel.phone_name || "WhatsApp conectado";
+                    this.notification.add(_t("WhatsApp conectado com sucesso!"), { type: "success" });
+                } else if (channel.qrcode_base64) {
+                    this.state.qrCodeData = channel.qrcode_base64;
+                }
+            }
+        } catch (e) {
+            console.error("Error fetching QR:", e);
+        }
+    }
+
+    async refreshQRCode() {
+        if (!this.state.currentChannelId) return;
+
+        try {
+            await this.orm.call("bader.inbox.channel", "action_refresh_qr", [this.state.currentChannelId]);
+            await this.fetchQRCode();
+        } catch (e) {
+            console.error("Error refreshing QR:", e);
+        }
+    }
+
+    startQRPolling() {
+        this.stopQRPolling();
+        this.qrPollInterval = setInterval(() => {
+            this.fetchQRCode();
+        }, 3000); // Poll every 3 seconds
+    }
+
+    stopQRPolling() {
+        if (this.qrPollInterval) {
+            clearInterval(this.qrPollInterval);
+            this.qrPollInterval = null;
+        }
     }
 
     // ==========================================
@@ -180,7 +235,6 @@ export class BaderInboxMain extends Component {
         this.state.selectedConversation = conv;
         await this.loadMessages(conv.id);
 
-        // Update unread count locally
         const idx = this.state.conversations.findIndex(c => c.id === conv.id);
         if (idx >= 0) {
             this.state.conversations[idx].unread_count = 0;
@@ -197,18 +251,12 @@ export class BaderInboxMain extends Component {
         const query = this.state.searchQuery.toLowerCase();
         return this.state.conversations.filter(c =>
             (c.computed_name || "").toLowerCase().includes(query) ||
-            (c.phone || "").includes(query) ||
-            (c.last_message || "").toLowerCase().includes(query)
+            (c.phone || "").includes(query)
         );
-    }
-
-    onSearch(event) {
-        this.state.searchQuery = event.target.value;
     }
 
     async assignConversation() {
         if (!this.state.selectedConversation) return;
-        // Open user selection dialog
         this.action.doAction({
             type: "ir.actions.act_window",
             res_model: "bader.inbox.conversation",
@@ -229,11 +277,6 @@ export class BaderInboxMain extends Component {
         } catch (e) {
             console.error(e);
         }
-    }
-
-    addTag() {
-        // TODO: Implement tag dialog
-        this.notification.add(_t("Em breve: Adicionar tags"), { type: "info" });
     }
 
     // ==========================================
@@ -264,10 +307,6 @@ export class BaderInboxMain extends Component {
             event.preventDefault();
             this.sendMessage();
         }
-    }
-
-    showTemplatesPopup() {
-        this.state.showTemplates = !this.state.showTemplates;
     }
 
     // ==========================================
@@ -306,7 +345,6 @@ export class BaderInboxMain extends Component {
                 target: "new",
             });
         } else {
-            // Create new partner
             this.action.doAction({
                 type: "ir.actions.act_window",
                 res_model: "res.partner",
@@ -318,54 +356,6 @@ export class BaderInboxMain extends Component {
                 }
             });
         }
-    }
-
-    async scheduleActivity() {
-        if (!this.state.selectedConversation) return;
-        this.notification.add(_t("Em breve: Agendar atividade"), { type: "info" });
-    }
-
-    async viewHistory() {
-        if (!this.state.selectedConversation) return;
-        this.action.doAction({
-            type: "ir.actions.act_window",
-            res_model: "bader.inbox.message",
-            views: [[false, "list"], [false, "form"]],
-            domain: [["conversation_id", "=", this.state.selectedConversation.id]],
-            name: _t("Histórico de Mensagens"),
-        });
-    }
-
-    // ==========================================
-    // NAVIGATION
-    // ==========================================
-
-    openChannels() {
-        this.action.doAction({
-            type: "ir.actions.act_window",
-            res_model: "bader.inbox.channel",
-            views: [[false, "list"], [false, "form"]],
-            name: _t("Canais WhatsApp"),
-        });
-    }
-
-    openTemplates() {
-        this.action.doAction({
-            type: "ir.actions.act_window",
-            res_model: "bader.inbox.template",
-            views: [[false, "list"], [false, "form"]],
-            name: _t("Templates de Resposta"),
-        });
-    }
-
-    openSettings() {
-        this.action.doAction({
-            type: "ir.actions.act_window",
-            res_model: "ir.config_parameter",
-            views: [[false, "list"], [false, "form"]],
-            domain: [["key", "like", "bader_inbox%"]],
-            name: _t("Configurações Bader Inbox"),
-        });
     }
 
     // ==========================================

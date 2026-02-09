@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
+    <!-- Evolution API URL - OdontoWave WhatsApp Server -->
     <record id="bader_inbox_evolution_url" model="ir.config_parameter">
         <field name="key">bader_inbox.evolution_url</field>
-        <field name="value">http://localhost:8080</field>
+        <field name="value">https://whatsapp.odontowave.com</field>
     </record>
+    <!-- Evolution API Key -->
     <record id="bader_inbox_evolution_key" model="ir.config_parameter">
         <field name="key">bader_inbox.evolution_key</field>
-        <field name="value">YOUR_API_KEY</field>
+        <field name="value">PO66GpWPJEwmstNRGh0oSqNBQJ3mi4xAVpXsKXgtXlBECuDSH3IjUxHET4qCRv3472ibxDPu9cMTyy6ckSgMBg</field>
     </record>
 </odoo>
