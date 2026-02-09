@@ -3,6 +3,7 @@
 
 import logging
 import json
+import base64
 from odoo import http, fields
 from odoo.http import request
 
@@ -41,6 +42,33 @@ class BaderInboxWebhook(http.Controller):
     Events: messages.upsert, connection.update, qrcode.updated
     Note: Webhooks are in-memory. Must reconfigure after API server restart.
     """
+
+    @http.route(
+        "/bader-inbox/media/<int:message_id>",
+        type="http", auth="user", methods=["GET"], csrf=False,
+    )
+    def serve_media(self, message_id, **kwargs):
+        """Serve stored media content for a message"""
+        try:
+            message = request.env["bader.inbox.message"].browse(message_id)
+            if not message.exists() or not message.media_data:
+                return request.not_found()
+            
+            data = base64.b64decode(message.media_data)
+            mimetype = message.media_mimetype or "application/octet-stream"
+            
+            headers = [
+                ("Content-Type", mimetype),
+                ("Content-Length", len(data)),
+                ("Cache-Control", "public, max-age=86400"),
+            ]
+            if message.media_filename:
+                headers.append(("Content-Disposition", f'inline; filename="{message.media_filename}"'))
+            
+            return request.make_response(data, headers)
+        except Exception as e:
+            _logger.error(f"Error serving media: {e}")
+            return request.not_found()
 
     @http.route(
         "/bader-inbox/webhook/<int:channel_id>",
@@ -184,7 +212,29 @@ class BaderInboxWebhook(http.Controller):
                 message_vals.update(media_info)
             
             new_message = Message.create(message_vals)
-            _logger.info(f"Message created: id={new_message.id}, conv={conversation.id}")
+            _logger.info(f"Message created: id={new_message.id}, conv={conversation.id}, type={msg_type}")
+            
+            # Download media content from Evolution API for non-text messages
+            if msg_type in ("image", "audio", "video", "document") and key:
+                try:
+                    api = request.env["bader.inbox.evolution_api"].sudo()
+                    instance_name = channel.evolution_instance_name
+                    media_key = {
+                        "remoteJid": key.get("remoteJid", ""),
+                        "id": key.get("id", ""),
+                        "fromMe": key.get("fromMe", False),
+                    }
+                    media_result = api.get_base64_from_media(instance_name, media_key)
+                    if media_result and media_result.get("base64"):
+                        new_message.sudo().write({
+                            "media_data": media_result["base64"],
+                            "media_mimetype": media_result.get("mimetype") or new_message.media_mimetype,
+                        })
+                        _logger.info(f"Media downloaded for message {new_message.id}")
+                    else:
+                        _logger.warning(f"Failed to download media for message {new_message.id}")
+                except Exception as me:
+                    _logger.error(f"Media download error: {me}")
             
             if direction == "in":
                 self._send_bus_notification(conversation, new_message, push_name, phone)

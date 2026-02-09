@@ -520,6 +520,15 @@ export class BaderInboxMain extends Component {
         return this.avatarColors[(id || 0) % this.avatarColors.length];
     }
 
+    getMediaUrl(msg) {
+        // Always use Odoo media endpoint for media messages
+        const mediaTypes = ["image", "audio", "video", "document"];
+        if (mediaTypes.includes(msg.message_type)) {
+            return `/bader-inbox/media/${msg.id}`;
+        }
+        return msg.media_url || "";
+    }
+
     getUserInitials() {
         return this.getInitials(this.user.name || "U");
     }

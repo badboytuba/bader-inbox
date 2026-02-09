@@ -148,6 +148,37 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
         }
 
+    def get_base64_from_media(self, instance_name, message_key):
+        """Download media content as base64 from Evolution API
+        
+        Args:
+            instance_name: Evolution API instance name
+            message_key: The message key dict with remoteJid, id, fromMe
+        
+        Returns:
+            dict with base64 data and mimetype, or None on failure
+        """
+        try:
+            data = {"key": message_key}
+            result = self._request(
+                "POST", 
+                f"/chat/getBase64FromMediaMessage/{instance_name}",
+                data
+            )
+            if result and isinstance(result, dict):
+                base64_data = result.get("base64") or result.get("data")
+                mimetype = result.get("mimetype") or result.get("mediaType", "")
+                if base64_data:
+                    # Strip data URI prefix if present
+                    if "," in base64_data and base64_data.startswith("data:"):
+                        base64_data = base64_data.split(",", 1)[1]
+                    return {"base64": base64_data, "mimetype": mimetype}
+            _logger.warning(f"No base64 data returned for media: {result}")
+            return None
+        except Exception as e:
+            _logger.error(f"Error downloading media: {e}")
+            return None
+
     def list_instances(self):
         """List all instances"""
         result = self._request("GET", "/instance/list")
