@@ -3,6 +3,7 @@
     <!-- ======================================== -->
     <!-- PHONE WHATSAPP WIDGET VIEWS              -->
     <!-- Adds WhatsApp click-to-chat to phone fields -->
+    <!-- Only form views - kanban views don't have phone/mobile fields -->
     <!-- ======================================== -->
 
     <!-- RES.PARTNER (Contacts) - Form View -->
@@ -23,22 +24,6 @@
         </field>
     </record>
 
-    <!-- RES.PARTNER (Contacts) - Kanban View -->
-    <record id="view_partner_kanban_phone_whatsapp" model="ir.ui.view">
-        <field name="name">res.partner.kanban.phone.whatsapp</field>
-        <field name="model">res.partner</field>
-        <field name="inherit_id" ref="base.res_partner_kanban_view"/>
-        <field name="priority">100</field>
-        <field name="arch" type="xml">
-            <xpath expr="//field[@name='phone']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-            <xpath expr="//field[@name='mobile']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-        </field>
-    </record>
-
     <!-- CRM.LEAD (Leads/Opportunities) - Form View -->
     <record id="view_crm_lead_form_phone_whatsapp" model="ir.ui.view">
         <field name="name">crm.lead.form.phone.whatsapp</field>
@@ -51,38 +36,6 @@
                 <attribute name="widget">phone_whatsapp</attribute>
             </xpath>
             <!-- Mobile field -->
-            <xpath expr="//field[@name='mobile']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-        </field>
-    </record>
-
-    <!-- CRM.LEAD - Kanban View -->
-    <record id="view_crm_lead_kanban_phone_whatsapp" model="ir.ui.view">
-        <field name="name">crm.lead.kanban.phone.whatsapp</field>
-        <field name="model">crm.lead</field>
-        <field name="inherit_id" ref="crm.crm_case_kanban_view_leads"/>
-        <field name="priority">100</field>
-        <field name="arch" type="xml">
-            <xpath expr="//field[@name='phone']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-            <xpath expr="//field[@name='mobile']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-        </field>
-    </record>
-
-    <!-- CRM Opportunities Pipeline Kanban -->
-    <record id="view_crm_opportunity_kanban_phone_whatsapp" model="ir.ui.view">
-        <field name="name">crm.opportunity.kanban.phone.whatsapp</field>
-        <field name="model">crm.lead</field>
-        <field name="inherit_id" ref="crm.crm_case_kanban_view"/>
-        <field name="priority">100</field>
-        <field name="arch" type="xml">
-            <xpath expr="//field[@name='phone']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
             <xpath expr="//field[@name='mobile']" position="attributes">
                 <attribute name="widget">phone_whatsapp</attribute>
             </xpath>
