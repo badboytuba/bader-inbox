@@ -1,35 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
     <t t-name="bader_inbox.InboxMain" owl="1">
-        <div class="bader-inbox-container">
-            <!-- HEADER BAR -->
-            <div class="bader-inbox-header-bar" style="position: fixed; top: 0; left: 0; right: 0; z-index: 100;">
-                <div class="bader-logo">
-                    <i class="fa fa-comments"/>
-                    <span>Bader Inbox</span>
-                </div>
-                <div class="bader-search">
-                    <i class="fa fa-search search-icon"/>
-                    <input type="text" placeholder="Buscar conversas..." t-model="state.searchQuery" t-on-input="onSearch"/>
-                </div>
-                <div class="bader-header-actions">
-                    <button class="btn-header" title="Canais WhatsApp" t-on-click="openChannels">
-                        <i class="fa fa-whatsapp"/>
-                    </button>
-                    <button class="btn-header" title="Templates" t-on-click="openTemplates">
-                        <i class="fa fa-file-text-o"/>
-                    </button>
-                    <button class="btn-header" title="Configurações" t-on-click="openSettings">
-                        <i class="fa fa-cog"/>
-                    </button>
-                    <div class="user-avatar">
-                        <t t-esc="getUserInitials()"/>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MAIN CONTENT (below header) -->
-            <div class="d-flex" style="margin-top: 56px; height: calc(100% - 56px);">
+        <div class="bader-inbox-container d-flex">
                 <!-- LEFT PANEL: Conversations -->
                 <div class="bader-inbox-left">
                     <div class="panel-header">
@@ -251,7 +223,6 @@
                         </div>
                     </div>
                 </t>
-            </div>
         </div>
     </t>
 </templates>

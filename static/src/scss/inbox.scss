@@ -35,7 +35,8 @@ $shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 // ========================================
 .bader-inbox-container {
     display: flex !important;
-    height: calc(100vh - 46px) !important;
+    height: 100% !important;
+    min-height: calc(100vh - 100px);
     background-color: $bader-bg;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     overflow: hidden;
