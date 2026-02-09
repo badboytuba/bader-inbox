@@ -48,6 +48,8 @@ export class BaderInboxMain extends Component {
         this.messagesRef = useRef("messagesContainer");
         this.avatarColors = ["green", "blue", "purple", "orange", "pink", "red"];
         this.qrPollInterval = null;
+        this.conversationPollInterval = null;
+        this.messagePollInterval = null;
 
         onWillStart(async () => {
             await this.loadChannels();
@@ -62,8 +64,24 @@ export class BaderInboxMain extends Component {
             }
         });
 
+        onMounted(() => {
+            // Poll conversations every 5 seconds for real-time sync
+            this.conversationPollInterval = setInterval(() => {
+                this.loadConversations();
+            }, 5000);
+
+            // Poll messages every 3 seconds when a conversation is open
+            this.messagePollInterval = setInterval(() => {
+                if (this.state.selectedConversation) {
+                    this._refreshMessages(this.state.selectedConversation.id);
+                }
+            }, 3000);
+        });
+
         onWillUnmount(() => {
             this.stopQRPolling();
+            if (this.conversationPollInterval) clearInterval(this.conversationPollInterval);
+            if (this.messagePollInterval) clearInterval(this.messagePollInterval);
         });
     }
 
@@ -129,6 +147,30 @@ export class BaderInboxMain extends Component {
             console.error("Error loading messages:", e);
         }
         this.state.loadingMessages = false;
+    }
+
+    async _refreshMessages(conversationId) {
+        // Silent refresh - no loading indicator, no scroll jump
+        if (!conversationId) return;
+        try {
+            const newMessages = await this.orm.searchRead(
+                "bader.inbox.message",
+                [["conversation_id", "=", conversationId]],
+                ["id", "direction", "message_type", "content", "status", "create_date"],
+                { order: "create_date asc" }
+            );
+            // Only update if there are new messages
+            if (newMessages.length !== this.state.messages.length) {
+                this.state.messages = newMessages;
+                // Scroll to bottom for new messages
+                setTimeout(() => {
+                    const container = this.messagesRef.el;
+                    if (container) container.scrollTop = container.scrollHeight;
+                }, 100);
+            }
+        } catch (e) {
+            // Silent fail for polling
+        }
     }
 
     async openConversationById(conversationId) {
