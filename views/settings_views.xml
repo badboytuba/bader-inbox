@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Settings Form View -->
+    <record id="view_bader_inbox_settings_form" model="ir.ui.view">
+        <field name="name">bader.inbox.settings.form</field>
+        <field name="model">bader.inbox.settings</field>
+        <field name="arch" type="xml">
+            <form string="Configuração API Evolution">
+                <group>
+                    <group string="🔗 Conexão Evolution API">
+                        <field name="evolution_url" placeholder="https://whatsapp.odontowave.com"/>
+                        <field name="evolution_key" password="True" placeholder="Sua chave API Evolution"/>
+                    </group>
+                </group>
+                <div class="alert alert-info" role="alert">
+                    <strong>💡 Dica:</strong> A chave API pode ser obtida no painel de administração do Evolution API.
+                </div>
+                <footer>
+                    <button name="action_test_connection" type="object" string="🔌 Testar Conexão" class="btn-secondary"/>
+                    <button name="action_save" type="object" string="💾 Salvar" class="btn-primary"/>
+                    <button special="cancel" string="Cancelar"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

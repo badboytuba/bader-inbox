@@ -5,9 +5,4 @@ access_bader_inbox_conversation_all,bader.inbox.conversation.all,model_bader_inb
 access_bader_inbox_conversation_manager,bader.inbox.conversation.manager,model_bader_inbox_conversation,group_bader_inbox_manager,1,1,1,1
 access_bader_inbox_message_all,bader.inbox.message.all,model_bader_inbox_message,base.group_user,1,1,1,0
 access_bader_inbox_message_manager,bader.inbox.message.manager,model_bader_inbox_message,group_bader_inbox_manager,1,1,1,1
-access_bader_inbox_tag_all,bader.inbox.tag.all,model_bader_inbox_tag,base.group_user,1,0,0,0
-access_bader_inbox_tag_manager,bader.inbox.tag.manager,model_bader_inbox_tag,group_bader_inbox_manager,1,1,1,1
-access_bader_inbox_template_all,bader.inbox.template.all,model_bader_inbox_template,base.group_user,1,0,0,0
-access_bader_inbox_template_manager,bader.inbox.template.manager,model_bader_inbox_template,group_bader_inbox_manager,1,1,1,1
-access_bader_inbox_chatbot_all,bader.inbox.chatbot.all,model_bader_inbox_chatbot,base.group_user,1,0,0,0
-access_bader_inbox_chatbot_manager,bader.inbox.chatbot.manager,model_bader_inbox_chatbot,group_bader_inbox_manager,1,1,1,1
+access_bader_inbox_settings_all,bader.inbox.settings.all,model_bader_inbox_settings,base.group_user,1,1,1,1

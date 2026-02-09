@@ -6,7 +6,7 @@
         action="action_bader_inbox_main"
         groups="base.group_user"/>
 
-    <!-- Old menus hidden, configuration only -->
+    <!-- Configuração - only Canais WhatsApp -->
     <menuitem id="menu_bader_inbox_config" name="⚙️ Configuração" 
         parent="menu_bader_inbox_root" 
         sequence="100" 
@@ -17,18 +17,8 @@
         action="action_bader_inbox_channel" 
         sequence="10"/>
     
-    <menuitem id="menu_bader_inbox_templates" name="📝 Templates" 
+    <menuitem id="menu_bader_inbox_settings" name="🔑 API Evolution" 
         parent="menu_bader_inbox_config" 
-        action="action_bader_inbox_template" 
+        action="action_bader_inbox_api_settings" 
         sequence="20"/>
-    
-    <menuitem id="menu_bader_inbox_chatbot" name="🤖 Automações" 
-        parent="menu_bader_inbox_config" 
-        action="action_bader_inbox_chatbot" 
-        sequence="30"/>
-
-    <menuitem id="menu_bader_inbox_conversations" name="📋 Conversas (Lista)" 
-        parent="menu_bader_inbox_config" 
-        action="action_bader_inbox_conversation" 
-        sequence="40"/>
 </odoo>

@@ -36,14 +36,15 @@
                             <field name="phone" readonly="1"/>
                             <field name="phone_name" readonly="1"/>
                         </group>
-                        <group string="⚙️ Configuração">
+                        <group string="⚙️ Técnico">
                             <field name="evolution_instance_name" readonly="1"/>
                             <field name="webhook_url" readonly="1"/>
                         </group>
                     </group>
                     <div attrs="{'invisible': [('state', '!=', 'qr_ready')]}">
                         <h3>📱 Escaneie o QR Code com seu WhatsApp:</h3>
-                        <field name="qrcode_base64" widget="image" class="oe_avatar"/>
+                        <p>Abra WhatsApp → Dispositivos Vinculados → Vincular Dispositivo</p>
+                        <field name="qrcode_base64" widget="image" class="oe_avatar" style="max-width: 300px;"/>
                     </div>
                 </sheet>
             </form>
@@ -59,5 +60,13 @@
             <p class="o_view_nocontent_smiling_face">Crie seu primeiro canal WhatsApp!</p>
             <p>Clique em "Criar" e depois "Conectar" para escanear o QR Code.</p>
         </field>
+    </record>
+
+    <!-- API Settings Transient Model Action -->
+    <record id="action_bader_inbox_api_settings" model="ir.actions.act_window">
+        <field name="name">🔑 Configuração API Evolution</field>
+        <field name="res_model">bader.inbox.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
     </record>
 </odoo>

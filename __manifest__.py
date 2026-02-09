@@ -3,25 +3,21 @@
 
 {
     "name": "Bader Inbox",
-    "summary": "Omnichannel WhatsApp Inbox - Simple, Modern, Powerful",
+    "summary": "WhatsApp Integration - Simple Setup via QR Code",
     "description": """
-        Modern WhatsApp inbox for Odoo inspired by Respond.io and Clientify.
+        Simple WhatsApp inbox for Odoo using Evolution API.
         
         Features:
-        - Ultra-simple setup: Name + QR Code = Connected
+        - Simple setup: Name + QR Code = Connected
         - Modern 3-panel interface
-        - Multi-channel support (multiple WhatsApp numbers)
-        - Team collaboration (assign conversations)
-        - Full CRM integration (contacts, opportunities, activities)
-        - Quick reply templates
-        - Chatbot automations
-        - Real-time notifications
-        - Uses Evolution API for QR-based connection
+        - Send and receive WhatsApp messages
+        - Full synchronization with your phone
+        - CRM integration (contacts, opportunities)
     """,
-    "version": "16.0.2.0.0",
+    "version": "16.0.3.0.0",
     "license": "AGPL-3",
     "author": "Bader Business",
-    "website": "https://github.com/badboytuba/bader-inbox-pro",
+    "website": "https://github.com/badboytuba/bader-inbox",
     "category": "Productivity/Discuss",
     "depends": ["base", "contacts", "crm", "mail", "bus"],
     "external_dependencies": {"python": ["requests"]},
@@ -29,10 +25,9 @@
         "security/security.xml",
         "security/ir.model.access.csv",
         "data/system_parameters.xml",
+        "views/settings_views.xml",
         "views/channel_views.xml",
         "views/conversation_views.xml",
-        "views/template_views.xml",
-        "views/chatbot_views.xml",
         "views/menus.xml",
     ],
     "assets": {

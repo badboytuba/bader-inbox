@@ -6,4 +6,4 @@ from . import conversation
 from . import message
 from . import evolution_api
 from . import res_partner
-from . import template
+from . import settings
