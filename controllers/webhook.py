@@ -9,8 +9,21 @@ from odoo.http import request
 _logger = logging.getLogger(__name__)
 
 
+def _json_ok(data=None):
+    """Return a JSON HTTP response (for type='http' routes)"""
+    return request.make_json_response(data or {"status": "ok"})
+
+
+def _json_error(msg="error"):
+    """Return a JSON error HTTP response"""
+    return request.make_json_response({"status": "error", "message": msg})
+
+
 class BaderInboxWebhook(http.Controller):
     """Webhook controller for Evolution API events
+    
+    IMPORTANT: Uses type='http' (NOT type='json') because Evolution API
+    sends plain JSON, not Odoo JSON-RPC format.
     
     Payload format (messages.upsert):
     {
@@ -31,16 +44,24 @@ class BaderInboxWebhook(http.Controller):
 
     @http.route(
         "/bader-inbox/webhook/<int:channel_id>",
-        type="json", auth="none", methods=["POST"], csrf=False,
+        type="http", auth="none", methods=["POST"], csrf=False,
     )
     def webhook_handler(self, channel_id, **kwargs):
-        """Handle incoming webhook from Evolution API"""
+        """Handle incoming webhook from Evolution API."""
         try:
-            # Odoo 16 compatibility - get JSON data
-            data = request.get_json_data() if hasattr(request, 'get_json_data') else (request.jsonrequest if hasattr(request, 'jsonrequest') else kwargs)
+            # Parse raw JSON body (Evolution API sends plain JSON, not JSON-RPC)
+            raw_body = request.httprequest.get_data(as_text=True)
+            _logger.info(f"Webhook raw body for channel {channel_id} (first 500 chars): {raw_body[:500]}")
+            
+            try:
+                data = json.loads(raw_body) if raw_body else {}
+            except json.JSONDecodeError as je:
+                _logger.error(f"Invalid JSON in webhook body: {je}")
+                return _json_error("Invalid JSON")
+            
             _logger.info(f"Webhook for channel {channel_id}: event={data.get('event', 'unknown')}")
             
-            # DEBUG: Save full payload
+            # DEBUG: Save full payload to file for analysis
             try:
                 with open(f"/tmp/webhook_debug_{channel_id}.json", "w") as f:
                     json.dump(data, f, indent=2, default=str)
@@ -50,7 +71,7 @@ class BaderInboxWebhook(http.Controller):
             channel = request.env["bader.inbox.channel"].sudo().browse(channel_id)
             if not channel.exists():
                 _logger.warning(f"Channel {channel_id} not found")
-                return {"status": "error", "message": "Channel not found"}
+                return _json_error("Channel not found")
             
             event = data.get("event", "")
             _logger.info(f"Processing event: {event} for channel {channel_id}")
@@ -63,11 +84,11 @@ class BaderInboxWebhook(http.Controller):
                 return self._handle_qrcode_update(channel, data)
             
             _logger.info(f"Ignoring event: {event}")
-            return {"status": "ignored"}
+            return _json_ok({"status": "ignored"})
             
         except Exception as e:
             _logger.error(f"Webhook error: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return _json_error(str(e))
 
     def _handle_message(self, channel, data):
         """Handle incoming/outgoing message
@@ -87,7 +108,7 @@ class BaderInboxWebhook(http.Controller):
             msg_obj = data.get("message", {})
             if not msg_obj:
                 _logger.warning("No message object in payload")
-                return {"status": "error", "message": "No message data"}
+                return _json_error("No message data")
             
             # Extract fields from INSIDE the message object
             key = msg_obj.get("key", {})
@@ -105,7 +126,7 @@ class BaderInboxWebhook(http.Controller):
             
             if not phone or "@" in phone:
                 _logger.warning(f"Invalid phone: {remote_jid}")
-                return {"status": "error", "message": "Invalid phone"}
+                return _json_error("Invalid phone")
             
             _logger.info(f"Processing message from {phone} (direction={direction})")
             
@@ -127,7 +148,7 @@ class BaderInboxWebhook(http.Controller):
                 existing = Message.search([("whatsapp_message_id", "=", msg_id)], limit=1)
                 if existing:
                     _logger.info(f"Duplicate message {msg_id}, skipping")
-                    return {"status": "duplicate"}
+                    return _json_ok({"status": "duplicate"})
             
             message_vals = {
                 "conversation_id": conversation.id,
@@ -147,11 +168,11 @@ class BaderInboxWebhook(http.Controller):
                 self._send_bus_notification(conversation, new_message, push_name, phone)
                 self._trigger_chatbot(conversation, new_message)
             
-            return {"status": "ok"}
+            return _json_ok()
             
         except Exception as e:
             _logger.error(f"Error handling message: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return _json_error(str(e))
 
     def _send_bus_notification(self, conversation, message, contact_name, phone):
         """Send bus notification for real-time updates"""
@@ -273,10 +294,10 @@ class BaderInboxWebhook(http.Controller):
             
             channel.sudo().write(update_vals)
             _logger.info(f"Channel {channel.id} state updated to {new_state}")
-            return {"status": "ok"}
+            return _json_ok()
         except Exception as e:
             _logger.error(f"Connection update error: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return _json_error(str(e))
 
     def _handle_qrcode_update(self, channel, data):
         """Handle QR code update
@@ -311,7 +332,7 @@ class BaderInboxWebhook(http.Controller):
                 channel.sudo().write({"qrcode_base64": qr_base64, "state": "qr_ready"})
                 _logger.info(f"QR code updated for channel {channel.id}")
             
-            return {"status": "ok"}
+            return _json_ok()
         except Exception as e:
             _logger.error(f"QR update error: {e}", exc_info=True)
-            return {"status": "error", "message": str(e)}
+            return _json_error(str(e))

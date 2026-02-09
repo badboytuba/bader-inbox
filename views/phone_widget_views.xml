@@ -1,45 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- ======================================== -->
-    <!-- PHONE WHATSAPP WIDGET VIEWS              -->
-    <!-- Adds WhatsApp click-to-chat to phone fields -->
-    <!-- Only form views - kanban views don't have phone/mobile fields -->
-    <!-- ======================================== -->
-
-    <!-- RES.PARTNER (Contacts) - Form View -->
-    <record id="view_partner_form_phone_whatsapp" model="ir.ui.view">
-        <field name="name">res.partner.form.phone.whatsapp</field>
-        <field name="model">res.partner</field>
-        <field name="inherit_id" ref="base.view_partner_form"/>
-        <field name="priority">100</field>
-        <field name="arch" type="xml">
-            <!-- Phone field -->
-            <xpath expr="//field[@name='phone']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-            <!-- Mobile field -->
-            <xpath expr="//field[@name='mobile']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-        </field>
-    </record>
-
-    <!-- CRM.LEAD (Leads/Opportunities) - Form View -->
-    <record id="view_crm_lead_form_phone_whatsapp" model="ir.ui.view">
-        <field name="name">crm.lead.form.phone.whatsapp</field>
-        <field name="model">crm.lead</field>
-        <field name="inherit_id" ref="crm.crm_lead_view_form"/>
-        <field name="priority">100</field>
-        <field name="arch" type="xml">
-            <!-- Phone field -->
-            <xpath expr="//field[@name='phone']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-            <!-- Mobile field -->
-            <xpath expr="//field[@name='mobile']" position="attributes">
-                <attribute name="widget">phone_whatsapp</attribute>
-            </xpath>
-        </field>
-    </record>
-
+    <!-- Phone WhatsApp widget views - disabled for now -->
+    <!-- The phone_whatsapp widget needs proper OWL component registration for Odoo 16 -->
 </odoo>
