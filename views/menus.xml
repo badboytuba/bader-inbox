@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_bader_inbox_root" name="Bader Inbox" sequence="35" web_icon="bader_inbox,static/description/icon.png"/>
+
+    <menuitem id="menu_bader_inbox_main" name="📥 Inbox" parent="menu_bader_inbox_root" action="action_bader_inbox_conversation" sequence="10"/>
+    <menuitem id="menu_bader_inbox_my" name="👤 Minhas Conversas" parent="menu_bader_inbox_root" action="action_bader_inbox_my_assignments" sequence="20"/>
+    <menuitem id="menu_bader_inbox_unread" name="🔔 Não Lidas" parent="menu_bader_inbox_root" action="action_bader_inbox_unread" sequence="30"/>
+
+    <menuitem id="menu_bader_inbox_config" name="⚙️ Configuração" parent="menu_bader_inbox_root" sequence="100" groups="group_bader_inbox_manager"/>
+    <menuitem id="menu_bader_inbox_channels" name="📱 Canais WhatsApp" parent="menu_bader_inbox_config" action="action_bader_inbox_channel" sequence="10"/>
+    <menuitem id="menu_bader_inbox_templates" name="📝 Templates" parent="menu_bader_inbox_config" action="action_bader_inbox_template" sequence="20"/>
+    <menuitem id="menu_bader_inbox_chatbot" name="🤖 Automações" parent="menu_bader_inbox_config" action="action_bader_inbox_chatbot" sequence="30"/>
+</odoo>

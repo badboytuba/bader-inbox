@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="group_bader_inbox_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="category_id" ref="base.module_category_productivity_discuss"/>
+    </record>
+
+    <record id="group_bader_inbox_manager" model="res.groups">
+        <field name="name">Manager</field>
+        <field name="category_id" ref="base.module_category_productivity_discuss"/>
+        <field name="implied_ids" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+</odoo>

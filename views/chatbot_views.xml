@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Chatbot Tree -->
+    <record id="view_bader_inbox_chatbot_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.chatbot.tree</field>
+        <field name="model">bader.inbox.chatbot</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="priority" widget="handle"/>
+                <field name="name"/>
+                <field name="trigger_type" widget="badge"/>
+                <field name="action_type" widget="badge"/>
+                <field name="trigger_count"/>
+                <field name="last_triggered"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Chatbot Form -->
+    <record id="view_bader_inbox_chatbot_form" model="ir.ui.view">
+        <field name="name">bader.inbox.chatbot.form</field>
+        <field name="model">bader.inbox.chatbot</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Nome da Regra"/></h1>
+                    </div>
+                    <group>
+                        <group string="🎯 Gatilho">
+                            <field name="trigger_type"/>
+                            <field name="trigger_keywords" placeholder="preço,orçamento" attrs="{'invisible': [('trigger_type', '!=', 'keyword')]}"/>
+                            <field name="trigger_delay_minutes" attrs="{'invisible': [('trigger_type', '!=', 'no_reply')]}"/>
+                        </group>
+                        <group string="⚙️ Config">
+                            <field name="active"/>
+                            <field name="priority"/>
+                            <field name="channel_ids" widget="many2many_tags"/>
+                        </group>
+                    </group>
+                    <group string="⚡ Ação">
+                        <field name="action_type"/>
+                    </group>
+                    <group attrs="{'invisible': [('action_type', '!=', 'reply')]}">
+                        <field name="reply_template_id"/>
+                        <field name="reply_content" placeholder="Olá {name}!" attrs="{'invisible': [('reply_template_id', '!=', False)]}"/>
+                    </group>
+                    <group attrs="{'invisible': [('action_type', '!=', 'assign')]}">
+                        <field name="assign_user_id"/>
+                    </group>
+                    <group string="📊 Estatísticas">
+                        <field name="trigger_count" readonly="1"/>
+                        <field name="last_triggered" readonly="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Chatbot Action -->
+    <record id="action_bader_inbox_chatbot" model="ir.actions.act_window">
+        <field name="name">🤖 Automações</field>
+        <field name="res_model">bader.inbox.chatbot</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

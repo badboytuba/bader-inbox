@@ -1,0 +1,90 @@
+/* Bader Inbox Pro - Styles */
+$bader-primary: #25D366;
+$bader-secondary: #128C7E;
+$bader-bg-chat: #e5ddd5;
+$bader-msg-out: #dcf8c6;
+$bader-msg-in: #ffffff;
+
+.bader-inbox-container {
+    height: calc(100vh - 46px) !important;
+    background-color: #f8f9fa;
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+}
+
+.bader-inbox-left {
+    background-color: #fff;
+    min-width: 280px;
+    max-width: 380px;
+
+    .bader-inbox-header {
+        background: linear-gradient(135deg, $bader-primary 0%, $bader-secondary 100%) !important;
+    }
+
+    .bader-inbox-conv-item {
+        transition: background-color 0.15s ease;
+
+        &:hover {
+            background-color: #f8f9fa;
+        }
+    }
+}
+
+.bader-inbox-avatar {
+    flex-shrink: 0;
+    background: linear-gradient(135deg, $bader-primary 0%, $bader-secondary 100%);
+    font-weight: 600;
+}
+
+.bader-inbox-messages {
+    background-color: $bader-bg-chat;
+}
+
+.bader-inbox-message {
+    animation: fadeInUp 0.2s ease;
+
+    .bg-success {
+        background-color: $bader-msg-out !important;
+        color: #000 !important;
+    }
+
+    .bg-white {
+        background-color: $bader-msg-in !important;
+    }
+}
+
+.bader-inbox-composer {
+    background-color: #f0f0f0;
+
+    textarea {
+        border-radius: 20px;
+        padding: 10px 16px;
+
+        &:focus {
+            box-shadow: none;
+            border-color: $bader-primary;
+        }
+    }
+
+    .btn-success {
+        background-color: $bader-primary;
+        border-color: $bader-primary;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

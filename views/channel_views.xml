@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Channel Tree -->
+    <record id="view_bader_inbox_channel_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.channel.tree</field>
+        <field name="model">bader.inbox.channel</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="phone"/>
+                <field name="state" widget="badge" decoration-success="state == 'connected'" decoration-warning="state == 'qr_ready'" decoration-danger="state == 'error'"/>
+                <field name="conversation_count"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Channel Form -->
+    <record id="view_bader_inbox_channel_form" model="ir.ui.view">
+        <field name="name">bader.inbox.channel.form</field>
+        <field name="model">bader.inbox.channel</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_connect" type="object" string="🔗 Conectar" class="btn-primary" attrs="{'invisible': [('state', 'not in', ['draft', 'disconnected', 'error'])]}"/>
+                    <button name="action_refresh_qr" type="object" string="🔄 Atualizar QR" attrs="{'invisible': [('state', '!=', 'qr_ready')]}"/>
+                    <button name="action_check_status" type="object" string="📡 Verificar Status"/>
+                    <button name="action_disconnect" type="object" string="❌ Desconectar" attrs="{'invisible': [('state', '!=', 'connected')]}" confirm="Deseja desconectar este canal?"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,qr_ready,connected"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Nome do Canal"/></h1>
+                    </div>
+                    <group>
+                        <group string="📱 WhatsApp">
+                            <field name="phone" readonly="1"/>
+                            <field name="phone_name" readonly="1"/>
+                        </group>
+                        <group string="⚙️ Configuração">
+                            <field name="evolution_instance_name" readonly="1"/>
+                            <field name="webhook_url" readonly="1"/>
+                        </group>
+                    </group>
+                    <div attrs="{'invisible': [('state', '!=', 'qr_ready')]}">
+                        <h3>📱 Escaneie o QR Code com seu WhatsApp:</h3>
+                        <field name="qrcode_base64" widget="image" class="oe_avatar"/>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Channel Action -->
+    <record id="action_bader_inbox_channel" model="ir.actions.act_window">
+        <field name="name">📱 Canais WhatsApp</field>
+        <field name="res_model">bader.inbox.channel</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Crie seu primeiro canal WhatsApp!</p>
+            <p>Clique em "Criar" e depois "Conectar" para escanear o QR Code.</p>
+        </field>
+    </record>
+</odoo>

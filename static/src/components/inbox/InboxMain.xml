@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="bader_inbox.InboxMain" owl="1">
+        <div class="bader-inbox-container d-flex h-100">
+            <!-- LEFT: Conversations -->
+            <div class="bader-inbox-left d-flex flex-column" style="width: 320px; border-right: 1px solid #dee2e6;">
+                <div class="bader-inbox-header p-3 bg-primary text-white">
+                    <h5 class="mb-0"><i class="fa fa-comments me-2"/>Bader Inbox</h5>
+                </div>
+                <div class="d-flex border-bottom bg-light">
+                    <button t-attf-class="btn btn-sm flex-fill rounded-0 {{ state.filter === 'all' ? 'btn-primary' : 'btn-light' }}" t-on-click="() => this.setFilter('all')">Todas</button>
+                    <button t-attf-class="btn btn-sm flex-fill rounded-0 {{ state.filter === 'unread' ? 'btn-primary' : 'btn-light' }}" t-on-click="() => this.setFilter('unread')">Não Lidas</button>
+                    <button t-attf-class="btn btn-sm flex-fill rounded-0 {{ state.filter === 'mine' ? 'btn-primary' : 'btn-light' }}" t-on-click="() => this.setFilter('mine')">Minhas</button>
+                </div>
+                <div class="flex-grow-1 overflow-auto">
+                    <t t-if="state.loadingConversations"><div class="text-center p-4"><i class="fa fa-spinner fa-spin fa-2x"/></div></t>
+                    <t t-elif="!state.conversations.length"><div class="text-center p-4 text-muted"><i class="fa fa-inbox fa-3x mb-3"/><p>Nenhuma conversa</p></div></t>
+                    <t t-else="">
+                        <t t-foreach="state.conversations" t-as="conv" t-key="conv.id">
+                            <div t-attf-class="p-3 border-bottom cursor-pointer {{ state.selectedConversation?.id === conv.id ? 'bg-light' : '' }}" t-on-click="() => this.selectConversation(conv)">
+                                <div class="d-flex">
+                                    <div class="bader-inbox-avatar me-3 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                        <t t-esc="getInitials(conv.display_name)"/>
+                                    </div>
+                                    <div class="flex-grow-1 overflow-hidden">
+                                        <div class="d-flex justify-content-between">
+                                            <strong class="text-truncate" t-esc="conv.display_name"/>
+                                            <small class="text-muted" t-esc="formatTime(conv.last_message_date)"/>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <small class="text-muted text-truncate" t-esc="conv.last_message || '-'"/>
+                                            <t t-if="conv.unread_count > 0"><span class="badge bg-success"><t t-esc="conv.unread_count"/></span></t>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </t>
+                    </t>
+                </div>
+            </div>
+            
+            <!-- CENTER: Chat -->
+            <div class="bader-inbox-center d-flex flex-column flex-grow-1">
+                <t t-if="state.selectedConversation">
+                    <div class="p-3 border-bottom bg-white d-flex align-items-center">
+                        <div class="bader-inbox-avatar me-3 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                            <t t-esc="getInitials(state.selectedConversation.display_name)"/>
+                        </div>
+                        <div>
+                            <h6 class="mb-0" t-esc="state.selectedConversation.display_name"/>
+                            <small class="text-muted" t-esc="state.selectedConversation.phone"/>
+                        </div>
+                    </div>
+                    <div class="bader-inbox-messages flex-grow-1 overflow-auto p-3" t-ref="messagesContainer">
+                        <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
+                            <div t-attf-class="bader-inbox-message mb-2 {{ msg.direction === 'out' ? 'text-end' : '' }}">
+                                <div t-attf-class="d-inline-block p-2 px-3 rounded-3 {{ msg.direction === 'out' ? 'bg-success' : 'bg-white' }}" style="max-width: 70%;">
+                                    <t t-esc="msg.content"/>
+                                    <div class="small text-muted" style="font-size: 11px;"><t t-esc="formatTime(msg.create_date)"/></div>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+                    <div class="bader-inbox-composer p-3 border-top bg-white d-flex">
+                        <textarea class="form-control me-2" rows="1" placeholder="Escreva..." t-model="state.composerText" t-on-keydown="(e) => e.key === 'Enter' and !e.shiftKey and (e.preventDefault(), this.sendMessage())"/>
+                        <button class="btn btn-success" t-on-click="sendMessage" t-att-disabled="state.sendingMessage">
+                            <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
+                        </button>
+                    </div>
+                </t>
+                <t t-else="">
+                    <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
+                        <i class="fa fa-comments fa-5x mb-4"/>
+                        <h4>Selecione uma conversa</h4>
+                    </div>
+                </t>
+            </div>
+        </div>
+    </t>
+</templates>

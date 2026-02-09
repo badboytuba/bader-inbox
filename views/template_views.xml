@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Template Tree -->
+    <record id="view_bader_inbox_template_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.template.tree</field>
+        <field name="model">bader.inbox.template</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="shortcut"/>
+                <field name="category" widget="badge"/>
+                <field name="content"/>
+                <field name="use_count"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Template Form -->
+    <record id="view_bader_inbox_template_form" model="ir.ui.view">
+        <field name="name">bader.inbox.template.form</field>
+        <field name="model">bader.inbox.template</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Nome do Template"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="shortcut" placeholder="/saudacao"/>
+                            <field name="category"/>
+                        </group>
+                        <group>
+                            <field name="channel_ids" widget="many2many_tags"/>
+                            <field name="use_count" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Conteúdo">
+                        <field name="content" nolabel="1" placeholder="Olá! Como posso ajudar?"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Template Action -->
+    <record id="action_bader_inbox_template" model="ir.actions.act_window">
+        <field name="name">📝 Templates Rápidos</field>
+        <field name="res_model">bader.inbox.template</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
