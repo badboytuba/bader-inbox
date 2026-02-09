@@ -61,7 +61,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
 
     def get_qrcode(self, instance_name):
         """Get QR code for instance"""
-        result = self._request("GET", f"/instance/connect/{instance_name}")
+        result = self._request("GET", f"/instance/qrcode/{instance_name}")
         # Handle different response formats
         qr = result.get("qrcode") or result.get("base64")
         if isinstance(qr, dict):
