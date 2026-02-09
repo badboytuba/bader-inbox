@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <menuitem id="menu_bader_inbox_root" name="Bader Inbox" sequence="35" web_icon="bader_inbox,static/description/icon.png"/>
+    <menuitem id="menu_bader_inbox_root" name="Bader Inbox" sequence="35" web_icon="bader_inbox,static/description/icon.svg"/>
 
     <menuitem id="menu_bader_inbox_main" name="📥 Inbox" parent="menu_bader_inbox_root" action="action_bader_inbox_conversation" sequence="10"/>
     <menuitem id="menu_bader_inbox_my" name="👤 Minhas Conversas" parent="menu_bader_inbox_root" action="action_bader_inbox_my_assignments" sequence="20"/>
