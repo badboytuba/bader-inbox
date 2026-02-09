@@ -50,7 +50,7 @@
                     </group>
                     <notebook>
                         <page string="💬 Mensagens" name="messages">
-                            <field name="message_ids" readonly="1">
+                            <field name="inbox_message_ids" readonly="1">
                                 <tree>
                                     <field name="create_date"/>
                                     <field name="direction" widget="badge"/>

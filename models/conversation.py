@@ -30,7 +30,7 @@ class BaderInboxConversation(models.Model):
     )
     
     # Messages
-    message_ids = fields.One2many(
+    inbox_message_ids = fields.One2many(
         "bader.inbox.message", "conversation_id", string="Messages"
     )
     last_message = fields.Text(string="Last Message", readonly=True)
