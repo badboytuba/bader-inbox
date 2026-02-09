@@ -47,9 +47,22 @@ class BaderInboxWebhook(http.Controller):
     def _handle_message(self, channel, data):
         """Handle incoming/outgoing message"""
         try:
-            messages = data.get("data", [])
-            if not isinstance(messages, list):
-                messages = [messages]
+            # API sends message data directly in payload, not in 'data' array
+            # Format: {"event": "messages.upsert", "message": {...}, "key": {...}, "pushName": "..."}
+            # Or nested: {"data": [{"key": {...}, "message": {...}, "pushName": "..."}]}
+            
+            messages = []
+            if "message" in data and "key" in data:
+                # Message at root level (production API format)
+                messages = [data]
+            elif "data" in data:
+                # Messages in data array (legacy format)
+                messages = data.get("data", [])
+                if not isinstance(messages, list):
+                    messages = [messages]
+            else:
+                # Try using whole data object
+                messages = [data]
             
             for msg_data in messages:
                 if not msg_data:
