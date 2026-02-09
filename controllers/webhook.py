@@ -206,8 +206,16 @@ class BaderInboxWebhook(http.Controller):
         """Handle connection status update"""
         try:
             connection = data.get("data", {})
-            state = connection.get("state", "")
-            state_map = {"open": "connected", "connecting": "connecting", "close": "disconnected"}
+            state = connection.get("state", "") or connection.get("status", "")
+            # Handle both Evolution API formats: 'open'/'close' and 'connected'/'disconnected'
+            state_map = {
+                "open": "connected", 
+                "connected": "connected",
+                "connecting": "connecting", 
+                "close": "disconnected",
+                "disconnected": "disconnected",
+                "qr_ready": "qr_ready"
+            }
             new_state = state_map.get(state, channel.state)
             
             update_vals = {"state": new_state}
