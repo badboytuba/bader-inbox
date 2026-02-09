@@ -28,6 +28,7 @@
         "views/settings_views.xml",
         "views/channel_views.xml",
         "views/conversation_views.xml",
+        "views/phone_widget_views.xml",
         "views/menus.xml",
     ],
     "assets": {
