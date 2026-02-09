@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
-    <!-- Evolution API URL - OdontoWave WhatsApp Server (Replit) -->
+    <!-- Evolution API URL - OdontoWave WhatsApp Server (Production) -->
     <record id="bader_inbox_evolution_url" model="ir.config_parameter">
         <field name="key">bader_inbox.evolution_url</field>
-        <field name="value">https://dbc3aaab-bc0e-485a-bb24-561e002db662-00-qgjr392aomzo.worf.replit.dev</field>
+        <field name="value">https://whatsapp.odontowave.com</field>
     </record>
-    <!-- Evolution API Key - Configure via Settings or set SESSION_SECRET from Replit -->
+    <!-- Evolution API Key - SESSION_SECRET from server -->
     <record id="bader_inbox_evolution_key" model="ir.config_parameter">
         <field name="key">bader_inbox.evolution_key</field>
         <field name="value"></field>
