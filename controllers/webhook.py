@@ -19,8 +19,9 @@ class BaderInboxWebhook(http.Controller):
     def webhook_handler(self, channel_id, **kwargs):
         """Handle incoming webhook from Evolution API"""
         try:
-            data = request.jsonrequest
-            _logger.debug(f"Webhook for channel {channel_id}: {json.dumps(data)[:500]}")
+            # Odoo 16 compatibility - get JSON data from request
+            data = request.get_json_data() if hasattr(request, 'get_json_data') else (request.jsonrequest if hasattr(request, 'jsonrequest') else kwargs)
+            _logger.info(f"Webhook for channel {channel_id}: {json.dumps(data)[:500]}")
             
             channel = request.env["bader.inbox.channel"].sudo().browse(channel_id)
             if not channel.exists():
