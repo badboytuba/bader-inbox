@@ -17,8 +17,15 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     def _get_config(self):
         """Get API configuration"""
         params = self.env["ir.config_parameter"].sudo()
+        # New Evolution API URL (Replit hosted)
+        url = params.get_param(
+            "bader_inbox.evolution_url", 
+            "https://dbc3aaab-bc0e-485a-bb24-561e002db662-00-qgjr392aomzo.worf.replit.dev"
+        )
+        # Normalize URL - remove /api suffix if present (endpoints already include /api/)
+        url = url.rstrip('/').rstrip('/api')
         return {
-            "url": params.get_param("bader_inbox.evolution_url", "https://whatsapp.odontowave.com"),
+            "url": url,
             "key": params.get_param("bader_inbox.evolution_key", ""),
         }
 
