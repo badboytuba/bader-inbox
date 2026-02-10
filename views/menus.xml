@@ -1,25 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Root menu - app icon in dashboard -->
+    <!-- Root menu - opens OWL Inbox directly -->
     <menuitem id="menu_bader_inbox_root" name="Bader Inbox" sequence="35" 
         web_icon="bader_inbox,static/description/icon.png"
+        action="action_bader_inbox_main"
         groups="base.group_user"/>
 
-    <!-- Inbox (OWL Component) - first menu item -->
-    <menuitem id="menu_bader_inbox_main" name="📥 Inbox" 
-        parent="menu_bader_inbox_root" 
-        action="action_bader_inbox_main" 
-        sequence="10"
-        groups="base.group_user"/>
-
-    <!-- Conversations List View -->
-    <menuitem id="menu_bader_inbox_conversations" name="💬 Conversas" 
-        parent="menu_bader_inbox_root" 
-        action="action_bader_inbox_conversation" 
-        sequence="20"
-        groups="base.group_user"/>
-
-    <!-- Configuração submenu -->
+    <!-- Configuração submenu in navbar -->
     <menuitem id="menu_bader_inbox_config" name="⚙️ Configuração" 
         parent="menu_bader_inbox_root" 
         sequence="100" 
