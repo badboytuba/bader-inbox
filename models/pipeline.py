@@ -135,6 +135,7 @@ class BaderInboxConversationPipeline(models.Model):
         ("done", "Ready"),
         ("blocked", "Blocked"),
     ], default="normal", string="Kanban State")
+    color = fields.Integer(string="Color")
     
     # Related fields from conversation (for display in kanban cards)
     contact_name = fields.Char(
@@ -154,9 +155,6 @@ class BaderInboxConversationPipeline(models.Model):
     )
     channel_id = fields.Many2one(
         related="conversation_id.channel_id", string="Channel", store=True
-    )
-    conversation_state = fields.Selection(
-        related="conversation_id.state", string="Conv. Status"
     )
     
     # Computed display name
