@@ -86,6 +86,52 @@ class BaderInboxChatbot(models.Model):
             return True
         return False
 
+    @api.model
+    def _process_no_reply_rules(self):
+        """Process 'no_reply' rules via cron"""
+        rules = self.search([
+            ("active", "=", True), 
+            ("trigger_type", "=", "no_reply"),
+            ("trigger_delay_minutes", ">", 0)
+        ], order="priority")
+        
+        if not rules:
+            return
+            
+        Conversation = self.env["bader.inbox.conversation"]
+        now = fields.Datetime.now()
+        
+        for rule in rules:
+            # Calculate threshold time
+            threshold = fields.Datetime.subtract(now, minutes=rule.trigger_delay_minutes)
+            
+            # Find candidate conversations:
+            # - Open/Pending state
+            # - Last message older than threshold
+            # - Last message was INCOMING (user waiting for reply)
+            # OR - Unread count > 0 (implies incoming)
+            # Optimization: Filter by date first
+            
+            domain = [
+                ("state", "in", ["open", "pending"]),
+                ("last_message_date", "<", threshold),
+                ("unread_count", ">", 0) # Quick check for incoming pending
+            ]
+            if rule.channel_ids:
+                domain.append(("channel_id", "in", rule.channel_ids.ids))
+                
+            conversations = Conversation.search(domain)
+            
+            for conv in conversations:
+                # Double check last message direction explicitly to avoid logic errors
+                last_msg = self.env["bader.inbox.message"].search([
+                    ("conversation_id", "=", conv.id)
+                ], order="create_date desc", limit=1)
+                
+                if last_msg and last_msg.direction == "in":
+                    # Check if already triggered recently? Not needed if action updates last_message_date
+                    rule.execute_action(conv, last_msg)
+
     def execute_action(self, conversation, message=None):
         """Execute rule action"""
         self.ensure_one()
@@ -98,8 +144,33 @@ class BaderInboxChatbot(models.Model):
             content = self.reply_template_id.content if self.reply_template_id else self.reply_content
             if content:
                 content = content.replace("{name}", conversation.contact_name or conversation.phone or "")
+                # Sends message -> updates last_message_date -> breaks loop
                 self.env["bader.inbox.message"].send_message(conversation.id, content, "text")
+                
         elif self.action_type == "assign" and self.assign_user_id:
             conversation.assigned_user_id = self.assign_user_id
+            # Log action to prevent loop
+            conversation.message_post(body=f"Chatbot: Auto-assigned to {self.assign_user_id.name}")
+            # Update last_message_date to prevent re-triggering immediately
+            conversation.last_message_date = fields.Datetime.now()
+            
         elif self.action_type == "tag" and self.add_tag_ids:
             conversation.tag_ids = [(4, tag.id) for tag in self.add_tag_ids]
+            # Log action
+            tag_names = ", ".join(self.add_tag_ids.mapped("name"))
+            conversation.message_post(body=f"Chatbot: Added tags {tag_names}")
+            conversation.last_message_date = fields.Datetime.now()
+            
+        elif self.action_type == "notify" and self.notify_user_ids:
+            # Send internal notification
+            subject = f"New WhatsApp from {conversation.computed_name}"
+            body = f"Customer waiting for reply > {self.trigger_delay_minutes} min"
+            for user in self.notify_user_ids:
+                conversation.message_notify(
+                    partner_ids=[user.partner_id.id],
+                    body=body,
+                    subject=subject,
+                    record_name=conversation.computed_name,
+                )
+            conversation.message_post(body=f"Chatbot: Notified {len(self.notify_user_ids)} users")
+            conversation.last_message_date = fields.Datetime.now()

@@ -71,10 +71,10 @@ class BaderInboxWebhook(http.Controller):
             return request.not_found()
 
     @http.route(
-        "/bader-inbox/webhook/<int:channel_id>",
+        "/bader-inbox/webhook/<int:channel_id>/<string:webhook_token>",
         type="http", auth="none", methods=["POST"], csrf=False,
     )
-    def webhook_handler(self, channel_id, **kwargs):
+    def webhook_handler(self, channel_id, webhook_token, **kwargs):
         """Handle incoming webhook from Evolution API."""
         try:
             # Parse raw JSON body (Evolution API sends plain JSON, not JSON-RPC)
@@ -89,17 +89,18 @@ class BaderInboxWebhook(http.Controller):
             
             _logger.info(f"Webhook for channel {channel_id}: event={data.get('event', 'unknown')}")
             
-            # DEBUG: Save full payload to file for analysis
-            try:
-                with open(f"/tmp/webhook_debug_{channel_id}.json", "w") as f:
-                    json.dump(data, f, indent=2, default=str)
-            except:
-                pass
+            # Removed debug file writing for security
+            # _logger.debug(f"Webhook data: {json.dumps(data, default=str)}")
             
             channel = request.env["bader.inbox.channel"].sudo().browse(channel_id)
             if not channel.exists():
                 _logger.warning(f"Channel {channel_id} not found")
                 return _json_error("Channel not found")
+                
+            # Verify Webhook Token
+            if channel.webhook_token != webhook_token:
+                _logger.warning(f"Invalid webhook token for channel {channel_id}")
+                return request.make_response("Forbidden", status=403)
             
             event = data.get("event", "")
             _logger.info(f"Processing event: {event} for channel {channel_id}")
@@ -118,67 +119,90 @@ class BaderInboxWebhook(http.Controller):
             _logger.error(f"Webhook error: {e}", exc_info=True)
             return _json_error(str(e))
 
-    def _handle_message(self, channel, data):
-        """Handle incoming/outgoing message
+    def _extract_phone_info(self, key):
+        """Extract phone and remote_jid from message key"""
+        remote_jid = key.get("remoteJid", "")
+        sender_pn = key.get("senderPn", "")
+        participant = key.get("participant", "")
         
-        Payload: key, content, pushName are INSIDE data["message"]
-        {
-            "event": "messages.upsert",
-            "message": {
-                "key": {"remoteJid": "...", "fromMe": false, "id": "..."},
-                "messageType": "conversation",
-                "content": {"conversation": "texto"},
-                "pushName": "Nome do Contato"
+        # Priority: senderPn > participant > remoteJid
+        phone_source = ""
+        if sender_pn and "@s.whatsapp.net" in sender_pn:
+            phone_source = sender_pn
+        elif participant and "@s.whatsapp.net" in participant:
+            phone_source = participant
+        else:
+            phone_source = remote_jid
+        
+        # Strip any @ suffix to get just the number
+        phone = phone_source.split("@")[0] if "@" in phone_source else phone_source
+        whatsapp_id = remote_jid or phone_source
+        
+        return phone, whatsapp_id, phone_source
+
+    def _process_media_download(self, channel, message, key):
+        """Download media content for a message"""
+        try:
+            api = request.env["bader.inbox.evolution_api"].sudo()
+            instance_name = channel.evolution_instance_name
+            media_key = {
+                "remoteJid": key.get("remoteJid", ""),
+                "id": key.get("id", ""),
+                "fromMe": key.get("fromMe", False),
             }
+            media_result = api.get_base64_from_media(instance_name, media_key)
+            if media_result and media_result.get("base64"):
+                message.sudo().write({
+                    "media_data": media_result["base64"],
+                    "media_mimetype": media_result.get("mimetype") or message.media_mimetype,
+                })
+                _logger.info(f"Media downloaded for message {message.id}")
+            else:
+                _logger.warning(f"Failed to download media for message {message.id}")
+        except Exception as me:
+            _logger.error(f"Media download error: {me}")
+
+    def _create_message(self, conversation, direction, msg_type, content, msg_id, media_info):
+        """Create a new message record"""
+        Message = request.env["bader.inbox.message"].sudo()
+        
+        # Check duplicate
+        if msg_id:
+            existing = Message.search([("whatsapp_message_id", "=", msg_id)], limit=1)
+            if existing:
+                _logger.info(f"Duplicate message {msg_id}, skipping")
+                return None
+        
+        message_vals = {
+            "conversation_id": conversation.id,
+            "direction": direction,
+            "message_type": msg_type,
+            "content": content,
+            "whatsapp_message_id": msg_id,
+            "status": "read" if direction == "in" else "sent",
         }
-        """
+        if media_info:
+            message_vals.update(media_info)
+        
+        return Message.create(message_vals)
+
+    def _handle_message(self, channel, data):
+        """Handle incoming/outgoing message"""
         try:
             msg_obj = data.get("message", {})
             if not msg_obj:
                 _logger.warning("No message object in payload")
                 return _json_error("No message data")
             
-            # Extract fields from INSIDE the message object
             key = msg_obj.get("key", {})
             message_content = msg_obj.get("content", {})
             push_name = msg_obj.get("pushName", "")
-            message_type_raw = msg_obj.get("messageType", "conversation")
             
-            _logger.info(f"Message: key={key}, pushName={push_name}, type={message_type_raw}")
-            
-            from_me = key.get("fromMe", False)
-            direction = "out" if from_me else "in"
-            
-            # Extract phone number - handle multiple jid formats:
-            # - Standard: "34651659176@s.whatsapp.net" 
-            # - Newsletter/LID: "221208599625931@lid"
-            # - Group: "34651659176@g.us"
-            # Use senderPn or participant as fallback for the actual phone
-            remote_jid = key.get("remoteJid", "")
-            sender_pn = key.get("senderPn", "")  # e.g. "34651659176@s.whatsapp.net"
-            participant = key.get("participant", "")
-            
-            # Try to get a clean phone number
-            # Priority: senderPn > participant > remoteJid
-            phone_source = ""
-            if sender_pn and "@s.whatsapp.net" in sender_pn:
-                phone_source = sender_pn
-            elif participant and "@s.whatsapp.net" in participant:
-                phone_source = participant
-            else:
-                phone_source = remote_jid
-            
-            # Strip any @ suffix to get just the number
-            phone = phone_source.split("@")[0] if "@" in phone_source else phone_source
-            whatsapp_id = remote_jid or phone_source
+            phone, whatsapp_id, phone_source = self._extract_phone_info(key)
             
             if not phone:
-                _logger.warning(f"No phone extracted from: remoteJid={remote_jid}, senderPn={sender_pn}")
+                _logger.warning("No phone extracted")
                 return _json_error("No phone number")
-            
-            _logger.info(f"Phone extracted: {phone} from source={phone_source} (remoteJid={remote_jid})")
-            
-            _logger.info(f"Processing message from {phone} (direction={direction})")
             
             Conversation = request.env["bader.inbox.conversation"].sudo()
             conversation = Conversation.get_or_create(
@@ -188,53 +212,23 @@ class BaderInboxWebhook(http.Controller):
                 contact_name=push_name
             )
             
-            # Parse message content from the "content" field
+            # Parse content
             msg_type, content, media_info = self._parse_message_content(message_content)
             
-            # Check for duplicate
+            from_me = key.get("fromMe", False)
+            direction = "out" if from_me else "in"
             msg_id = key.get("id", "")
-            Message = request.env["bader.inbox.message"].sudo()
-            if msg_id:
-                existing = Message.search([("whatsapp_message_id", "=", msg_id)], limit=1)
-                if existing:
-                    _logger.info(f"Duplicate message {msg_id}, skipping")
-                    return _json_ok({"status": "duplicate"})
             
-            message_vals = {
-                "conversation_id": conversation.id,
-                "direction": direction,
-                "message_type": msg_type,
-                "content": content,
-                "whatsapp_message_id": msg_id,
-                "status": "read" if direction == "in" else "sent",
-            }
-            if media_info:
-                message_vals.update(media_info)
+            # Create message
+            new_message = self._create_message(conversation, direction, msg_type, content, msg_id, media_info)
+            if not new_message:
+                return _json_ok({"status": "duplicate"})
             
-            new_message = Message.create(message_vals)
-            _logger.info(f"Message created: id={new_message.id}, conv={conversation.id}, type={msg_type}")
+            _logger.info(f"Message created: id={new_message.id}, type={msg_type}")
             
-            # Download media content from Evolution API for non-text messages
+            # Download media if needed
             if msg_type in ("image", "audio", "video", "document") and key:
-                try:
-                    api = request.env["bader.inbox.evolution_api"].sudo()
-                    instance_name = channel.evolution_instance_name
-                    media_key = {
-                        "remoteJid": key.get("remoteJid", ""),
-                        "id": key.get("id", ""),
-                        "fromMe": key.get("fromMe", False),
-                    }
-                    media_result = api.get_base64_from_media(instance_name, media_key)
-                    if media_result and media_result.get("base64"):
-                        new_message.sudo().write({
-                            "media_data": media_result["base64"],
-                            "media_mimetype": media_result.get("mimetype") or new_message.media_mimetype,
-                        })
-                        _logger.info(f"Media downloaded for message {new_message.id}")
-                    else:
-                        _logger.warning(f"Failed to download media for message {new_message.id}")
-                except Exception as me:
-                    _logger.error(f"Media download error: {me}")
+                self._process_media_download(channel, new_message, key)
             
             if direction == "in":
                 self._send_bus_notification(conversation, new_message, push_name, phone)

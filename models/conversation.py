@@ -68,8 +68,28 @@ class BaderInboxConversation(models.Model):
                 rec.computed_name = rec.phone or "Unknown"
 
     @api.model
+    def _clean_phone(self, phone):
+        """Normalize phone number to digits only (no spaces, dashes, +, parentheses)"""
+        if not phone:
+            return False
+        return phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "").replace("+", "")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get("phone"):
+                vals["phone"] = self._clean_phone(vals["phone"])
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if vals.get("phone"):
+            vals["phone"] = self._clean_phone(vals["phone"])
+        return super().write(vals)
+
+    @api.model
     def get_or_create(self, channel_id, phone, whatsapp_id=None, contact_name=None):
         """Get existing or create new conversation"""
+        phone = self._clean_phone(phone)
         domain = [("channel_id", "=", channel_id), ("phone", "=", phone)]
         conversation = self.search(domain, limit=1)
         
@@ -98,9 +118,7 @@ class BaderInboxConversation(models.Model):
             return {"success": False, "error": "No phone number provided"}
         
         # Clean phone number
-        clean_phone = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-        if clean_phone.startswith("+"):
-            clean_phone = clean_phone[1:]
+        clean_phone = self._clean_phone(phone)
         
         # Find existing conversation with this phone
         conversation = self.search([

@@ -121,8 +121,35 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
         }
 
-    def send_media(self, instance_name, phone, media_type, media_url, filename=None, caption=None):
-        """Send media message via URL"""
+    def send_media(self, instance_name, phone, media_type, media_url=None, media_data=None, filename=None, caption=None):
+        """Send media message via URL or Base64"""
+        
+        # Priority 1: Send Base64 if available (New generic endpoint /message/sendMedia)
+        if media_data:
+            # Evolution API v2 generic media endpoint
+            endpoint = "/message/sendMedia"
+            
+            # Ensure base64 prefix is stripped
+            if "," in media_data:
+                media_data = media_data.split(",")[1]
+            
+            data = {
+                "number": phone,
+                "mediatype": media_type,
+                "media": media_data,
+                "fileName": filename or "file",
+                "caption": caption or "",
+            }
+            # mimetype is optional if API can detect, but better to pass if we knew it
+            # bader_inbox Message model stores media_mimetype
+            
+            result = self._request("POST", f"{endpoint}/{instance_name}", data)
+            return {
+                "success": "key" in result or result.get("status") == "sent",
+                "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
+            }
+
+        # Priority 2: Send URL (specific endpoints)
         endpoint_map = {
             "image": "/message/image",
             "audio": "/message/audio",
@@ -131,7 +158,6 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         }
         endpoint = endpoint_map.get(media_type, "/message/document")
         
-        # Use URL-based endpoints per Evolution API docs
         url_key = f"{media_type}Url" if media_type != "document" else "documentUrl"
         data = {
             "number": phone,

@@ -124,9 +124,10 @@ class BaderInboxMessage(models.Model):
                     channel.evolution_instance_name, 
                     phone, 
                     msg_type,
-                    media_data,
-                    media_filename,
-                    content
+                    media_data=media_data,  # Pass base64 data
+                    media_url=None,         # No URL for direct upload
+                    filename=media_filename, 
+                    caption=content
                 )
             
             if result.get("success"):

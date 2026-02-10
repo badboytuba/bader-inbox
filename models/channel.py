@@ -4,6 +4,7 @@
 import logging
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
+import uuid
 
 _logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class BaderInboxChannel(models.Model):
     
     # Webhook
     webhook_url = fields.Char(string="Webhook URL", readonly=True)
+    webhook_token = fields.Char(string="Webhook Token", readonly=True, copy=False)
     
     # Relations
     conversation_ids = fields.One2many(
@@ -66,7 +68,14 @@ class BaderInboxChannel(models.Model):
             
             # Generate webhook URL BEFORE creating instance
             base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url")
-            webhook_url = f"{base_url}/bader-inbox/webhook/{self.id}"
+            # Generate webhook URL BEFORE creating instance
+            base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url")
+            
+            # Generate or reuse token
+            if not self.webhook_token:
+                self.webhook_token = str(uuid.uuid4())
+                
+            webhook_url = f"{base_url}/bader-inbox/webhook/{self.id}/{self.webhook_token}"
             self.webhook_url = webhook_url
             
             # Create instance WITH webhook configured

@@ -4,6 +4,8 @@ import { Component, useState, onWillStart, useRef, onMounted, onWillUnmount } fr
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { _t } from "@web/core/l10n/translation";
+import { deserializeDateTime } from "@web/core/l10n/dates";
+const { DateTime } = luxon;
 
 export class BaderInboxMain extends Component {
     static template = "bader_inbox.InboxMain";
@@ -14,6 +16,7 @@ export class BaderInboxMain extends Component {
         this.notification = useService("notification");
         this.action = useService("action");
         this.user = useService("user");
+        this.busService = useService("bus_service");
 
         this.state = useState({
             // Conversations
@@ -46,12 +49,14 @@ export class BaderInboxMain extends Component {
         });
 
         this.messagesRef = useRef("messagesContainer");
+        this.fileInputRef = useRef("fileInput");
         this.avatarColors = ["green", "blue", "purple", "orange", "pink", "red"];
         this.qrPollInterval = null;
         this.conversationPollInterval = null;
         this.messagePollInterval = null;
 
         onWillStart(async () => {
+            this.busService.addChannel("bader_inbox");
             await this.loadChannels();
             await this.loadConversations();
 
@@ -65,21 +70,24 @@ export class BaderInboxMain extends Component {
         });
 
         onMounted(() => {
-            // Silent poll: conversations every 5s, messages every 3s
-            // These use _refresh methods that do NOT show loading spinners
+            this.busService.addEventListener("notification", this._onBusNotification.bind(this));
+
+            // Reduced polling intervals (now mostly for fallback/sync)
             this.conversationPollInterval = setInterval(() => {
                 this._refreshConversations();
-            }, 5000);
+            }, 60000); // 60s fallback
 
             this.messagePollInterval = setInterval(() => {
+                // Keep checking messages occasionally just in case
                 if (this.state.selectedConversation) {
                     this._refreshMessages(this.state.selectedConversation.id);
                 }
-            }, 3000);
+            }, 30000); // 30s fallback
         });
 
         onWillUnmount(() => {
             this.stopQRPolling();
+            this.busService.removeEventListener("notification", this._onBusNotification.bind(this));
             if (this.conversationPollInterval) clearInterval(this.conversationPollInterval);
             if (this.messagePollInterval) clearInterval(this.messagePollInterval);
         });
@@ -421,15 +429,38 @@ export class BaderInboxMain extends Component {
     // ==========================================
 
     async sendMessage() {
-        if (!this.state.composerText.trim() || !this.state.selectedConversation) return;
+        if (!this.state.selectedConversation) return;
+
+        const content = this.state.composerText.trim();
+        // Allow empty content if sending media
+        if (!content && !this.state.attachment) return;
 
         this.state.sendingMessage = true;
         try {
-            await this.orm.call(
-                "bader.inbox.message",
-                "send_message",
-                [this.state.selectedConversation.id, this.state.composerText, "text"]
-            );
+            if (this.state.attachment) {
+                // Send with media
+                await this.orm.call(
+                    "bader.inbox.message",
+                    "send_message",
+                    [],
+                    {
+                        conversation_id: this.state.selectedConversation.id,
+                        content: content,
+                        msg_type: this.state.attachment.type,
+                        media_data: this.state.attachment.data,
+                        media_filename: this.state.attachment.name
+                    }
+                );
+                this.state.attachment = null;
+            } else {
+                // Send text only
+                await this.orm.call(
+                    "bader.inbox.message",
+                    "send_message",
+                    [this.state.selectedConversation.id, content, "text"]
+                );
+            }
+
             this.state.composerText = "";
             await this.loadMessages(this.state.selectedConversation.id);
         } catch (e) {
@@ -437,6 +468,42 @@ export class BaderInboxMain extends Component {
             this.notification.add(_t("Erro ao enviar mensagem"), { type: "danger" });
         }
         this.state.sendingMessage = false;
+    }
+
+    triggerFileInput() {
+        if (this.fileInputRef.el) {
+            this.fileInputRef.el.click();
+        }
+    }
+
+    async onFileSelected(ev) {
+        const file = ev.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64Data = reader.result.split(',')[1];
+            this.state.attachment = {
+                name: file.name,
+                data: base64Data,
+                type: this._getMediaType(file.type),
+                preview: reader.result
+            };
+            // Clear input so same file can be selected again
+            ev.target.value = "";
+        };
+        reader.readAsDataURL(file);
+    }
+
+    removeAttachment() {
+        this.state.attachment = null;
+    }
+
+    _getMediaType(mimeType) {
+        if (mimeType.startsWith("image/")) return "image";
+        if (mimeType.startsWith("audio/")) return "audio";
+        if (mimeType.startsWith("video/")) return "video";
+        return "document";
     }
 
     onComposerKeydown(event) {
@@ -501,18 +568,20 @@ export class BaderInboxMain extends Component {
 
     formatTime(dateStr) {
         if (!dateStr) return "";
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        // Deserialize UTC string to Luxon DateTime (in local/system zone)
+        const date = deserializeDateTime(dateStr);
+        const now = DateTime.local();
+        // Calculate difference in days (ignoring time)
+        const diff = Math.floor(now.diff(date, 'days').days);
 
-        if (diffDays === 0) {
-            return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        } else if (diffDays === 1) {
+        if (date.hasSame(now, 'day')) {
+            return date.toFormat("HH:mm");
+        } else if (diff < 2 && date.hasSame(now.minus({ days: 1 }), 'day')) {
             return "Ontem";
-        } else if (diffDays < 7) {
-            return date.toLocaleDateString([], { weekday: "short" });
+        } else if (diff < 7) {
+            return date.toFormat("ccc"); // Short weekday
         } else {
-            return date.toLocaleDateString([], { day: "2-digit", month: "2-digit" });
+            return date.toFormat("dd/MM");
         }
     }
 
@@ -532,6 +601,50 @@ export class BaderInboxMain extends Component {
             return `/bader-inbox/media/${msg.id}`;
         }
         return msg.media_url || "";
+    }
+
+    async _onBusNotification({ detail: notifications }) {
+        let refreshConversations = false;
+        let refreshMessages = false;
+
+        for (const { payload, type } of notifications) {
+            if (type === "bader_inbox_new_message") {
+                // New message received
+                refreshConversations = true;
+
+                // If this conversation is currently open, refresh messages immediately
+                if (this.state.selectedConversation &&
+                    this.state.selectedConversation.id === payload.conversation_id) {
+
+                    // Optimistic update if we have full message payload
+                    if (payload.message) {
+                        // Check if already exists
+                        const exists = this.state.messages.some(m => m.id === payload.message.id);
+                        if (!exists) {
+                            // Add media URL helper if needed
+                            const msg = payload.message;
+                            if (!msg.media_url && msg.message_type !== 'text' && msg.id) {
+                                msg.media_url = `/bader-inbox/media/${msg.id}`;
+                            }
+                            this.state.messages.push(msg);
+                            setTimeout(() => {
+                                const container = this.messagesRef.el;
+                                if (container) container.scrollTop = container.scrollHeight;
+                            }, 100);
+                        }
+                    } else {
+                        refreshMessages = true;
+                    }
+                }
+            }
+        }
+
+        if (refreshConversations) {
+            await this._refreshConversations();
+        }
+        if (refreshMessages && this.state.selectedConversation) {
+            await this._refreshMessages(this.state.selectedConversation.id);
+        }
     }
 
     getUserInitials() {

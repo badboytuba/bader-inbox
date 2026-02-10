@@ -177,17 +177,37 @@
                     </div>
 
                     <div class="chat-composer">
+                        <!-- Attachment Preview -->
+                        <t t-if="state.attachment">
+                            <div class="attachment-preview">
+                                <div class="preview-content">
+                                    <t t-if="state.attachment.type === 'image'">
+                                        <img t-att-src="state.attachment.preview" class="preview-image"/>
+                                    </t>
+                                    <t t-else="">
+                                        <div class="preview-file">
+                                            <i t-attf-class="fa {{ state.attachment.type === 'audio' ? 'fa-music' : state.attachment.type === 'video' ? 'fa-video-camera' : 'fa-file' }}"/>
+                                        </div>
+                                    </t>
+                                    <span class="preview-name" t-esc="state.attachment.name"/>
+                                </div>
+                                <button class="btn-remove-attachment" t-on-click="removeAttachment">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
+                        </t>
                         <div class="composer-actions">
-                            <button class="btn-composer" title="Anexar arquivo">
+                            <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
                                 <i class="fa fa-paperclip"/>
                             </button>
+                            <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
                         </div>
                         <div class="composer-input">
                             <textarea rows="1" placeholder="Escreva uma mensagem..." 
                                 t-model="state.composerText" 
                                 t-on-keydown="onComposerKeydown"/>
                         </div>
-                        <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || !state.composerText.trim()">
+                        <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
                             <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
                         </button>
                     </div>

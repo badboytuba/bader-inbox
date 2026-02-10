@@ -7,3 +7,4 @@ from . import message
 from . import evolution_api
 from . import res_partner
 from . import settings
+from . import template
