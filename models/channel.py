@@ -68,8 +68,6 @@ class BaderInboxChannel(models.Model):
             
             # Generate webhook URL BEFORE creating instance
             base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url")
-            # Generate webhook URL BEFORE creating instance
-            base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url")
             
             # Generate or reuse token
             if not self.webhook_token:
