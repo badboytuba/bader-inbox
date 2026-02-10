@@ -48,15 +48,77 @@ class BaderInboxWebhook(http.Controller):
         type="http", auth="user", methods=["GET"], csrf=False,
     )
     def serve_media(self, message_id, **kwargs):
-        """Serve stored media content for a message"""
+        """Serve stored media content for a message.
+        If not stored yet, downloads on-demand from media_url or Evolution API."""
         try:
-            message = request.env["bader.inbox.message"].browse(message_id)
-            if not message.exists() or not message.media_data:
+            message = request.env["bader.inbox.message"].sudo().browse(message_id)
+            if not message.exists():
                 return request.not_found()
             
-            data = base64.b64decode(message.media_data)
-            mimetype = message.media_mimetype or "application/octet-stream"
+            media_types = ("image", "audio", "video", "document", "sticker")
+            if message.message_type not in media_types:
+                return request.not_found()
             
+            # 1) Try stored media_data (ir.attachment)
+            data = None
+            if message.media_data:
+                try:
+                    data = base64.b64decode(message.media_data)
+                except Exception:
+                    data = None
+            
+            # 2) Download from media_url (WA CDN) if not stored
+            if not data and message.media_url:
+                try:
+                    import requests as req_lib
+                    resp = req_lib.get(message.media_url, timeout=15, stream=True)
+                    if resp.status_code == 200:
+                        data = resp.content
+                        # Cache it in media_data for future requests
+                        try:
+                            message.write({"media_data": base64.b64encode(data).decode()})
+                            _logger.info(f"Media cached from URL for message {message_id}")
+                        except Exception as ce:
+                            _logger.warning(f"Failed to cache media: {ce}")
+                        # Update mimetype from response if available
+                        ct = resp.headers.get("Content-Type")
+                        if ct and not message.media_mimetype:
+                            message.write({"media_mimetype": ct.split(";")[0]})
+                except Exception as e:
+                    _logger.warning(f"Media URL download failed for {message_id}: {e}")
+            
+            # 3) Fallback: Evolution API getBase64FromMediaMessage
+            if not data and message.whatsapp_message_id:
+                try:
+                    conv = message.conversation_id
+                    channel = conv.channel_id
+                    if channel and channel.evolution_instance_name:
+                        api = request.env["bader.inbox.evolution_api"].sudo()
+                        media_key = {
+                            "remoteJid": conv.whatsapp_id or f"{conv.phone}@s.whatsapp.net",
+                            "id": message.whatsapp_message_id,
+                            "fromMe": message.direction == "out",
+                        }
+                        result = api.get_base64_from_media(channel.evolution_instance_name, media_key)
+                        if result and result.get("base64"):
+                            data = base64.b64decode(result["base64"])
+                            # Cache it
+                            try:
+                                message.write({
+                                    "media_data": result["base64"],
+                                    "media_mimetype": result.get("mimetype") or message.media_mimetype,
+                                })
+                                _logger.info(f"Media cached from Evolution API for message {message_id}")
+                            except Exception as ce:
+                                _logger.warning(f"Failed to cache media: {ce}")
+                except Exception as e:
+                    _logger.warning(f"Evolution API media download failed for {message_id}: {e}")
+            
+            if not data:
+                _logger.warning(f"No media data available for message {message_id}")
+                return request.not_found()
+            
+            mimetype = message.media_mimetype or "application/octet-stream"
             headers = [
                 ("Content-Type", mimetype),
                 ("Content-Length", len(data)),
