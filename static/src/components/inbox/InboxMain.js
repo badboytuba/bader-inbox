@@ -34,6 +34,7 @@ export class BaderInboxMain extends Component {
 
             // UI
             showContactPanel: true,
+            viewMode: "list", // "list" or "kanban"
 
             // Channels
             channels: [],
@@ -46,6 +47,19 @@ export class BaderInboxMain extends Component {
             qrCodeData: null,
             currentChannelId: null,
             connectedPhone: "",
+
+            // Pipeline / Kanban
+            pipelines: [],
+            selectedPipelineId: null,
+            kanbanStages: [],
+            kanbanCards: {},  // { stageId: [cards] }
+            loadingKanban: false,
+            convPipelines: [],  // pipeline assignments for selected conversation
+            loadingPipelines: false,
+
+            // Add to Pipeline Modal
+            showPipelineModal: false,
+            pipelineModalPipelineId: null,
         });
 
         this.messagesRef = useRef("messagesContainer");
@@ -59,6 +73,7 @@ export class BaderInboxMain extends Component {
             this.busService.addChannel("bader_inbox");
             await this.loadChannels();
             await this.loadConversations();
+            await this.loadPipelines();
 
             // Check if we need to open a specific conversation (from PhoneWhatsAppWidget)
             const params = this.props.action?.params || {};
@@ -379,6 +394,7 @@ export class BaderInboxMain extends Component {
     async selectConversation(conv) {
         this.state.selectedConversation = conv;
         await this.loadMessages(conv.id);
+        await this.loadConvPipelines(conv.id);
 
         const idx = this.state.conversations.findIndex(c => c.id === conv.id);
         if (idx >= 0) {
@@ -519,6 +535,230 @@ export class BaderInboxMain extends Component {
 
     toggleContactPanel() {
         this.state.showContactPanel = !this.state.showContactPanel;
+    }
+
+    // ==========================================
+    // VIEW MODE TOGGLE
+    // ==========================================
+
+    setViewMode(mode) {
+        this.state.viewMode = mode;
+        if (mode === "kanban") {
+            if (this.state.pipelines.length && !this.state.selectedPipelineId) {
+                this.state.selectedPipelineId = this.state.pipelines[0].id;
+            }
+            this.loadKanbanData();
+        }
+    }
+
+    // ==========================================
+    // PIPELINE / KANBAN
+    // ==========================================
+
+    async loadPipelines() {
+        try {
+            this.state.pipelines = await this.orm.searchRead(
+                "bader.inbox.pipeline",
+                [["active", "=", true]],
+                ["id", "name", "icon", "color"],
+                { order: "sequence, name" }
+            );
+        } catch (e) {
+            console.error("Error loading pipelines:", e);
+        }
+    }
+
+    async selectPipeline(pipelineId) {
+        this.state.selectedPipelineId = pipelineId;
+        await this.loadKanbanData();
+    }
+
+    async loadKanbanData() {
+        if (!this.state.selectedPipelineId) return;
+        this.state.loadingKanban = true;
+        try {
+            // Load stages for this pipeline
+            const stages = await this.orm.searchRead(
+                "bader.inbox.pipeline.stage",
+                [["pipeline_id", "=", this.state.selectedPipelineId]],
+                ["id", "name", "sequence", "fold"],
+                { order: "sequence, id" }
+            );
+            this.state.kanbanStages = stages;
+
+            // Load assignments (cards)
+            const cards = await this.orm.searchRead(
+                "bader.inbox.conversation.pipeline",
+                [["pipeline_id", "=", this.state.selectedPipelineId]],
+                [
+                    "id", "conversation_id", "stage_id", "contact_name",
+                    "phone", "last_message", "unread_count", "priority",
+                    "assigned_user_id", "kanban_state", "notes"
+                ],
+                { order: "priority desc, id" }
+            );
+
+            // Group cards by stage
+            const grouped = {};
+            for (const stage of stages) {
+                grouped[stage.id] = [];
+            }
+            for (const card of cards) {
+                const stageId = card.stage_id[0];
+                if (grouped[stageId]) {
+                    grouped[stageId].push(card);
+                }
+            }
+            this.state.kanbanCards = grouped;
+        } catch (e) {
+            console.error("Error loading kanban:", e);
+        }
+        this.state.loadingKanban = false;
+    }
+
+    // Drag and Drop
+    onDragStart(ev, card) {
+        ev.dataTransfer.setData("text/plain", JSON.stringify({
+            cardId: card.id,
+            fromStageId: card.stage_id[0]
+        }));
+        ev.dataTransfer.effectAllowed = "move";
+        ev.target.classList.add("dragging");
+    }
+
+    onDragEnd(ev) {
+        ev.target.classList.remove("dragging");
+    }
+
+    onDragOver(ev) {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+        ev.currentTarget.classList.add("drag-over");
+    }
+
+    onDragLeave(ev) {
+        ev.currentTarget.classList.remove("drag-over");
+    }
+
+    async onDrop(ev, targetStageId) {
+        ev.preventDefault();
+        ev.currentTarget.classList.remove("drag-over");
+
+        try {
+            const data = JSON.parse(ev.dataTransfer.getData("text/plain"));
+            if (data.fromStageId === targetStageId) return;
+
+            // Optimistic update
+            const fromCards = this.state.kanbanCards[data.fromStageId] || [];
+            const cardIdx = fromCards.findIndex(c => c.id === data.cardId);
+            if (cardIdx >= 0) {
+                const [card] = fromCards.splice(cardIdx, 1);
+                const targetStage = this.state.kanbanStages.find(s => s.id === targetStageId);
+                card.stage_id = [targetStageId, targetStage?.name || ""];
+                if (!this.state.kanbanCards[targetStageId]) {
+                    this.state.kanbanCards[targetStageId] = [];
+                }
+                this.state.kanbanCards[targetStageId].push(card);
+            }
+
+            // Persist to server
+            await this.orm.write(
+                "bader.inbox.conversation.pipeline",
+                [data.cardId],
+                { stage_id: targetStageId }
+            );
+        } catch (e) {
+            console.error("Error moving card:", e);
+            this.notification.add(_t("Erro ao mover card"), { type: "danger" });
+            await this.loadKanbanData();
+        }
+    }
+
+    onKanbanCardClick(card) {
+        // Switch to list view and open this conversation
+        const conv = this.state.conversations.find(c => c.id === card.conversation_id[0]);
+        if (conv) {
+            this.state.viewMode = "list";
+            this.selectConversation(conv);
+        } else {
+            this.openConversationById(card.conversation_id[0]);
+            this.state.viewMode = "list";
+        }
+    }
+
+    // Pipeline sidebar — load assignments for selected conversation
+    async loadConvPipelines(conversationId) {
+        if (!conversationId) return;
+        this.state.loadingPipelines = true;
+        try {
+            this.state.convPipelines = await this.orm.searchRead(
+                "bader.inbox.conversation.pipeline",
+                [["conversation_id", "=", conversationId]],
+                ["id", "pipeline_id", "stage_id", "priority"],
+                { order: "id" }
+            );
+        } catch (e) {
+            console.error("Error loading conv pipelines:", e);
+        }
+        this.state.loadingPipelines = false;
+    }
+
+    // Add conversation to pipeline
+    openAddToPipelineModal() {
+        this.state.showPipelineModal = true;
+        this.state.pipelineModalPipelineId = null;
+    }
+
+    closePipelineModal() {
+        this.state.showPipelineModal = false;
+    }
+
+    async addToPipeline() {
+        if (!this.state.selectedConversation || !this.state.pipelineModalPipelineId) return;
+        try {
+            // Get first stage of the pipeline
+            const stages = await this.orm.searchRead(
+                "bader.inbox.pipeline.stage",
+                [["pipeline_id", "=", this.state.pipelineModalPipelineId]],
+                ["id"],
+                { order: "sequence", limit: 1 }
+            );
+            if (!stages.length) {
+                this.notification.add(_t("Este pipeline não tem etapas!"), { type: "warning" });
+                return;
+            }
+            await this.orm.create("bader.inbox.conversation.pipeline", [{
+                conversation_id: this.state.selectedConversation.id,
+                pipeline_id: this.state.pipelineModalPipelineId,
+                stage_id: stages[0].id,
+            }]);
+            this.notification.add(_t("Adicionado ao pipeline!"), { type: "success" });
+            this.state.showPipelineModal = false;
+            await this.loadConvPipelines(this.state.selectedConversation.id);
+        } catch (e) {
+            console.error("Error adding to pipeline:", e);
+            if (e.message && e.message.includes("unique")) {
+                this.notification.add(_t("Esta conversa já está neste pipeline!"), { type: "warning" });
+            } else {
+                this.notification.add(_t("Erro ao adicionar"), { type: "danger" });
+            }
+        }
+    }
+
+    async removeFromPipeline(assignmentId) {
+        try {
+            await this.orm.unlink("bader.inbox.conversation.pipeline", [assignmentId]);
+            this.notification.add(_t("Removido do pipeline"), { type: "info" });
+            await this.loadConvPipelines(this.state.selectedConversation.id);
+        } catch (e) {
+            console.error("Error removing from pipeline:", e);
+        }
+    }
+
+    get availablePipelinesForModal() {
+        // Pipelines not already assigned to this conversation
+        const assignedIds = this.state.convPipelines.map(cp => cp.pipeline_id[0]);
+        return this.state.pipelines.filter(p => !assignedIds.includes(p.id));
     }
 
     async createOpportunity() {

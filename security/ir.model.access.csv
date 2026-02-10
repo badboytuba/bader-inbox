@@ -13,3 +13,9 @@ access_bader_inbox_settings_user,bader.inbox.settings.user,model_bader_inbox_set
 access_bader_inbox_template_user,bader.inbox.template.user,model_bader_inbox_template,base.group_user,1,0,0,0
 access_bader_inbox_chatbot_user,bader.inbox.chatbot.user,model_bader_inbox_chatbot,base.group_user,1,0,0,0
 access_bader_inbox_tag_user,bader.inbox.tag.user,model_bader_inbox_tag,base.group_user,1,1,1,0
+access_bader_inbox_pipeline_all,bader.inbox.pipeline.all,model_bader_inbox_pipeline,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_pipeline_stage_all,bader.inbox.pipeline.stage.all,model_bader_inbox_pipeline_stage,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_conv_pipeline_all,bader.inbox.conversation.pipeline.all,model_bader_inbox_conversation_pipeline,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_pipeline_user,bader.inbox.pipeline.user,model_bader_inbox_pipeline,base.group_user,1,1,1,0
+access_bader_inbox_pipeline_stage_user,bader.inbox.pipeline.stage.user,model_bader_inbox_pipeline_stage,base.group_user,1,1,1,0
+access_bader_inbox_conv_pipeline_user,bader.inbox.conversation.pipeline.user,model_bader_inbox_conversation_pipeline,base.group_user,1,1,1,0

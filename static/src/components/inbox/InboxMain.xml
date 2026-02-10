@@ -80,149 +80,251 @@
                 </div>
             </div>
 
-            <!-- CENTER PANEL: Chat -->
+            <!-- CENTER PANEL: Chat or Kanban -->
             <div class="bader-inbox-center">
-                <t t-if="state.selectedConversation">
-                    <div class="chat-header">
-                        <div class="chat-contact">
-                            <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
-                                <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                <!-- View Mode Toggle -->
+                <div class="view-mode-toggle">
+                    <button t-attf-class="toggle-btn {{ state.viewMode === 'list' ? 'active' : '' }}" 
+                            t-on-click="() => this.setViewMode('list')" title="Vista Chat">
+                        <i class="fa fa-comments"/> Chat
+                    </button>
+                    <button t-attf-class="toggle-btn {{ state.viewMode === 'kanban' ? 'active' : '' }}" 
+                            t-on-click="() => this.setViewMode('kanban')" title="Vista Kanban">
+                        <i class="fa fa-columns"/> Kanban
+                    </button>
+                </div>
+
+                <!-- ═══ LIST VIEW (Chat) ═══ -->
+                <t t-if="state.viewMode === 'list'">
+                    <t t-if="state.selectedConversation">
+                        <div class="chat-header">
+                            <div class="chat-contact">
+                                <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
+                                    <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                                </div>
+                                <div class="contact-info">
+                                    <h4 t-esc="state.selectedConversation.computed_name || state.selectedConversation.phone"/>
+                                    <p t-esc="state.selectedConversation.phone"/>
+                                </div>
                             </div>
-                            <div class="contact-info">
-                                <h4 t-esc="state.selectedConversation.computed_name || state.selectedConversation.phone"/>
-                                <p t-esc="state.selectedConversation.phone"/>
+                            <div class="chat-actions">
+                                <button class="btn-chat-action" title="Atribuir" t-on-click="assignConversation">
+                                    <i class="fa fa-user-plus"/>
+                                </button>
+                                <button class="btn-chat-action" title="Resolver" t-on-click="resolveConversation">
+                                    <i class="fa fa-check"/>
+                                </button>
+                                <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Esconder detalhes' : 'Ver detalhes'">
+                                    <i class="fa fa-user"/>
+                                </button>
                             </div>
                         </div>
-                        <div class="chat-actions">
-                            <button class="btn-chat-action" title="Atribuir" t-on-click="assignConversation">
-                                <i class="fa fa-user-plus"/>
-                            </button>
-                            <button class="btn-chat-action" title="Resolver" t-on-click="resolveConversation">
-                                <i class="fa fa-check"/>
-                            </button>
-                            <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Esconder detalhes' : 'Ver detalhes'">
-                                <i class="fa fa-user"/>
+
+                        <div class="chat-messages" t-ref="messagesContainer">
+                            <t t-if="state.loadingMessages">
+                                <div class="text-center p-4">
+                                    <i class="fa fa-spinner fa-spin fa-2x"/>
+                                </div>
+                            </t>
+                            <t t-else="">
+                                <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
+                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}">
+                                        <div class="message-bubble">
+                                            <!-- Media content based on message type -->
+                                            <t t-if="msg.message_type === 'image'">
+                                                <div class="message-media">
+                                                    <img t-att-src="getMediaUrl(msg)" class="message-image" 
+                                                         t-on-click="() => window.open(getMediaUrl(msg), '_blank')"
+                                                         alt="Image" loading="lazy"/>
+                                                </div>
+                                                <t t-if="msg.content">
+                                                    <div class="message-text" t-esc="msg.content"/>
+                                                </t>
+                                            </t>
+                                            <t t-elif="msg.message_type === 'audio'">
+                                                <div class="message-media">
+                                                    <audio controls="" preload="none">
+                                                        <source t-att-src="getMediaUrl(msg)" t-att-type="msg.media_mimetype || 'audio/ogg'"/>
+                                                    </audio>
+                                                </div>
+                                            </t>
+                                            <t t-elif="msg.message_type === 'video'">
+                                                <div class="message-media">
+                                                    <video controls="" preload="none" class="message-video">
+                                                        <source t-att-src="getMediaUrl(msg)" t-att-type="msg.media_mimetype || 'video/mp4'"/>
+                                                    </video>
+                                                </div>
+                                                <t t-if="msg.content">
+                                                    <div class="message-text" t-esc="msg.content"/>
+                                                </t>
+                                            </t>
+                                            <t t-elif="msg.message_type === 'document'">
+                                                <div class="message-document">
+                                                    <a t-att-href="getMediaUrl(msg)" target="_blank" class="document-link">
+                                                        <i class="fa fa-file-o"/>
+                                                        <span t-esc="msg.media_filename || 'Document'"/>
+                                                    </a>
+                                                </div>
+                                                <t t-if="msg.content">
+                                                    <div class="message-text" t-esc="msg.content"/>
+                                                </t>
+                                            </t>
+                                            <t t-elif="msg.message_type === 'location'">
+                                                <div class="message-location">
+                                                    <i class="fa fa-map-marker"/>
+                                                    <span t-esc="msg.content || 'Location'"/>
+                                                </div>
+                                            </t>
+                                            <t t-else="">
+                                                <div class="message-text" t-esc="msg.content"/>
+                                            </t>
+                                            <div class="message-meta">
+                                                <span class="message-time" t-esc="formatTime(msg.create_date)"/>
+                                                <t t-if="msg.direction === 'out'">
+                                                    <i t-attf-class="fa fa-check message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : 'sent' }}"/>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </t>
+                            </t>
+                        </div>
+
+                        <div class="chat-composer">
+                            <!-- Attachment Preview -->
+                            <t t-if="state.attachment">
+                                <div class="attachment-preview">
+                                    <div class="preview-content">
+                                        <t t-if="state.attachment.type === 'image'">
+                                            <img t-att-src="state.attachment.preview" class="preview-image"/>
+                                        </t>
+                                        <t t-else="">
+                                            <div class="preview-file">
+                                                <i t-attf-class="fa {{ state.attachment.type === 'audio' ? 'fa-music' : state.attachment.type === 'video' ? 'fa-video-camera' : 'fa-file' }}"/>
+                                            </div>
+                                        </t>
+                                        <span class="preview-name" t-esc="state.attachment.name"/>
+                                    </div>
+                                    <button class="btn-remove-attachment" t-on-click="removeAttachment">
+                                        <i class="fa fa-times"/>
+                                    </button>
+                                </div>
+                            </t>
+                            <div class="composer-actions">
+                                <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
+                                    <i class="fa fa-paperclip"/>
+                                </button>
+                                <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
+                            </div>
+                            <div class="composer-input">
+                                <textarea rows="1" placeholder="Escreva uma mensagem..." 
+                                    t-model="state.composerText" 
+                                    t-on-keydown="onComposerKeydown"/>
+                            </div>
+                            <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
+                                <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
                             </button>
                         </div>
+                    </t>
+                    <t t-else="">
+                        <div class="empty-chat">
+                            <div class="empty-icon">
+                                <i class="fa fa-comments"/>
+                            </div>
+                            <h3>Bader Inbox</h3>
+                            <p>Selecione uma conversa para começar</p>
+                            <t t-if="!state.channels.length">
+                                <button class="btn btn-success btn-lg mt-3" t-on-click="openAddChannelModal">
+                                    <i class="fa fa-whatsapp"/> Conectar WhatsApp
+                                </button>
+                            </t>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- ═══ KANBAN VIEW ═══ -->
+                <t t-if="state.viewMode === 'kanban'">
+                    <div class="kanban-header">
+                        <div class="pipeline-selector">
+                            <label>Pipeline:</label>
+                            <select class="form-select form-select-sm" 
+                                    t-on-change="(ev) => this.selectPipeline(parseInt(ev.target.value))">
+                                <t t-foreach="state.pipelines" t-as="p" t-key="p.id">
+                                    <option t-att-value="p.id" t-att-selected="p.id === state.selectedPipelineId">
+                                        <t t-esc="p.icon"/> <t t-esc="p.name"/>
+                                    </option>
+                                </t>
+                            </select>
+                        </div>
+                        <t t-if="!state.pipelines.length">
+                            <div class="alert alert-info py-2 small mb-0">
+                                <i class="fa fa-info-circle"/> Crie pipelines em ⚙️ Configuração → Gerir Pipelines
+                            </div>
+                        </t>
                     </div>
 
-                    <div class="chat-messages" t-ref="messagesContainer">
-                        <t t-if="state.loadingMessages">
-                            <div class="text-center p-4">
+                    <div class="kanban-board">
+                        <t t-if="state.loadingKanban">
+                            <div class="text-center p-4 w-100">
                                 <i class="fa fa-spinner fa-spin fa-2x"/>
                             </div>
                         </t>
-                        <t t-else="">
-                            <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
-                                <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}">
-                                    <div class="message-bubble">
-                                        <!-- Media content based on message type -->
-                                        <t t-if="msg.message_type === 'image'">
-                                            <div class="message-media">
-                                                <img t-att-src="getMediaUrl(msg)" class="message-image" 
-                                                     t-on-click="() => window.open(getMediaUrl(msg), '_blank')"
-                                                     alt="Image" loading="lazy"/>
-                                            </div>
-                                            <t t-if="msg.content">
-                                                <div class="message-text" t-esc="msg.content"/>
-                                            </t>
-                                        </t>
-                                        <t t-elif="msg.message_type === 'audio'">
-                                            <div class="message-media">
-                                                <audio controls="" preload="none">
-                                                    <source t-att-src="getMediaUrl(msg)" t-att-type="msg.media_mimetype || 'audio/ogg'"/>
-                                                </audio>
-                                            </div>
-                                        </t>
-                                        <t t-elif="msg.message_type === 'video'">
-                                            <div class="message-media">
-                                                <video controls="" preload="none" class="message-video">
-                                                    <source t-att-src="getMediaUrl(msg)" t-att-type="msg.media_mimetype || 'video/mp4'"/>
-                                                </video>
-                                            </div>
-                                            <t t-if="msg.content">
-                                                <div class="message-text" t-esc="msg.content"/>
-                                            </t>
-                                        </t>
-                                        <t t-elif="msg.message_type === 'document'">
-                                            <div class="message-document">
-                                                <a t-att-href="getMediaUrl(msg)" target="_blank" class="document-link">
-                                                    <i class="fa fa-file-o"/>
-                                                    <span t-esc="msg.media_filename || 'Document'"/>
-                                                </a>
-                                            </div>
-                                            <t t-if="msg.content">
-                                                <div class="message-text" t-esc="msg.content"/>
-                                            </t>
-                                        </t>
-                                        <t t-elif="msg.message_type === 'location'">
-                                            <div class="message-location">
-                                                <i class="fa fa-map-marker"/>
-                                                <span t-esc="msg.content || 'Location'"/>
+                        <t t-elif="state.kanbanStages.length">
+                            <t t-foreach="state.kanbanStages" t-as="stage" t-key="stage.id">
+                                <div class="kanban-column"
+                                     t-on-dragover="onDragOver"
+                                     t-on-dragleave="onDragLeave"
+                                     t-on-drop="(ev) => this.onDrop(ev, stage.id)">
+                                    <div class="kanban-column-header">
+                                        <span class="column-title" t-esc="stage.name"/>
+                                        <span class="column-count badge bg-secondary">
+                                            <t t-esc="(state.kanbanCards[stage.id] || []).length"/>
+                                        </span>
+                                    </div>
+                                    <div class="kanban-column-body">
+                                        <t t-foreach="state.kanbanCards[stage.id] || []" t-as="card" t-key="card.id">
+                                            <div class="kanban-card" draggable="true"
+                                                 t-on-dragstart="(ev) => this.onDragStart(ev, card)"
+                                                 t-on-dragend="onDragEnd"
+                                                 t-on-click="() => this.onKanbanCardClick(card)">
+                                                <div class="card-header-row">
+                                                    <strong t-esc="card.contact_name || 'Unknown'"/>
+                                                    <t t-if="card.unread_count > 0">
+                                                        <span class="badge bg-danger badge-sm">
+                                                            <t t-esc="card.unread_count"/>
+                                                        </span>
+                                                    </t>
+                                                </div>
+                                                <div class="card-phone text-muted small">
+                                                    📱 <t t-esc="card.phone"/>
+                                                </div>
+                                                <t t-if="card.last_message">
+                                                    <div class="card-preview">
+                                                        <t t-esc="(card.last_message || '').substring(0, 60)"/>
+                                                        <t t-if="(card.last_message || '').length > 60">...</t>
+                                                    </div>
+                                                </t>
+                                                <div class="card-footer">
+                                                    <t t-if="card.assigned_user_id">
+                                                        <span class="card-user small text-muted">
+                                                            <i class="fa fa-user"/> <t t-esc="card.assigned_user_id[1]"/>
+                                                        </span>
+                                                    </t>
+                                                </div>
                                             </div>
                                         </t>
-                                        <t t-else="">
-                                            <div class="message-text" t-esc="msg.content"/>
-                                        </t>
-                                        <div class="message-meta">
-                                            <span class="message-time" t-esc="formatTime(msg.create_date)"/>
-                                            <t t-if="msg.direction === 'out'">
-                                                <i t-attf-class="fa fa-check message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : 'sent' }}"/>
-                                            </t>
-                                        </div>
                                     </div>
                                 </div>
                             </t>
                         </t>
-                    </div>
-
-                    <div class="chat-composer">
-                        <!-- Attachment Preview -->
-                        <t t-if="state.attachment">
-                            <div class="attachment-preview">
-                                <div class="preview-content">
-                                    <t t-if="state.attachment.type === 'image'">
-                                        <img t-att-src="state.attachment.preview" class="preview-image"/>
-                                    </t>
-                                    <t t-else="">
-                                        <div class="preview-file">
-                                            <i t-attf-class="fa {{ state.attachment.type === 'audio' ? 'fa-music' : state.attachment.type === 'video' ? 'fa-video-camera' : 'fa-file' }}"/>
-                                        </div>
-                                    </t>
-                                    <span class="preview-name" t-esc="state.attachment.name"/>
+                        <t t-else="">
+                            <div class="empty-chat">
+                                <div class="empty-icon">
+                                    <i class="fa fa-columns"/>
                                 </div>
-                                <button class="btn-remove-attachment" t-on-click="removeAttachment">
-                                    <i class="fa fa-times"/>
-                                </button>
+                                <h3>Sem Pipeline Selecionado</h3>
+                                <p>Selecione ou crie um pipeline em ⚙️ Configuração</p>
                             </div>
-                        </t>
-                        <div class="composer-actions">
-                            <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
-                                <i class="fa fa-paperclip"/>
-                            </button>
-                            <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
-                        </div>
-                        <div class="composer-input">
-                            <textarea rows="1" placeholder="Escreva uma mensagem..." 
-                                t-model="state.composerText" 
-                                t-on-keydown="onComposerKeydown"/>
-                        </div>
-                        <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
-                            <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
-                        </button>
-                    </div>
-                </t>
-                <t t-else="">
-                    <div class="empty-chat">
-                        <div class="empty-icon">
-                            <i class="fa fa-comments"/>
-                        </div>
-                        <h3>Bader Inbox</h3>
-                        <p>Selecione uma conversa para começar</p>
-                        <t t-if="!state.channels.length">
-                            <button class="btn btn-success btn-lg mt-3" t-on-click="openAddChannelModal">
-                                <i class="fa fa-whatsapp"/> Conectar WhatsApp
-                            </button>
                         </t>
                     </div>
                 </t>
@@ -255,6 +357,40 @@
                             <span class="info-label">Atribuído</span>
                             <span class="info-value" t-esc="state.selectedConversation.assigned_user_id?.[1] || 'Não atribuído'"/>
                         </div>
+                    </div>
+
+                    <!-- Pipeline Assignments Section -->
+                    <div class="contact-section">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h4>📊 Fluxos</h4>
+                            <button class="btn btn-sm btn-outline-primary" t-on-click="openAddToPipelineModal" 
+                                    t-att-disabled="!availablePipelinesForModal.length"
+                                    title="Adicionar a um fluxo">
+                                <i class="fa fa-plus"/>
+                            </button>
+                        </div>
+                        <t t-if="state.loadingPipelines">
+                            <div class="text-center py-2">
+                                <i class="fa fa-spinner fa-spin"/>
+                            </div>
+                        </t>
+                        <t t-elif="state.convPipelines.length">
+                            <t t-foreach="state.convPipelines" t-as="cp" t-key="cp.id">
+                                <div class="pipeline-assignment-row">
+                                    <div class="pipeline-info">
+                                        <strong t-esc="cp.pipeline_id[1]"/>
+                                        <span class="badge bg-info ms-1" t-esc="cp.stage_id[1]"/>
+                                    </div>
+                                    <button class="btn btn-sm btn-link text-danger p-0" 
+                                            t-on-click="() => this.removeFromPipeline(cp.id)" title="Remover">
+                                        <i class="fa fa-times"/>
+                                    </button>
+                                </div>
+                            </t>
+                        </t>
+                        <t t-else="">
+                            <p class="text-muted small mb-0">Nenhum fluxo atribuído</p>
+                        </t>
                     </div>
 
                     <div class="contact-actions">
@@ -339,6 +475,41 @@
                                     <i class="fa fa-check"/> Concluído
                                 </button>
                             </div>
+                        </t>
+                    </div>
+                </div>
+            </div>
+        </t>
+
+        <!-- ADD TO PIPELINE MODAL -->
+        <t t-if="state.showPipelineModal">
+            <div class="bader-modal-overlay" t-on-click="closePipelineModal">
+                <div class="bader-modal" t-on-click.stop="" style="max-width: 400px;">
+                    <div class="bader-modal-header">
+                        <h4><i class="fa fa-columns"/> Adicionar a Pipeline</h4>
+                        <button class="btn-close" t-on-click="closePipelineModal"/>
+                    </div>
+                    <div class="bader-modal-body">
+                        <t t-if="availablePipelinesForModal.length">
+                            <div class="mb-3">
+                                <label class="form-label">Selecione o pipeline:</label>
+                                <select class="form-select" 
+                                        t-on-change="(ev) => this.state.pipelineModalPipelineId = parseInt(ev.target.value)">
+                                    <option value="">-- Escolher --</option>
+                                    <t t-foreach="availablePipelinesForModal" t-as="p" t-key="p.id">
+                                        <option t-att-value="p.id">
+                                            <t t-esc="p.icon"/> <t t-esc="p.name"/>
+                                        </option>
+                                    </t>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary w-100" t-on-click="addToPipeline"
+                                    t-att-disabled="!state.pipelineModalPipelineId">
+                                <i class="fa fa-plus"/> Adicionar
+                            </button>
+                        </t>
+                        <t t-else="">
+                            <p class="text-muted">Esta conversa já está em todos os pipelines disponíveis.</p>
                         </t>
                     </div>
                 </div>

@@ -57,6 +57,20 @@ class BaderInboxConversation(models.Model):
     # Tags
     tag_ids = fields.Many2many("bader.inbox.tag", string="Tags")
     
+    # Pipeline assignments
+    pipeline_assignment_ids = fields.One2many(
+        "bader.inbox.conversation.pipeline", "conversation_id",
+        string="Pipeline Assignments"
+    )
+    pipeline_count = fields.Integer(
+        compute="_compute_pipeline_count", string="Pipelines"
+    )
+
+    @api.depends("pipeline_assignment_ids")
+    def _compute_pipeline_count(self):
+        for rec in self:
+            rec.pipeline_count = len(rec.pipeline_assignment_ids)
+    
     @api.depends("contact_name", "phone", "partner_id")
     def _compute_name(self):
         for rec in self:

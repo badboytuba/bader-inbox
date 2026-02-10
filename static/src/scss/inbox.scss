@@ -1258,3 +1258,217 @@ $shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         padding: 4px 8px;
     }
 }
+
+// ==========================================
+// VIEW MODE TOGGLE
+// ==========================================
+.view-mode-toggle {
+    display: flex;
+    gap: 4px;
+    padding: 6px 12px;
+    background: $bader-surface;
+    border-bottom: 1px solid $bader-border;
+
+    .toggle-btn {
+        flex: 1;
+        border: none;
+        background: transparent;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        color: $bader-text-muted;
+        cursor: pointer;
+        transition: all 0.2s;
+
+        i {
+            margin-right: 4px;
+        }
+
+        &:hover {
+            background: rgba($bader-primary, 0.08);
+            color: $bader-primary;
+        }
+
+        &.active {
+            background: $bader-primary;
+            color: white;
+        }
+    }
+}
+
+// ==========================================
+// KANBAN BOARD
+// ==========================================
+.kanban-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: $bader-surface;
+    border-bottom: 1px solid $bader-border;
+
+    .pipeline-selector {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        label {
+            font-weight: 600;
+            font-size: 13px;
+            white-space: nowrap;
+            margin-bottom: 0;
+        }
+
+        .form-select {
+            max-width: 200px;
+            font-size: 13px;
+        }
+    }
+}
+
+.kanban-board {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    overflow-x: auto;
+    flex: 1;
+    background: $bader-bg;
+    align-items: flex-start;
+}
+
+.kanban-column {
+    min-width: 260px;
+    max-width: 300px;
+    background: darken($bader-bg, 2%);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.2s;
+
+    &.drag-over {
+        box-shadow: 0 0 0 2px $bader-primary;
+        background: rgba($bader-primary, 0.04);
+    }
+
+    .kanban-column-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-bottom: 2px solid $bader-primary;
+
+        .column-title {
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: $bader-text;
+        }
+
+        .column-count {
+            font-size: 11px;
+        }
+    }
+
+    .kanban-column-body {
+        padding: 8px;
+        min-height: 100px;
+        max-height: calc(100vh - 240px);
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+
+.kanban-card {
+    background: $bader-surface;
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: $shadow-sm;
+    cursor: grab;
+    transition: all 0.2s;
+    border-left: 3px solid $bader-primary;
+
+    &:hover {
+        box-shadow: $shadow-md;
+        transform: translateY(-1px);
+    }
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    &.dragging {
+        opacity: 0.4;
+        transform: rotate(2deg);
+    }
+
+    .card-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+
+        strong {
+            font-size: 13px;
+            color: $bader-text;
+        }
+
+        .badge-sm {
+            font-size: 10px;
+            padding: 2px 5px;
+        }
+    }
+
+    .card-phone {
+        font-size: 11px;
+        margin-bottom: 4px;
+    }
+
+    .card-preview {
+        font-size: 11px;
+        color: $bader-text-muted;
+        margin-bottom: 4px;
+        line-height: 1.4;
+    }
+
+    .card-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+}
+
+// ==========================================
+// PIPELINE SIDEBAR
+// ==========================================
+.pipeline-assignment-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba($bader-border, 0.5);
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    .pipeline-info {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+
+        strong {
+            font-size: 12px;
+            color: $bader-text;
+        }
+
+        .badge {
+            font-size: 10px;
+            padding: 2px 6px;
+        }
+    }
+}

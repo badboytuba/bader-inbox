@@ -6,7 +6,14 @@
         action="action_bader_inbox_main"
         groups="base.group_user"/>
 
-    <!-- Configuração submenu in navbar -->
+    <!-- 📊 Pipelines Kanban -->
+    <menuitem id="menu_bader_inbox_pipelines" name="📊 Pipelines" 
+        parent="menu_bader_inbox_root" 
+        action="action_bader_inbox_pipeline_kanban"
+        sequence="20"
+        groups="base.group_user"/>
+
+    <!-- ⚙️ Configuração submenu -->
     <menuitem id="menu_bader_inbox_config" name="⚙️ Configuração" 
         parent="menu_bader_inbox_root" 
         sequence="100" 
@@ -21,4 +28,9 @@
         parent="menu_bader_inbox_config" 
         action="action_bader_inbox_api_settings" 
         sequence="20"/>
+
+    <menuitem id="menu_bader_inbox_manage_pipelines" name="📊 Gerir Pipelines" 
+        parent="menu_bader_inbox_config" 
+        action="action_bader_inbox_pipeline" 
+        sequence="30"/>
 </odoo>
