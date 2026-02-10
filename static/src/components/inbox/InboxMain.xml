@@ -248,7 +248,7 @@
                         <div class="pipeline-selector">
                             <label>Pipeline:</label>
                             <select class="form-select form-select-sm" 
-                                    t-on-change="(ev) => this.selectPipeline(parseInt(ev.target.value))">
+                                    t-on-change="onPipelineSelectChange">
                                 <t t-foreach="state.pipelines" t-as="p" t-key="p.id">
                                     <option t-att-value="p.id" t-att-selected="p.id === state.selectedPipelineId">
                                         <t t-esc="p.icon"/> <t t-esc="p.name"/>
@@ -494,7 +494,7 @@
                             <div class="mb-3">
                                 <label class="form-label">Selecione o pipeline:</label>
                                 <select class="form-select" 
-                                        t-on-change="(ev) => this.state.pipelineModalPipelineId = parseInt(ev.target.value)">
+                                        t-on-change="onPipelineModalChange">
                                     <option value="">-- Escolher --</option>
                                     <t t-foreach="availablePipelinesForModal" t-as="p" t-key="p.id">
                                         <option t-att-value="p.id">

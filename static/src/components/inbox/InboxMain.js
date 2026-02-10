@@ -573,6 +573,15 @@ export class BaderInboxMain extends Component {
         await this.loadKanbanData();
     }
 
+    onPipelineSelectChange(ev) {
+        const val = parseInt(ev.target.value, 10);
+        if (val) this.selectPipeline(val);
+    }
+
+    onPipelineModalChange(ev) {
+        this.state.pipelineModalPipelineId = parseInt(ev.target.value, 10) || null;
+    }
+
     async loadKanbanData() {
         if (!this.state.selectedPipelineId) return;
         this.state.loadingKanban = true;
