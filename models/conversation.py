@@ -153,6 +153,13 @@ class BaderInboxConversation(models.Model):
         self.ensure_one()
         self.unread_count = 0
 
+    @api.model
+    def mark_as_read(self, conversation_id):
+        """Mark conversation as read - called from JS frontend"""
+        conv = self.browse(conversation_id)
+        if conv.exists():
+            conv.unread_count = 0
+
     def action_assign_to_me(self):
         """Assign to current user"""
         self.ensure_one()

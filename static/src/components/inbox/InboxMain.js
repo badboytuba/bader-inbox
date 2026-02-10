@@ -157,7 +157,12 @@ export class BaderInboxMain extends Component {
                 const selectedId = this.state.selectedConversation?.id;
                 this.state.conversations = freshConvs;
                 if (selectedId) {
-                    this.state.selectedConversation = freshConvs.find(c => c.id === selectedId) || this.state.selectedConversation;
+                    const selected = freshConvs.find(c => c.id === selectedId);
+                    if (selected) {
+                        // Force unread_count=0 since user is viewing this conversation
+                        selected.unread_count = 0;
+                        this.state.selectedConversation = selected;
+                    }
                 }
             }
         } catch (e) {
