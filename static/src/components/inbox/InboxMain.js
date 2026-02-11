@@ -990,6 +990,15 @@ export class BaderInboxMain extends Component {
                         refreshMessages = true;
                     }
                 }
+            } else if (type === "bader_inbox_status_update") {
+                // Message delivery/read status update
+                if (this.state.selectedConversation &&
+                    this.state.selectedConversation.id === payload.conversation_id) {
+                    const msg = this.state.messages.find(m => m.id === payload.message_id);
+                    if (msg) {
+                        msg.status = payload.status;
+                    }
+                }
             }
         }
 

@@ -184,7 +184,24 @@
                                             <div class="message-meta">
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
                                                 <t t-if="msg.direction === 'out'">
-                                                    <i t-attf-class="fa fa-check message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : 'sent' }}"/>
+                                                    <t t-if="msg.status === 'failed'">
+                                                        <i class="fa fa-times message-status failed" title="Falha no envio"/>
+                                                    </t>
+                                                    <t t-elif="msg.status === 'read'">
+                                                        <span class="message-status read" title="Lida">
+                                                            <i class="fa fa-check"/><i class="fa fa-check"/>
+                                                        </span>
+                                                    </t>
+                                                    <t t-elif="msg.status === 'delivered'">
+                                                        <span class="message-status delivered" title="Entregue">
+                                                            <i class="fa fa-check"/><i class="fa fa-check"/>
+                                                        </span>
+                                                    </t>
+                                                    <t t-else="">
+                                                        <span class="message-status sent" title="Enviada">
+                                                            <i class="fa fa-check"/>
+                                                        </span>
+                                                    </t>
                                                 </t>
                                             </div>
                                         </div>

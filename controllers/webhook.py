@@ -169,6 +169,8 @@ class BaderInboxWebhook(http.Controller):
             
             if event == "messages.upsert":
                 return self._handle_message(channel, data)
+            elif event == "messages.update":
+                return self._handle_message_update(channel, data)
             elif event == "connection.update":
                 return self._handle_connection_update(channel, data)
             elif event == "qrcode.updated":
@@ -406,6 +408,83 @@ class BaderInboxWebhook(http.Controller):
             text = loc.get("address", "")
         
         return msg_type, text, media_info
+
+    def _handle_message_update(self, channel, data):
+        """Handle message status update (delivery/read receipts).
+        
+        Payload: {event: 'messages.update', data: [{key: {id, remoteJid, fromMe}, update: {status: N}}]}
+        Status codes: 0=ERROR, 1=PENDING, 2=SENT/SERVER_ACK, 3=DELIVERED/DELIVERY_ACK, 4=READ/READ, 5=PLAYED
+        """
+        try:
+            updates = data.get("data", [])
+            if not isinstance(updates, list):
+                updates = [updates] if updates else []
+            
+            Message = request.env["bader.inbox.message"].sudo()
+            
+            status_map = {
+                0: "failed",
+                1: "pending",
+                2: "sent",
+                3: "delivered",
+                4: "read",
+                5: "read",  # PLAYED (audio) = read
+            }
+            
+            for update_item in updates:
+                if not isinstance(update_item, dict):
+                    continue
+                
+                key = update_item.get("key", {})
+                update_data = update_item.get("update", {})
+                
+                msg_id = key.get("id")
+                if not msg_id:
+                    continue
+                
+                raw_status = update_data.get("status")
+                if raw_status is None:
+                    continue
+                
+                new_status = status_map.get(int(raw_status), "sent")
+                
+                message = Message.search([
+                    ("whatsapp_message_id", "=", msg_id)
+                ], limit=1)
+                
+                if not message:
+                    _logger.debug(f"Message update: WA ID {msg_id} not found, skipping")
+                    continue
+                
+                # Only upgrade status (don't downgrade read→delivered)
+                status_priority = {"pending": 0, "sent": 1, "delivered": 2, "read": 3, "failed": -1}
+                current_priority = status_priority.get(message.status, 0)
+                new_priority = status_priority.get(new_status, 0)
+                
+                if new_status == "failed" or new_priority > current_priority:
+                    message.write({
+                        "status": new_status,
+                        "status_timestamp": fields.Datetime.now(),
+                    })
+                    _logger.info(f"Message {message.id} status: {message.status} → {new_status}")
+                    
+                    # Send bus notification for real-time UI update
+                    try:
+                        request.env["bus.bus"]._sendone(
+                            "bader_inbox", "bader_inbox_status_update",
+                            {
+                                "message_id": message.id,
+                                "conversation_id": message.conversation_id.id,
+                                "status": new_status,
+                            }
+                        )
+                    except Exception:
+                        pass
+            
+            return _json_ok()
+        except Exception as e:
+            _logger.error(f"Message update error: {e}", exc_info=True)
+            return _json_error(str(e))
 
     def _handle_connection_update(self, channel, data):
         """Handle connection status update
