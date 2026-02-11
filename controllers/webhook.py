@@ -261,13 +261,18 @@ class BaderInboxWebhook(http.Controller):
     def _handle_message(self, channel, data):
         """Handle incoming/outgoing message"""
         try:
-            msg_obj = data.get("message", {})
-            if not msg_obj:
-                _logger.warning("No message object in payload")
+            # Evolution API wraps message in data.data or sends flat
+            # Format: {event, instance, data: {key, message, pushName, ...}}
+            msg_obj = data.get("data") or data.get("message")
+            if isinstance(msg_obj, list):
+                # Sometimes Evolution sends a list of messages
+                msg_obj = msg_obj[0] if msg_obj else {}
+            if not msg_obj or not isinstance(msg_obj, dict):
+                _logger.warning(f"No message object in payload. Keys: {list(data.keys())}")
                 return _json_error("No message data")
             
             key = msg_obj.get("key", {})
-            message_content = msg_obj.get("content", {})
+            message_content = msg_obj.get("message", {})
             push_name = msg_obj.get("pushName", "")
             
             phone, whatsapp_id, phone_source = self._extract_phone_info(key)
