@@ -441,7 +441,19 @@ export class BaderInboxMain extends Component {
         if (!this.state.currentChannelId) return;
 
         try {
-            // Get updated channel with QR code
+            // Actively check connection status via Evolution API
+            // (don't rely solely on webhook)
+            try {
+                await this.orm.call(
+                    "bader.inbox.channel",
+                    "action_check_status",
+                    [this.state.currentChannelId]
+                );
+            } catch (e) {
+                // Ignore — channel may not have instance yet
+            }
+
+            // Get updated channel with QR code and state
             const channels = await this.orm.searchRead(
                 "bader.inbox.channel",
                 [["id", "=", this.state.currentChannelId]],
@@ -454,6 +466,7 @@ export class BaderInboxMain extends Component {
                 if (channel.state === "connected") {
                     // Connected - close modal and go to inbox!
                     this.stopQRPolling();
+                    this.state.connectedPhone = channel.phone || "";
                     this.notification.add(_t("WhatsApp conectado com sucesso!"), { type: "success" });
                     this.state.showChannelModal = false;
                     this.loadChannels();
