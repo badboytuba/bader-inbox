@@ -558,34 +558,24 @@
 
                         <!-- Results -->
                         <div class="new-conv-results">
-                            <!-- Loading -->
                             <t t-if="state.searchingContacts and !state.contactSearchResults.length">
                                 <div class="new-conv-empty">
                                     <i class="fa fa-spinner fa-spin fa-2x"/>
                                     <p>A pesquisar...</p>
                                 </div>
-                            </t>
-
-                            <!-- Empty State -->
-                            <t t-elif="!state.contactSearchQuery">
+                            </t><t t-elif="!state.contactSearchQuery">
                                 <div class="new-conv-empty">
                                     <i class="fa fa-address-book fa-3x"/>
                                     <p>Pesquise um contacto do Odoo</p>
                                     <span class="text-muted small">Procure por nome, telefone ou email</span>
                                 </div>
-                            </t>
-
-                            <!-- No Results -->
-                            <t t-elif="state.contactSearchQuery and !state.searchingContacts and !state.contactSearchResults.length">
+                            </t><t t-elif="state.contactSearchQuery and !state.searchingContacts and !state.contactSearchResults.length">
                                 <div class="new-conv-empty">
                                     <i class="fa fa-user-times fa-2x"/>
                                     <p>Nenhum contacto encontrado</p>
                                     <span class="text-muted small">Tente outro nome ou número</span>
                                 </div>
-                            </t>
-
-                            <!-- Contact List -->
-                            <t t-else="">
+                            </t><t t-else="">
                                 <t t-foreach="state.contactSearchResults" t-as="contact" t-key="contact.id">
                                     <div class="new-conv-contact" t-on-click="() => this.startConversation(contact)">
                                         <div class="new-conv-contact-avatar">
