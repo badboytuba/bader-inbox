@@ -187,18 +187,28 @@ class BaderInboxWebhook(http.Controller):
         sender_pn = key.get("senderPn", "")
         participant = key.get("participant", "")
         
+        # Skip non-personal chats (LID, groups, newsletters, status)
+        skip_suffixes = ("@lid", "@g.us", "@newsletter", "@broadcast", "@status")
+        if remote_jid and any(remote_jid.endswith(s) for s in skip_suffixes):
+            _logger.info(f"Skipping non-personal JID: {remote_jid}")
+            return None, None, None
+        
         # Priority: senderPn > participant > remoteJid
         phone_source = ""
         if sender_pn and "@s.whatsapp.net" in sender_pn:
             phone_source = sender_pn
         elif participant and "@s.whatsapp.net" in participant:
             phone_source = participant
-        else:
+        elif remote_jid and "@s.whatsapp.net" in remote_jid:
             phone_source = remote_jid
+        else:
+            # Unknown JID format - skip
+            _logger.warning(f"Unknown JID format: {remote_jid}")
+            return None, None, None
         
         # Strip any @ suffix to get just the number
         phone = phone_source.split("@")[0] if "@" in phone_source else phone_source
-        whatsapp_id = remote_jid or phone_source
+        whatsapp_id = phone_source
         
         return phone, whatsapp_id, phone_source
 
