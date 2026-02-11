@@ -60,6 +60,13 @@ export class BaderInboxMain extends Component {
             // Add to Pipeline Modal
             showPipelineModal: false,
             pipelineModalPipelineId: null,
+
+            // New Conversation Modal
+            showNewConversationModal: false,
+            contactSearchQuery: "",
+            contactSearchResults: [],
+            searchingContacts: false,
+            selectedChannelId: null,
         });
 
         this.messagesRef = useRef("messagesContainer");
@@ -67,6 +74,7 @@ export class BaderInboxMain extends Component {
         this.avatarColors = ["green", "blue", "purple", "orange", "pink", "red"];
         this.qrPollInterval = null;
         this.conversationPollInterval = null;
+        this._contactSearchTimeout = null;
         this.messagePollInterval = null;
 
         onWillStart(async () => {
@@ -280,6 +288,103 @@ export class BaderInboxMain extends Component {
             console.error("Error opening conversation by phone:", e);
             this.notification.add(_t("Erro ao abrir conversa: ") + e.message, { type: "danger" });
         }
+    }
+
+    // ==========================================
+    // NEW CONVERSATION
+    // ==========================================
+
+    openNewConversationModal() {
+        this.state.showNewConversationModal = true;
+        this.state.contactSearchQuery = "";
+        this.state.contactSearchResults = [];
+        this.state.searchingContacts = false;
+        // Default to first connected channel
+        const connected = this.state.channels.find(c => c.state === 'connected');
+        this.state.selectedChannelId = connected ? connected.id : (this.state.channels[0]?.id || null);
+    }
+
+    closeNewConversationModal() {
+        this.state.showNewConversationModal = false;
+        this.state.contactSearchQuery = "";
+        this.state.contactSearchResults = [];
+        if (this._contactSearchTimeout) {
+            clearTimeout(this._contactSearchTimeout);
+            this._contactSearchTimeout = null;
+        }
+    }
+
+    onContactSearchInput(ev) {
+        this.state.contactSearchQuery = ev.target.value;
+        // Debounce 300ms
+        if (this._contactSearchTimeout) {
+            clearTimeout(this._contactSearchTimeout);
+        }
+        this._contactSearchTimeout = setTimeout(() => {
+            this.searchContacts();
+        }, 300);
+    }
+
+    async searchContacts() {
+        const query = this.state.contactSearchQuery.trim();
+        if (!query) {
+            this.state.contactSearchResults = [];
+            return;
+        }
+        this.state.searchingContacts = true;
+        try {
+            const results = await this.orm.call(
+                "bader.inbox.conversation",
+                "search_contacts",
+                [query, 20]
+            );
+            this.state.contactSearchResults = results;
+        } catch (err) {
+            console.error("Contact search error:", err);
+            this.state.contactSearchResults = [];
+        }
+        this.state.searchingContacts = false;
+    }
+
+    async startConversation(contact) {
+        const phone = contact.display_phone;
+        if (!phone) {
+            this.notification.add(_("Este contacto não tem telefone"), { type: "warning" });
+            return;
+        }
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.conversation",
+                "open_or_create_by_phone",
+                [phone, contact.id, contact.name]
+            );
+            if (result.success) {
+                this.closeNewConversationModal();
+                await this.loadConversations();
+                await this.openConversationById(result.conversation_id);
+                this.notification.add(
+                    _(`Conversa aberta com ${contact.name}`),
+                    { type: "success" }
+                );
+            } else {
+                this.notification.add(
+                    result.error || _("Erro ao criar conversa"),
+                    { type: "danger" }
+                );
+            }
+        } catch (err) {
+            console.error("Start conversation error:", err);
+            this.notification.add(_("Erro ao iniciar conversa"), { type: "danger" });
+        }
+    }
+
+    getContactInitials(name) {
+        if (!name) return "?";
+        const parts = name.trim().split(/\s+/);
+        if (parts.length >= 2) {
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+        return name.substring(0, 2).toUpperCase();
     }
 
     // ==========================================

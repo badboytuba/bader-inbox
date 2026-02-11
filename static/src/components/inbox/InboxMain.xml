@@ -10,6 +10,9 @@
                         <button class="btn btn-sm btn-success" t-on-click="openAddChannelModal" title="Adicionar Canal WhatsApp">
                             <i class="fa fa-plus"/> Canal
                         </button>
+                        <button class="btn btn-sm btn-new-conversation" t-on-click="openNewConversationModal" title="Nova Conversa">
+                            <i class="fa fa-comment"/> +
+                        </button>
                     </div>
                     
                     <!-- Channel Status -->
@@ -511,6 +514,110 @@
                         <t t-else="">
                             <p class="text-muted">Esta conversa já está em todos os pipelines disponíveis.</p>
                         </t>
+                    </div>
+                </div>
+            </div>
+        </t>
+
+        <!-- NEW CONVERSATION MODAL -->
+        <t t-if="state.showNewConversationModal">
+            <div class="bader-modal-overlay" t-on-click="closeNewConversationModal">
+                <div class="bader-modal new-conv-modal" t-on-click.stop="">
+                    <div class="bader-modal-header">
+                        <h4><i class="fa fa-comment"/> Nova Conversa</h4>
+                        <button class="btn-close" t-on-click="closeNewConversationModal"/>
+                    </div>
+                    <div class="bader-modal-body">
+                        <!-- Channel Selector (if multiple) -->
+                        <t t-if="state.channels.length > 1">
+                            <div class="new-conv-channel-select mb-3">
+                                <label class="form-label small text-muted">Canal WhatsApp:</label>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
+                                        <button t-attf-class="btn btn-sm {{ state.selectedChannelId === ch.id ? 'btn-success' : 'btn-outline-secondary' }}"
+                                                t-on-click="() => this.state.selectedChannelId = ch.id">
+                                            <i class="fa fa-whatsapp"/> <t t-esc="ch.name"/>
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+
+                        <!-- Search Input -->
+                        <div class="new-conv-search-wrapper">
+                            <i class="fa fa-search new-conv-search-icon"/>
+                            <input type="text" class="form-control new-conv-search-input"
+                                   placeholder="Pesquisar contacto por nome, telefone ou email..."
+                                   t-att-value="state.contactSearchQuery"
+                                   t-on-input="onContactSearchInput"
+                                   autofocus="1"/>
+                            <t t-if="state.searchingContacts">
+                                <i class="fa fa-spinner fa-spin new-conv-search-spinner"/>
+                            </t>
+                        </div>
+
+                        <!-- Results -->
+                        <div class="new-conv-results">
+                            <!-- Loading -->
+                            <t t-if="state.searchingContacts and !state.contactSearchResults.length">
+                                <div class="new-conv-empty">
+                                    <i class="fa fa-spinner fa-spin fa-2x"/>
+                                    <p>A pesquisar...</p>
+                                </div>
+                            </t>
+
+                            <!-- Empty State -->
+                            <t t-elif="!state.contactSearchQuery">
+                                <div class="new-conv-empty">
+                                    <i class="fa fa-address-book fa-3x"/>
+                                    <p>Pesquise um contacto do Odoo</p>
+                                    <span class="text-muted small">Procure por nome, telefone ou email</span>
+                                </div>
+                            </t>
+
+                            <!-- No Results -->
+                            <t t-elif="state.contactSearchQuery and !state.searchingContacts and !state.contactSearchResults.length">
+                                <div class="new-conv-empty">
+                                    <i class="fa fa-user-times fa-2x"/>
+                                    <p>Nenhum contacto encontrado</p>
+                                    <span class="text-muted small">Tente outro nome ou número</span>
+                                </div>
+                            </t>
+
+                            <!-- Contact List -->
+                            <t t-else="">
+                                <t t-foreach="state.contactSearchResults" t-as="contact" t-key="contact.id">
+                                    <div class="new-conv-contact" t-on-click="() => this.startConversation(contact)">
+                                        <div class="new-conv-contact-avatar">
+                                            <t t-if="contact.has_image">
+                                                <img t-attf-src="/web/image/res.partner/{{ contact.id }}/image_128" alt="Avatar"/>
+                                            </t>
+                                            <t t-else="">
+                                                <span t-attf-class="avatar-initials {{ getAvatarColor(contact.id) }}">
+                                                    <t t-esc="getContactInitials(contact.name)"/>
+                                                </span>
+                                            </t>
+                                        </div>
+                                        <div class="new-conv-contact-info">
+                                            <div class="new-conv-contact-name" t-esc="contact.name"/>
+                                            <div class="new-conv-contact-details">
+                                                <span class="new-conv-phone">
+                                                    <i class="fa fa-phone"/> <t t-esc="contact.display_phone"/>
+                                                </span>
+                                                <t t-if="contact.company_name">
+                                                    <span class="new-conv-company">
+                                                        <i class="fa fa-building-o"/> <t t-esc="contact.company_name"/>
+                                                    </span>
+                                                </t>
+                                            </div>
+                                        </div>
+                                        <div class="new-conv-contact-action">
+                                            <i class="fa fa-whatsapp"/>
+                                        </div>
+                                    </div>
+                                </t>
+                            </t>
+                        </div>
                     </div>
                 </div>
             </div>

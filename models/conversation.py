@@ -126,6 +126,45 @@ class BaderInboxConversation(models.Model):
         return conversation
 
     @api.model
+    def search_contacts(self, query="", limit=20):
+        """Search Odoo contacts (res.partner) for new conversation modal.
+        
+        Returns partners with phone/mobile, matching by name, phone, mobile or email.
+        """
+        Partner = self.env["res.partner"].sudo()
+        domain = [
+            "|", ("phone", "!=", False), ("mobile", "!=", False),
+        ]
+        if query and query.strip():
+            q = query.strip()
+            domain = [
+                "&",
+                "|", ("phone", "!=", False), ("mobile", "!=", False),
+                "|", "|", "|",
+                ("name", "ilike", q),
+                ("phone", "ilike", q),
+                ("mobile", "ilike", q),
+                ("email", "ilike", q),
+            ]
+        
+        partners = Partner.search(domain, limit=limit, order="name asc")
+        
+        results = []
+        for p in partners:
+            results.append({
+                "id": p.id,
+                "name": p.name or "",
+                "phone": p.phone or "",
+                "mobile": p.mobile or "",
+                "email": p.email or "",
+                "company_name": p.parent_id.name if p.parent_id else (p.company_name or ""),
+                "has_image": bool(p.image_128),
+                "display_phone": p.mobile or p.phone or "",
+            })
+        
+        return results
+
+    @api.model
     def open_or_create_by_phone(self, phone, partner_id=None, contact_name=None, model=None):
         """Find or create conversation by phone - used by PhoneWhatsAppWidget"""
         if not phone:
