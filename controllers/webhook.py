@@ -182,16 +182,14 @@ class BaderInboxWebhook(http.Controller):
             return _json_error(str(e))
 
     def _extract_phone_info(self, key):
-        """Extract phone and remote_jid from message key"""
+        """Extract phone and remote_jid from message key.
+        
+        Evolution API often uses LID (Linked ID) as remoteJid but provides
+        the real phone number in senderPn. We must check senderPn first.
+        """
         remote_jid = key.get("remoteJid", "")
         sender_pn = key.get("senderPn", "")
         participant = key.get("participant", "")
-        
-        # Skip non-personal chats (LID, groups, newsletters, status)
-        skip_suffixes = ("@lid", "@g.us", "@newsletter", "@broadcast", "@status")
-        if remote_jid and any(remote_jid.endswith(s) for s in skip_suffixes):
-            _logger.info(f"Skipping non-personal JID: {remote_jid}")
-            return None, None, None
         
         # Priority: senderPn > participant > remoteJid
         phone_source = ""
@@ -202,7 +200,16 @@ class BaderInboxWebhook(http.Controller):
         elif remote_jid and "@s.whatsapp.net" in remote_jid:
             phone_source = remote_jid
         else:
-            # Unknown JID format - skip
+            # No valid @s.whatsapp.net source found
+            # Skip groups, newsletters, broadcasts, status
+            skip_suffixes = ("@g.us", "@newsletter", "@broadcast", "@status")
+            if remote_jid and any(remote_jid.endswith(s) for s in skip_suffixes):
+                _logger.info(f"Skipping non-personal JID: {remote_jid}")
+                return None, None, None
+            # LID without senderPn — can't resolve phone
+            if remote_jid and remote_jid.endswith("@lid"):
+                _logger.warning(f"LID without senderPn, cannot resolve: {remote_jid}")
+                return None, None, None
             _logger.warning(f"Unknown JID format: {remote_jid}")
             return None, None, None
         
@@ -272,7 +279,7 @@ class BaderInboxWebhook(http.Controller):
                 return _json_error("No message data")
             
             key = msg_obj.get("key", {})
-            message_content = msg_obj.get("message", {})
+            message_content = msg_obj.get("content") or msg_obj.get("message", {})
             push_name = msg_obj.get("pushName", "")
             
             phone, whatsapp_id, phone_source = self._extract_phone_info(key)
