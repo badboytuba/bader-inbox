@@ -32,6 +32,7 @@
         "views/template_views.xml",
         "views/pipeline_views.xml",
         "data/chatbot_cron.xml",
+        "data/channel_health_cron.xml",
         "views/phone_widget_views.xml",
         "views/menus.xml",
     ],

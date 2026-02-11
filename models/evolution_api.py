@@ -205,6 +205,67 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             _logger.error(f"Error downloading media: {e}")
             return None
 
+    def instance_exists(self, instance_name):
+        """Check if an instance exists on Evolution API.
+        
+        Uses the webhook/find endpoint as a lightweight probe since
+        connectionState is not available in all API versions.
+        Returns True if instance responds, False if 'not found' or error.
+        """
+        try:
+            result = self._request("GET", f"/webhook/find/{instance_name}")
+            if isinstance(result, dict) and result.get("error"):
+                error_msg = str(result.get("error", "")) + str(result.get("message", ""))
+                if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
+                    return False
+            return True
+        except Exception:
+            return False
+
+    def ensure_instance(self, instance_name, webhook_url):
+        """Ensure instance exists and webhook is configured.
+        
+        If instance doesn't exist, creates it and sets webhook.
+        Returns dict with 'exists', 'created', 'webhook_set' flags.
+        """
+        result = {"exists": False, "created": False, "webhook_set": False, "error": None}
+        
+        try:
+            # Check if instance already exists
+            if self.instance_exists(instance_name):
+                result["exists"] = True
+                # Re-set webhook (it may have been lost after API restart)
+                try:
+                    self.set_webhook(instance_name, webhook_url)
+                    result["webhook_set"] = True
+                except Exception as e:
+                    _logger.warning(f"Failed to re-set webhook for {instance_name}: {e}")
+                return result
+            
+            # Instance doesn't exist — recreate it
+            _logger.info(f"Instance {instance_name} not found, recreating...")
+            create_result = self.create_instance(instance_name, webhook_url=webhook_url)
+            if create_result.get("success") is False:
+                result["error"] = create_result.get("error", "Unknown create error")
+                return result
+            
+            result["created"] = True
+            result["exists"] = True
+            
+            # Also set webhook explicitly as fallback
+            try:
+                self.set_webhook(instance_name, webhook_url)
+                result["webhook_set"] = True
+            except Exception:
+                pass  # Webhook was already set during creation
+            
+            return result
+            
+        except Exception as e:
+            result["error"] = str(e)
+            _logger.error(f"ensure_instance error for {instance_name}: {e}")
+            return result
+
     def list_instances(self):
         """List all instances"""
         result = self._request("GET", "/instance/list")
