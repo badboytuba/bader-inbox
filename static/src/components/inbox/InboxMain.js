@@ -52,9 +52,30 @@ export class BaderInboxMain extends Component {
             // Drag & Drop
             isDragOver: false,
 
+            // Tags
+            allTags: [],
+            activeTagFilter: null,
+            showTagManager: false,
+
+            // Notes
+            notes: [],
+            noteText: "",
+            notesTab: "info",
+            loadingNotes: false,
+
+            // Dashboard
+            dashboardData: null,
+            loadingDashboard: false,
+
+            // Scheduled Messages
+            scheduledMessages: [],
+            showScheduleModal: false,
+            scheduleDate: "",
+            scheduleTime: "",
+
             // UI
             showContactPanel: true,
-            viewMode: "list", // "list" or "kanban"
+            viewMode: "list", // "list", "kanban", or "dashboard"
 
             // Channels
             channels: [],
@@ -106,6 +127,7 @@ export class BaderInboxMain extends Component {
             await this.loadConversations();
             await this.loadPipelines();
             await this.loadQuickReplies();
+            await this.loadTags();
             this._requestNotificationPermission();
 
             // Check if we need to open a specific conversation (from PhoneWhatsAppWidget)
@@ -166,13 +188,17 @@ export class BaderInboxMain extends Component {
             } else if (this.state.filter === "mine") {
                 domain.push(["assigned_user_id", "=", this.user.userId]);
             }
+            if (this.state.activeTagFilter) {
+                domain.push(["tag_ids", "in", [this.state.activeTagFilter]]);
+            }
 
             this.state.conversations = await this.orm.searchRead(
                 "bader.inbox.conversation",
                 domain,
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
-                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id"
+                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                    "tag_ids"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -191,13 +217,17 @@ export class BaderInboxMain extends Component {
             } else if (this.state.filter === "mine") {
                 domain.push(["assigned_user_id", "=", this.user.userId]);
             }
+            if (this.state.activeTagFilter) {
+                domain.push(["tag_ids", "in", [this.state.activeTagFilter]]);
+            }
 
             const freshConvs = await this.orm.searchRead(
                 "bader.inbox.conversation",
                 domain,
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
-                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id"
+                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                    "tag_ids"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -534,19 +564,15 @@ export class BaderInboxMain extends Component {
     // CONVERSATION ACTIONS
     // ==========================================
 
-    async selectConversation(conv) {
-        this.state.selectedConversation = conv;
-        await this.loadMessages(conv.id);
-        await this.loadConvPipelines(conv.id);
-
-        const idx = this.state.conversations.findIndex(c => c.id === conv.id);
-        if (idx >= 0) {
-            this.state.conversations[idx].unread_count = 0;
-        }
-    }
+    // selectConversation is defined in the Phase 2 section below
 
     setFilter(filter) {
         this.state.filter = filter;
+        this.loadConversations();
+    }
+
+    filterByTag(tagId) {
+        this.state.activeTagFilter = this.state.activeTagFilter === tagId ? null : tagId;
         this.loadConversations();
     }
 
@@ -835,6 +861,21 @@ export class BaderInboxMain extends Component {
         } catch (e) { }
     }
 
+    async selectConversation(conv) {
+        this.state.selectedConversation = conv;
+        this.state.showQuickReplies = false;
+        this.state.showEmojiPicker = false;
+        this.state.showMessageSearch = false;
+        this.state.messageSearchResults = [];
+        this.state.notesTab = "info";
+        await this.loadMessages(conv.id);
+        this.loadConvPipelines(conv.id);
+        const idx = this.state.conversations.findIndex(c => c.id === conv.id);
+        if (idx >= 0) {
+            this.state.conversations[idx].unread_count = 0;
+        }
+    }
+
     // ──── MESSAGE SEARCH ────
     toggleMessageSearch() {
         this.state.showMessageSearch = !this.state.showMessageSearch;
@@ -963,6 +1004,8 @@ export class BaderInboxMain extends Component {
                 this.state.selectedPipelineId = this.state.pipelines[0].id;
             }
             this.loadKanbanData();
+        } else if (mode === "dashboard") {
+            this.loadDashboardData();
         }
     }
 
@@ -1324,6 +1367,172 @@ export class BaderInboxMain extends Component {
         }
         if (refreshMessages && this.state.selectedConversation) {
             await this._refreshMessages(this.state.selectedConversation.id);
+        }
+    }
+
+    // ──── TAGS ────
+    async loadTags() {
+        try {
+            this.state.allTags = await this.orm.searchRead(
+                "bader.inbox.tag", [], ["id", "name", "color"], { order: "name" }
+            );
+        } catch (e) {
+            console.error("Error loading tags:", e);
+        }
+    }
+
+    async toggleTag(convId, tagId) {
+        const conv = this.state.conversations.find(c => c.id === convId);
+        if (!conv) return;
+        const hasTag = (conv.tag_ids || []).includes(tagId);
+        try {
+            await this.orm.write("bader.inbox.conversation", [convId], {
+                tag_ids: hasTag ? [[3, tagId]] : [[4, tagId]]
+            });
+            if (hasTag) {
+                conv.tag_ids = conv.tag_ids.filter(t => t !== tagId);
+            } else {
+                conv.tag_ids = [...(conv.tag_ids || []), tagId];
+            }
+            if (this.state.selectedConversation?.id === convId) {
+                this.state.selectedConversation = { ...conv };
+            }
+        } catch (e) {
+            console.error("Error toggling tag:", e);
+        }
+    }
+
+    getTagName(tagId) {
+        const tag = this.state.allTags.find(t => t.id === tagId);
+        return tag ? tag.name : "";
+    }
+
+    getTagColor(tagId) {
+        const tag = this.state.allTags.find(t => t.id === tagId);
+        if (!tag) return "#6B7280";
+        const colors = [
+            "#6B7280", "#EF4444", "#F59E0B", "#10B981", "#3B82F6",
+            "#8B5CF6", "#EC4899", "#F97316", "#06B6D4", "#84CC16", "#14B8A6"
+        ];
+        return colors[tag.color % colors.length];
+    }
+
+    // ──── NOTES ────
+    async loadNotes(convId) {
+        this.state.loadingNotes = true;
+        try {
+            this.state.notes = await this.orm.searchRead(
+                "bader.inbox.note",
+                [["conversation_id", "=", convId]],
+                ["id", "content", "author_id", "create_date"],
+                { order: "create_date desc", limit: 50 }
+            );
+        } catch (e) {
+            console.error("Error loading notes:", e);
+        }
+        this.state.loadingNotes = false;
+    }
+
+    async addNote() {
+        if (!this.state.noteText.trim() || !this.state.selectedConversation) return;
+        try {
+            await this.orm.create("bader.inbox.note", [{
+                conversation_id: this.state.selectedConversation.id,
+                content: this.state.noteText.trim(),
+            }]);
+            this.state.noteText = "";
+            await this.loadNotes(this.state.selectedConversation.id);
+            this.notification.add("Nota adicionada", { type: "success" });
+        } catch (e) {
+            console.error("Error adding note:", e);
+            this.notification.add("Erro ao adicionar nota", { type: "danger" });
+        }
+    }
+
+    async deleteNote(noteId) {
+        try {
+            await this.orm.unlink("bader.inbox.note", [noteId]);
+            this.state.notes = this.state.notes.filter(n => n.id !== noteId);
+            this.notification.add("Nota removida", { type: "info" });
+        } catch (e) {
+            console.error("Error deleting note:", e);
+        }
+    }
+
+    setNotesTab(tab) {
+        this.state.notesTab = tab;
+        if (tab === "notes" && this.state.selectedConversation) {
+            this.loadNotes(this.state.selectedConversation.id);
+        } else if (tab === "scheduled" && this.state.selectedConversation) {
+            this.loadScheduledMessages(this.state.selectedConversation.id);
+        }
+    }
+
+    // ──── DASHBOARD ────
+    async loadDashboardData() {
+        this.state.loadingDashboard = true;
+        try {
+            const response = await this.orm.call("bader.inbox.conversation", "get_dashboard_stats", []);
+            this.state.dashboardData = response;
+        } catch (e) {
+            console.error("Error loading dashboard:", e);
+        }
+        this.state.loadingDashboard = false;
+    }
+
+    // ──── SCHEDULED MESSAGES ────
+    toggleScheduleModal() {
+        this.state.showScheduleModal = !this.state.showScheduleModal;
+        if (this.state.showScheduleModal) {
+            const now = new Date();
+            now.setHours(now.getHours() + 1);
+            this.state.scheduleDate = now.toISOString().split("T")[0];
+            this.state.scheduleTime = now.toTimeString().slice(0, 5);
+        }
+    }
+
+    async scheduleMessage() {
+        if (!this.state.composerText.trim() || !this.state.selectedConversation) return;
+        const dt = `${this.state.scheduleDate} ${this.state.scheduleTime}:00`;
+        try {
+            await this.orm.create("bader.inbox.scheduled.message", [{
+                conversation_id: this.state.selectedConversation.id,
+                content: this.state.composerText.trim(),
+                scheduled_datetime: dt,
+                msg_type: "text",
+            }]);
+            this.state.composerText = "";
+            this.state.showScheduleModal = false;
+            this.notification.add("Mensagem agendada com sucesso!", { type: "success" });
+            if (this.state.notesTab === "scheduled") {
+                await this.loadScheduledMessages(this.state.selectedConversation.id);
+            }
+        } catch (e) {
+            console.error("Error scheduling message:", e);
+            this.notification.add("Erro ao agendar mensagem", { type: "danger" });
+        }
+    }
+
+    async loadScheduledMessages(convId) {
+        try {
+            this.state.scheduledMessages = await this.orm.searchRead(
+                "bader.inbox.scheduled.message",
+                [["conversation_id", "=", convId], ["status", "=", "pending"]],
+                ["id", "content", "scheduled_datetime", "status", "author_id"],
+                { order: "scheduled_datetime asc" }
+            );
+        } catch (e) {
+            console.error("Error loading scheduled messages:", e);
+        }
+    }
+
+    async cancelScheduledMessage(id) {
+        try {
+            await this.orm.write("bader.inbox.scheduled.message", [id], { status: "cancelled" });
+            this.state.scheduledMessages = this.state.scheduledMessages.filter(m => m.id !== id);
+            this.notification.add("Agendamento cancelado", { type: "info" });
+        } catch (e) {
+            console.error("Error cancelling scheduled message:", e);
         }
     }
 

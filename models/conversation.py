@@ -286,6 +286,72 @@ class BaderInboxConversation(models.Model):
             }
         }
 
+    @api.model
+    def get_dashboard_stats(self):
+        """Return dashboard KPIs"""
+        cr = self.env.cr
+
+        # Open vs resolved today
+        cr.execute("""
+            SELECT
+                COUNT(*) FILTER (WHERE state IN ('open', 'pending')) AS open_count,
+                COUNT(*) FILTER (WHERE state = 'done' AND write_date::date = CURRENT_DATE) AS resolved_today
+            FROM bader_inbox_conversation
+        """)
+        row = cr.dictfetchone()
+
+        # Messages today
+        cr.execute("""
+            SELECT
+                COUNT(*) FILTER (WHERE direction = 'out') AS sent_today,
+                COUNT(*) FILTER (WHERE direction = 'in') AS received_today
+            FROM bader_inbox_message
+            WHERE create_date::date = CURRENT_DATE
+        """)
+        msg_row = cr.dictfetchone()
+
+        # Messages last 7 days (chart data)
+        cr.execute("""
+            SELECT
+                d::date AS day,
+                COUNT(*) FILTER (WHERE m.direction = 'in') AS received,
+                COUNT(*) FILTER (WHERE m.direction = 'out') AS sent
+            FROM generate_series(
+                CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, '1 day'
+            ) d
+            LEFT JOIN bader_inbox_message m ON m.create_date::date = d::date
+            GROUP BY d::date
+            ORDER BY d::date
+        """)
+        activity = [
+            {"day": str(r["day"]), "received": r["received"] or 0, "sent": r["sent"] or 0}
+            for r in cr.dictfetchall()
+        ]
+
+        # Top agents
+        cr.execute("""
+            SELECT
+                u.login AS agent,
+                COUNT(m.id) AS msg_count
+            FROM bader_inbox_message m
+            JOIN res_users u ON u.id = m.author_id
+            WHERE m.direction = 'out'
+                AND m.create_date >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY u.login
+            ORDER BY msg_count DESC
+            LIMIT 5
+        """)
+        top_agents = [{"agent": r["agent"], "count": r["count"] if "count" in r else r["msg_count"]} for r in cr.dictfetchall()]
+
+        return {
+            "open_count": row["open_count"] or 0,
+            "resolved_today": row["resolved_today"] or 0,
+            "sent_today": msg_row["sent_today"] or 0,
+            "received_today": msg_row["received_today"] or 0,
+            "activity": activity,
+            "top_agents": top_agents,
+        }
+
 
 class BaderInboxTag(models.Model):
     """Conversation tags"""

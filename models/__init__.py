@@ -5,7 +5,9 @@ from . import channel
 from . import conversation
 from . import message
 from . import evolution_api
+from . import note
 from . import pipeline
 from . import res_partner
+from . import scheduled_message
 from . import settings
 from . import template

@@ -19,3 +19,7 @@ access_bader_inbox_conv_pipeline_all,bader.inbox.conversation.pipeline.all,model
 access_bader_inbox_pipeline_user,bader.inbox.pipeline.user,model_bader_inbox_pipeline,base.group_user,1,1,1,0
 access_bader_inbox_pipeline_stage_user,bader.inbox.pipeline.stage.user,model_bader_inbox_pipeline_stage,base.group_user,1,1,1,0
 access_bader_inbox_conv_pipeline_user,bader.inbox.conversation.pipeline.user,model_bader_inbox_conversation_pipeline,base.group_user,1,1,1,0
+access_bader_inbox_note_all,bader.inbox.note.all,model_bader_inbox_note,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_note_user,bader.inbox.note.user,model_bader_inbox_note,base.group_user,1,1,1,0
+access_bader_inbox_scheduled_message_all,bader.inbox.scheduled.message.all,model_bader_inbox_scheduled_message,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_scheduled_message_user,bader.inbox.scheduled.message.user,model_bader_inbox_scheduled_message,base.group_user,1,1,1,0
