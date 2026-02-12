@@ -151,6 +151,9 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         - /message/audio/{instance}
         - /message/video/{instance}
         - /message/document/{instance}
+        
+        The API expects: {"number": phone, "{type}Url": url_or_data_uri}
+        For base64, use data URI format: "data:{mimetype};base64,{data}"
         """
         endpoint_map = {
             "image": "/message/image",
@@ -159,18 +162,51 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "document": "/message/document",
             "sticker": "/message/image",  # fallback stickers to image
         }
+        # Map media type to the URL key the API expects
+        url_key_map = {
+            "image": "imageUrl",
+            "audio": "audioUrl",
+            "video": "videoUrl",
+            "document": "documentUrl",
+            "sticker": "imageUrl",
+        }
+        # Map media type to default mimetype for data URI
+        mimetype_map = {
+            "image": "image/png",
+            "audio": "audio/ogg",
+            "video": "video/mp4",
+            "document": "application/octet-stream",
+            "sticker": "image/webp",
+        }
+        
         endpoint = endpoint_map.get(media_type, "/message/document")
+        url_key = url_key_map.get(media_type, "documentUrl")
         
         data = {"number": phone}
         
         if media_data:
-            # Send as base64
-            if "," in media_data:
-                media_data = media_data.split(",")[1]
-            data["media"] = media_data
+            # Send as base64 data URI — API requires {type}Url key
+            # Strip existing data URI prefix if present
+            if media_data.startswith("data:") and "," in media_data:
+                # Already has data URI prefix, use as-is
+                data[url_key] = media_data
+            else:
+                # Add data URI prefix
+                mimetype = mimetype_map.get(media_type, "application/octet-stream")
+                # Try to detect mimetype from filename
+                if filename:
+                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                    ext_mime = {
+                        "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                        "gif": "image/gif", "webp": "image/webp",
+                        "mp3": "audio/mpeg", "ogg": "audio/ogg", "wav": "audio/wav",
+                        "mp4": "video/mp4", "avi": "video/avi",
+                        "pdf": "application/pdf", "doc": "application/msword",
+                        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    }
+                    mimetype = ext_mime.get(ext, mimetype)
+                data[url_key] = f"data:{mimetype};base64,{media_data}"
         elif media_url:
-            # Send as URL — use type-specific URL key
-            url_key = f"{media_type}Url" if media_type != "document" else "documentUrl"
             data[url_key] = media_url
         
         if caption:
