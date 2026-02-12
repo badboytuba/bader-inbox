@@ -771,17 +771,36 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
         align-items: center;
         justify-content: center;
         color: $bader-text-muted;
-        background: $bader-surface;
+        background: linear-gradient(170deg, #F4F8F9 0%, #E8EEF0 40%, #DDE8EB 100%);
+        position: relative;
+        overflow: hidden;
+
+        // Subtle background pattern
+        &::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 40%, rgba($bader-green, 0.04) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba($bader-dark, 0.03) 0%, transparent 50%);
+            pointer-events: none;
+        }
 
         .empty-icon {
             width: 120px;
             height: 120px;
             border-radius: 50%;
-            background: $bader-bg;
+            background: linear-gradient(135deg, rgba($bader-green, 0.12) 0%, rgba($bader-dark, 0.06) 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             margin-bottom: 24px;
+            animation: fadeIn 0.6s ease;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 8px 32px rgba($bader-green, 0.12);
 
             i {
                 font-size: 48px;
@@ -791,14 +810,20 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
 
         h3 {
             margin: 0 0 8px 0;
-            font-size: 20px;
-            font-weight: 600;
+            font-size: 22px;
+            font-weight: 700;
             color: $bader-text;
+            position: relative;
+            z-index: 1;
+            letter-spacing: -0.3px;
         }
 
         p {
             margin: 0;
-            font-size: 14px;
+            font-size: 15px;
+            position: relative;
+            z-index: 1;
+            color: $bader-text-muted;
         }
     }
 }
@@ -1235,6 +1260,122 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
 // Cursor pointer utility
 .cursor-pointer {
     cursor: pointer;
+}
+
+// ========================================
+// MISSING CLASSES (XML ↔ CSS alignment)
+// ========================================
+
+// Unread count badge on conversation list
+.conv-badge {
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background: $bader-green;
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    padding: 0 6px;
+    animation: bounceIn 0.3s ease;
+}
+
+// List view container (wraps the chat when in list mode)
+.list-view-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+// Chat view (wraps chat header + messages + composer)
+.chat-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+// Kanban view container
+.kanban-view-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+// Connect WhatsApp CTA in empty state
+.connect-cta {
+    margin-top: 16px;
+
+    .btn-success {
+        background: $bader-green !important;
+        border-color: $bader-green !important;
+        padding: 12px 28px !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 14px rgba($bader-green, 0.35);
+        transition: all 0.2s;
+
+        &:hover {
+            background: $bader-green-dark !important;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba($bader-green, 0.45);
+        }
+    }
+}
+
+// Search spinner wrap in new conversation modal
+.search-spinner-wrap {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: $bader-green;
+}
+
+// Contact search results container in new conv modal
+.contact-search-results {
+    // Inherits .new-conv-results styling
+}
+
+// No pipelines / no pipelines message
+.no-pipelines,
+.no-pipelines-msg {
+    padding: 8px 0;
+}
+
+.pipelines-list {
+    // Container for pipeline assignment rows
+}
+
+// Channel modal steps
+.channel-step-1,
+.channel-step-2,
+.channel-step-3 {
+    // Steps inherit modal body padding
+}
+
+// QR data container
+.qr-data {
+    // Wraps qr-container + instructions
+}
+
+// Channel/pipeline/new conv modal wrappers
+.channel-modal-wrapper,
+.pipeline-modal-wrapper,
+.new-conv-modal-wrapper {
+    // These just hold the modal overlay - no extra styles needed
+}
+
+// Pipeline select form in modal
+.pipeline-select-form {
+    // Container for the pipeline selector
 }
 
 // ========================================
