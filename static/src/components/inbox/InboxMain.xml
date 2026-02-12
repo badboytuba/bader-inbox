@@ -64,9 +64,7 @@
                                     </div>
                                     <div class="conv-preview">
                                         <span class="conv-message" t-esc="conv.last_message || 'Nova conversa'"/>
-                                        <t t-if="conv.unread_count > 0">
-                                            <span class="conv-badge" t-esc="conv.unread_count"/>
-                                        </t>
+                                        <span t-if="conv.unread_count > 0" class="conv-badge" t-esc="conv.unread_count"/>
                                     </div>
                                 </div>
                             </div>
@@ -155,9 +153,9 @@
                                             <div class="message-meta">
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
                                                 <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
-                                                    <t t-if="msg.status === 'failed'"><i class="fa fa-times"/></t>
-                                                    <t t-elif="msg.status === 'delivered' or msg.status === 'read'"><i class="fa fa-check"/><i class="fa fa-check"/></t>
-                                                    <t t-else=""><i class="fa fa-check"/></t>
+                                                    <span t-if="msg.status === 'failed'"><i class="fa fa-times"/></span>
+                                                    <span t-elif="msg.status === 'delivered' or msg.status === 'read'"><i class="fa fa-check"/><i class="fa fa-check"/></span>
+                                                    <span t-else=""><i class="fa fa-check"/></span>
                                                 </span>
                                                 <span t-else="" class="message-status-placeholder"/>
                                             </div>
@@ -203,11 +201,11 @@
                         </div>
                         <h3>Bader Inbox</h3>
                         <p>Selecione uma conversa para começar</p>
-                        <t t-if="!state.channels.length">
+                        <div t-if="!state.channels.length" class="connect-cta">
                             <button class="btn btn-success btn-lg mt-3" t-on-click="openAddChannelModal">
                                 <i class="fa fa-whatsapp"/> Conectar WhatsApp
                             </button>
-                        </t>
+                        </div>
                     </div>
                 </div>
 
@@ -225,11 +223,9 @@
                                 </t>
                             </select>
                         </div>
-                        <t t-if="!state.pipelines.length">
-                            <div class="alert alert-info py-2 small mb-0">
-                                <i class="fa fa-info-circle"/> Crie pipelines em ⚙️ Configuração → Gerir Pipelines
-                            </div>
-                        </t>
+                        <div t-if="!state.pipelines.length" class="alert alert-info py-2 small mb-0">
+                            <i class="fa fa-info-circle"/> Crie pipelines em ⚙️ Configuração → Gerir Pipelines
+                        </div>
                     </div>
 
                     <div class="kanban-board">
@@ -256,27 +252,21 @@
                                                  t-on-click="() => this.onKanbanCardClick(card)">
                                                 <div class="card-header-row">
                                                     <strong t-esc="card.contact_name || 'Unknown'"/>
-                                                    <t t-if="card.unread_count > 0">
-                                                        <span class="badge bg-danger badge-sm">
-                                                            <t t-esc="card.unread_count"/>
-                                                        </span>
-                                                    </t>
+                                                    <span t-if="card.unread_count > 0" class="badge bg-danger badge-sm">
+                                                        <t t-esc="card.unread_count"/>
+                                                    </span>
                                                 </div>
                                                 <div class="card-phone text-muted small">
                                                     📱 <t t-esc="card.phone"/>
                                                 </div>
-                                                <t t-if="card.last_message">
-                                                    <div class="card-preview">
-                                                        <t t-esc="(card.last_message || '').substring(0, 60)"/>
-                                                        <t t-if="(card.last_message || '').length > 60">...</t>
-                                                    </div>
-                                                </t>
+                                                <div t-if="card.last_message" class="card-preview">
+                                                    <t t-esc="(card.last_message || '').substring(0, 60)"/>
+                                                    <span t-if="(card.last_message || '').length > 60">...</span>
+                                                </div>
                                                 <div class="card-footer">
-                                                    <t t-if="card.assigned_user_id">
-                                                        <span class="card-user small text-muted">
-                                                            <i class="fa fa-user"/> <t t-esc="card.assigned_user_id[1]"/>
-                                                        </span>
-                                                    </t>
+                                                    <span t-if="card.assigned_user_id" class="card-user small text-muted">
+                                                        <i class="fa fa-user"/> <t t-esc="card.assigned_user_id[1]"/>
+                                                    </span>
                                                 </div>
                                             </div>
                                         </t>
@@ -333,12 +323,10 @@
                                 <i class="fa fa-plus"/>
                             </button>
                         </div>
-                        <t t-if="state.loadingPipelines">
-                            <div class="text-center py-2">
-                                <i class="fa fa-spinner fa-spin"/>
-                            </div>
-                        </t>
-                        <t t-elif="state.convPipelines.length">
+                        <div t-if="state.loadingPipelines" class="text-center py-2">
+                            <i class="fa fa-spinner fa-spin"/>
+                        </div>
+                        <div t-elif="state.convPipelines.length" class="pipelines-list">
                             <t t-foreach="state.convPipelines" t-as="cp" t-key="cp.id">
                                 <div class="pipeline-assignment-row">
                                     <div class="pipeline-info">
@@ -351,10 +339,10 @@
                                     </button>
                                 </div>
                             </t>
-                        </t>
-                        <t t-else="">
+                        </div>
+                        <div t-else="" class="no-pipelines">
                             <p class="text-muted small mb-0">Nenhum fluxo atribuído</p>
-                        </t>
+                        </div>
                     </div>
 
                     <div class="contact-actions">
@@ -373,7 +361,7 @@
         </div>
 
         <!-- ADD CHANNEL MODAL -->
-        <t t-if="state.showChannelModal">
+        <div t-if="state.showChannelModal" class="channel-modal-wrapper">
             <div class="bader-modal-overlay" t-on-click="closeChannelModal">
                 <div class="bader-modal" t-on-click.stop="">
                     <div class="bader-modal-header">
@@ -382,7 +370,7 @@
                     </div>
                     <div class="bader-modal-body">
                         <!-- Step 1: Enter Name -->
-                        <t t-if="state.channelStep === 1">
+                        <div t-if="state.channelStep === 1" class="channel-step-1">
                             <div class="mb-3">
                                 <label class="form-label">Nome do Canal</label>
                                 <input type="text" class="form-control form-control-lg" 
@@ -392,20 +380,20 @@
                             <button class="btn btn-success btn-lg w-100" 
                                 t-on-click="createChannel" 
                                 t-att-disabled="!state.newChannelName.trim() || state.creatingChannel">
-                                <t t-if="state.creatingChannel">
+                                <span t-if="state.creatingChannel">
                                     <i class="fa fa-spinner fa-spin"/> Criando...
-                                </t>
-                                <t t-else="">
+                                </span>
+                                <span t-else="">
                                     <i class="fa fa-arrow-right"/> Continuar
-                                </t>
+                                </span>
                             </button>
-                        </t>
+                        </div>
                         
                         <!-- Step 2: Show QR Code -->
-                        <t t-if="state.channelStep === 2">
+                        <div t-if="state.channelStep === 2" class="channel-step-2">
                             <div class="text-center">
                                 <p class="mb-3">Escaneie o QR Code com o WhatsApp</p>
-                                <t t-if="state.qrCodeData">
+                                <div t-if="state.qrCodeData" class="qr-data">
                                     <div class="qr-container">
                                         <img t-att-src="'data:image/png;base64,' + state.qrCodeData" 
                                             class="qr-code-img" alt="QR Code"/>
@@ -413,21 +401,19 @@
                                     <p class="small text-muted mt-3">
                                         <i class="fa fa-mobile"/> Abra o WhatsApp &gt; Dispositivos Vinculados &gt; Vincular Dispositivo
                                     </p>
-                                </t>
-                                <t t-else="">
-                                    <div class="qr-loading">
-                                        <i class="fa fa-spinner fa-spin fa-3x"/>
-                                        <p class="mt-2">A obter QR Code...</p>
-                                    </div>
-                                </t>
+                                </div>
+                                <div t-else="" class="qr-loading">
+                                    <i class="fa fa-spinner fa-spin fa-3x"/>
+                                    <p class="mt-2">A obter QR Code...</p>
+                                </div>
                                 <button class="btn btn-outline-secondary mt-3" t-on-click="refreshQRCode">
                                     <i class="fa fa-refresh"/> Atualizar QR Code
                                 </button>
                             </div>
-                        </t>
+                        </div>
                         
                         <!-- Step 3: Connected -->
-                        <t t-if="state.channelStep === 3">
+                        <div t-if="state.channelStep === 3" class="channel-step-3">
                             <div class="text-center">
                                 <div class="success-icon">
                                     <i class="fa fa-check-circle text-success"/>
@@ -438,14 +424,14 @@
                                     <i class="fa fa-check"/> Concluído
                                 </button>
                             </div>
-                        </t>
+                        </div>
                     </div>
                 </div>
             </div>
-        </t>
+        </div>
 
         <!-- ADD TO PIPELINE MODAL -->
-        <t t-if="state.showPipelineModal">
+        <div t-if="state.showPipelineModal" class="pipeline-modal-wrapper">
             <div class="bader-modal-overlay" t-on-click="closePipelineModal">
                 <div class="bader-modal" t-on-click.stop="" style="max-width: 400px;">
                     <div class="bader-modal-header">
@@ -453,7 +439,7 @@
                         <button class="btn-close" t-on-click="closePipelineModal"/>
                     </div>
                     <div class="bader-modal-body">
-                        <t t-if="availablePipelinesForModal.length">
+                        <div t-if="availablePipelinesForModal.length" class="pipeline-select-form">
                             <div class="mb-3">
                                 <label class="form-label">Selecione o pipeline:</label>
                                 <select class="form-select" 
@@ -470,17 +456,17 @@
                                     t-att-disabled="!state.pipelineModalPipelineId">
                                 <i class="fa fa-plus"/> Adicionar
                             </button>
-                        </t>
-                        <t t-else="">
+                        </div>
+                        <div t-else="" class="no-pipelines-msg">
                             <p class="text-muted">Esta conversa já está em todos os pipelines disponíveis.</p>
-                        </t>
+                        </div>
                     </div>
                 </div>
             </div>
-        </t>
+        </div>
 
         <!-- NEW CONVERSATION MODAL -->
-        <t t-if="state.showNewConversationModal">
+        <div t-if="state.showNewConversationModal" class="new-conv-modal-wrapper">
             <div class="bader-modal-overlay" t-on-click="closeNewConversationModal">
                 <div class="bader-modal new-conv-modal" t-on-click.stop="">
                     <div class="bader-modal-header">
@@ -489,19 +475,17 @@
                     </div>
                     <div class="bader-modal-body">
                         <!-- Channel Selector (if multiple) -->
-                        <t t-if="state.channels.length > 1">
-                            <div class="new-conv-channel-select mb-3">
-                                <label class="form-label small text-muted">Canal WhatsApp:</label>
-                                <div class="d-flex gap-2 flex-wrap">
-                                    <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
-                                        <button t-attf-class="btn btn-sm {{ state.selectedChannelId === ch.id ? 'btn-success' : 'btn-outline-secondary' }}"
-                                                t-on-click="() => this.state.selectedChannelId = ch.id">
-                                            <i class="fa fa-whatsapp"/> <t t-esc="ch.name"/>
-                                        </button>
-                                    </t>
-                                </div>
+                        <div t-if="state.channels.length > 1" class="new-conv-channel-select mb-3">
+                            <label class="form-label small text-muted">Canal WhatsApp:</label>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
+                                    <button t-attf-class="btn btn-sm {{ state.selectedChannelId === ch.id ? 'btn-success' : 'btn-outline-secondary' }}"
+                                            t-on-click="() => this.state.selectedChannelId = ch.id">
+                                        <i class="fa fa-whatsapp"/> <t t-esc="ch.name"/>
+                                    </button>
+                                </t>
                             </div>
-                        </t>
+                        </div>
 
                         <!-- Search Input -->
                         <div class="new-conv-search-wrapper">
@@ -511,42 +495,35 @@
                                    t-att-value="state.contactSearchQuery"
                                    t-on-input="onContactSearchInput"
                                    autofocus="1"/>
-                            <t t-if="state.searchingContacts">
+                            <span t-if="state.searchingContacts" class="search-spinner-wrap">
                                 <i class="fa fa-spinner fa-spin new-conv-search-spinner"/>
-                            </t>
+                            </span>
                         </div>
 
                         <!-- Results -->
                         <div class="new-conv-results">
-                            <t t-if="state.searchingContacts and !state.contactSearchResults.length">
-                                <div class="new-conv-empty">
-                                    <i class="fa fa-spinner fa-spin fa-2x"/>
-                                    <p>A pesquisar...</p>
-                                </div>
-                            </t><t t-elif="!state.contactSearchQuery">
-                                <div class="new-conv-empty">
-                                    <i class="fa fa-address-book fa-3x"/>
-                                    <p>Pesquise um contacto do Odoo</p>
-                                    <span class="text-muted small">Procure por nome, telefone ou email</span>
-                                </div>
-                            </t><t t-elif="state.contactSearchQuery and !state.searchingContacts and !state.contactSearchResults.length">
-                                <div class="new-conv-empty">
-                                    <i class="fa fa-user-times fa-2x"/>
-                                    <p>Nenhum contacto encontrado</p>
-                                    <span class="text-muted small">Tente outro nome ou número</span>
-                                </div>
-                            </t><t t-else="">
+                            <div t-if="state.searchingContacts and !state.contactSearchResults.length" class="new-conv-empty">
+                                <i class="fa fa-spinner fa-spin fa-2x"/>
+                                <p>A pesquisar...</p>
+                            </div>
+                            <div t-elif="!state.contactSearchQuery" class="new-conv-empty">
+                                <i class="fa fa-address-book fa-3x"/>
+                                <p>Pesquise um contacto do Odoo</p>
+                                <span class="text-muted small">Procure por nome, telefone ou email</span>
+                            </div>
+                            <div t-elif="state.contactSearchQuery and !state.searchingContacts and !state.contactSearchResults.length" class="new-conv-empty">
+                                <i class="fa fa-user-times fa-2x"/>
+                                <p>Nenhum contacto encontrado</p>
+                                <span class="text-muted small">Tente outro nome ou número</span>
+                            </div>
+                            <div t-else="" class="contact-search-results">
                                 <t t-foreach="state.contactSearchResults" t-as="contact" t-key="contact.id">
                                     <div class="new-conv-contact" t-on-click="() => this.startConversation(contact)">
                                         <div class="new-conv-contact-avatar">
-                                            <t t-if="contact.has_image">
-                                                <img t-attf-src="/web/image/res.partner/{{ contact.id }}/image_128" alt="Avatar"/>
-                                            </t>
-                                            <t t-else="">
-                                                <span t-attf-class="avatar-initials {{ getAvatarColor(contact.id) }}">
-                                                    <t t-esc="getContactInitials(contact.name)"/>
-                                                </span>
-                                            </t>
+                                            <img t-if="contact.has_image" t-attf-src="/web/image/res.partner/{{ contact.id }}/image_128" alt="Avatar"/>
+                                            <span t-else="" t-attf-class="avatar-initials {{ getAvatarColor(contact.id) }}">
+                                                <t t-esc="getContactInitials(contact.name)"/>
+                                            </span>
                                         </div>
                                         <div class="new-conv-contact-info">
                                             <div class="new-conv-contact-name" t-esc="contact.name"/>
@@ -554,11 +531,9 @@
                                                 <span class="new-conv-phone">
                                                     <i class="fa fa-phone"/> <t t-esc="contact.display_phone"/>
                                                 </span>
-                                                <t t-if="contact.company_name">
-                                                    <span class="new-conv-company">
-                                                        <i class="fa fa-building-o"/> <t t-esc="contact.company_name"/>
-                                                    </span>
-                                                </t>
+                                                <span t-if="contact.company_name" class="new-conv-company">
+                                                    <i class="fa fa-building-o"/> <t t-esc="contact.company_name"/>
+                                                </span>
                                             </div>
                                         </div>
                                         <div class="new-conv-contact-action">
@@ -566,11 +541,11 @@
                                         </div>
                                     </div>
                                 </t>
-                            </t>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </t>
+        </div>
     </t>
 </templates>
