@@ -6,7 +6,7 @@ access_bader_inbox_settings_all,bader.inbox.settings.all,model_bader_inbox_setti
 access_bader_inbox_template_all,bader.inbox.template.all,model_bader_inbox_template,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_chatbot_all,bader.inbox.chatbot.all,model_bader_inbox_chatbot,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_tag_all,bader.inbox.tag.all,model_bader_inbox_tag,bader_inbox.group_bader_inbox_user,1,1,1,1
-access_bader_inbox_channel_user,bader.inbox.channel.user,model_bader_inbox_channel,base.group_user,1,1,1,1
+access_bader_inbox_channel_user,bader.inbox.channel.user,model_bader_inbox_channel,base.group_user,1,0,0,0
 access_bader_inbox_conversation_user,bader.inbox.conversation.user,model_bader_inbox_conversation,base.group_user,1,1,1,0
 access_bader_inbox_message_user,bader.inbox.message.user,model_bader_inbox_message,base.group_user,1,1,1,0
 access_bader_inbox_settings_user,bader.inbox.settings.user,model_bader_inbox_settings,base.group_user,1,0,0,0

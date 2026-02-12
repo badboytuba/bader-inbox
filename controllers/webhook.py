@@ -4,6 +4,7 @@
 import logging
 import json
 import base64
+import requests as req_lib
 from odoo import http, fields
 from odoo.http import request
 
@@ -70,7 +71,6 @@ class BaderInboxWebhook(http.Controller):
             # 2) Download from media_url (WA CDN) if not stored
             if not data and message.media_url:
                 try:
-                    import requests as req_lib
                     resp = req_lib.get(message.media_url, timeout=15, stream=True)
                     if resp.status_code == 200:
                         data = resp.content
@@ -121,7 +121,7 @@ class BaderInboxWebhook(http.Controller):
             mimetype = message.media_mimetype or "application/octet-stream"
             headers = [
                 ("Content-Type", mimetype),
-                ("Content-Length", len(data)),
+                ("Content-Length", str(len(data))),
                 ("Cache-Control", "public, max-age=86400"),
             ]
             if message.media_filename:
@@ -313,7 +313,7 @@ class BaderInboxWebhook(http.Controller):
             _logger.info(f"Message created: id={new_message.id}, type={msg_type}")
             
             # Download media if needed
-            if msg_type in ("image", "audio", "video", "document") and key:
+            if msg_type in ("image", "audio", "video", "document", "sticker") and key:
                 self._process_media_download(channel, new_message, key)
             
             if direction == "in":
@@ -401,6 +401,10 @@ class BaderInboxWebhook(http.Controller):
             doc = content["documentMessage"]
             text = doc.get("caption", "")
             media_info = {"media_mimetype": doc.get("mimetype"), "media_filename": doc.get("fileName"), "media_url": doc.get("url")}
+        elif "stickerMessage" in content:
+            msg_type = "sticker"
+            stk = content["stickerMessage"]
+            media_info = {"media_mimetype": stk.get("mimetype"), "media_url": stk.get("url")}
         elif "locationMessage" in content:
             msg_type = "location"
             loc = content["locationMessage"]

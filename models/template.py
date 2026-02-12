@@ -1,6 +1,7 @@
 # Copyright 2026 Bader Business
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+from datetime import timedelta
 from odoo import api, fields, models, _
 
 
@@ -103,7 +104,7 @@ class BaderInboxChatbot(models.Model):
         
         for rule in rules:
             # Calculate threshold time
-            threshold = fields.Datetime.subtract(now, minutes=rule.trigger_delay_minutes)
+            threshold = now - timedelta(minutes=rule.trigger_delay_minutes)
             
             # Find candidate conversations:
             # - Open/Pending state

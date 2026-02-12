@@ -76,6 +76,7 @@ export class BaderInboxMain extends Component {
         this.conversationPollInterval = null;
         this._contactSearchTimeout = null;
         this.messagePollInterval = null;
+        this._boundBusHandler = this._onBusNotification.bind(this);
 
         onWillStart(async () => {
             this.busService.addChannel("bader_inbox");
@@ -93,7 +94,7 @@ export class BaderInboxMain extends Component {
         });
 
         onMounted(() => {
-            this.busService.addEventListener("notification", this._onBusNotification.bind(this));
+            this.busService.addEventListener("notification", this._boundBusHandler);
 
             // Reduced polling intervals (now mostly for fallback/sync)
             this.conversationPollInterval = setInterval(() => {
@@ -110,7 +111,7 @@ export class BaderInboxMain extends Component {
 
         onWillUnmount(() => {
             this.stopQRPolling();
-            this.busService.removeEventListener("notification", this._onBusNotification.bind(this));
+            this.busService.removeEventListener("notification", this._boundBusHandler);
             if (this.conversationPollInterval) clearInterval(this.conversationPollInterval);
             if (this.messagePollInterval) clearInterval(this.messagePollInterval);
         });
@@ -286,7 +287,7 @@ export class BaderInboxMain extends Component {
             }
         } catch (e) {
             console.error("Error opening conversation by phone:", e);
-            this.notification.add(_t("Erro ao abrir conversa: ") + e.message, { type: "danger" });
+            this.notification.add(_.str.sprintf(_t("Erro ao abrir conversa: %s"), e.message), { type: "danger" });
         }
     }
 
@@ -432,7 +433,7 @@ export class BaderInboxMain extends Component {
 
         } catch (e) {
             console.error("Error creating channel:", e);
-            this.notification.add(_t("Erro ao criar canal: " + e.message), { type: "danger" });
+            this.notification.add(_t("Erro ao criar canal") + ": " + e.message, { type: "danger" });
         }
         this.state.creatingChannel = false;
     }

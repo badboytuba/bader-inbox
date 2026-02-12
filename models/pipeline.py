@@ -80,7 +80,6 @@ class BaderInboxPipelineStage(models.Model):
         compute="_compute_assignment_count", string="Conversations"
     )
 
-    @api.depends()
     def _compute_assignment_count(self):
         for rec in self:
             rec.assignment_count = self.env["bader.inbox.conversation.pipeline"].search_count([

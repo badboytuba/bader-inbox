@@ -2,7 +2,7 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 import logging
-import base64
+
 from odoo import api, fields, models, _
 
 _logger = logging.getLogger(__name__)
@@ -79,9 +79,13 @@ class BaderInboxMessage(models.Model):
                 "last_message_date": fields.Datetime.now(),
             })
             
-            # Increment unread for incoming
+            # Increment unread for incoming (atomic to avoid race conditions)
             if message.direction == "in":
-                conv.unread_count += 1
+                self.env.cr.execute(
+                    "UPDATE bader_inbox_conversation SET unread_count = unread_count + 1 WHERE id = %s",
+                    [conv.id]
+                )
+                conv.invalidate_recordset(['unread_count'])
         
         return messages
 

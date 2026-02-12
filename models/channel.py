@@ -225,9 +225,7 @@ class BaderInboxChannel(models.Model):
                     "last_health_check": now,
                     "health_status": "error",
                 })
-        
-        # Commit after all channels are processed
-        self.env.cr.commit()
+
 
     def action_reconnect(self):
         """Manual reconnect: recreate instance and reconfigure webhook."""

@@ -1,7 +1,7 @@
 # Copyright 2026 Bader Business
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class ResPartner(models.Model):
@@ -14,6 +14,7 @@ class ResPartner(models.Model):
         compute="_compute_bader_inbox_count", string="Conversations"
     )
 
+    @api.depends("bader_inbox_conversation_ids")
     def _compute_bader_inbox_count(self):
         for partner in self:
             partner.bader_inbox_conversation_count = len(partner.bader_inbox_conversation_ids)

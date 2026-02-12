@@ -108,9 +108,10 @@ class BaderInboxConversation(models.Model):
         conversation = self.search(domain, limit=1)
         
         if not conversation:
-            # Try to find partner
+            # Use last 9 digits for flexible matching against formatted partner phones
+            search_phone = phone[-9:] if len(phone) > 9 else phone
             partner = self.env["res.partner"].search([
-                "|", ("phone", "ilike", phone), ("mobile", "ilike", phone)
+                "|", ("phone", "ilike", search_phone), ("mobile", "ilike", search_phone)
             ], limit=1)
             
             conversation = self.create({

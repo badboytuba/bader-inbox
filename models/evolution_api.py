@@ -2,6 +2,7 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
 import logging
+import re
 import requests
 from odoo import api, models
 
@@ -23,7 +24,6 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "https://whatsapp.odontowave.com"
         )
         # Normalize URL - remove /api suffix if present (endpoints already include /api/)
-        import re
         url = re.sub(r'/api/?$', '', url.rstrip('/'))
         return {
             "url": url,
