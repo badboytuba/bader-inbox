@@ -89,7 +89,16 @@
 
                 <!-- ═══ LIST VIEW (Chat) ═══ -->
                 <div t-if="state.viewMode === 'list'" class="list-view-container">
-                    <div t-if="state.selectedConversation" class="chat-view">
+                    <div t-if="state.selectedConversation" class="chat-view"
+                         t-on-dragenter="onDragEnterChat" t-on-dragover="onDragOverChat"
+                         t-on-dragleave="onDragLeaveChat" t-on-drop="onDropChat">
+                        <!-- Drag & Drop Overlay -->
+                        <div t-if="state.isDragOver" class="drop-zone-overlay">
+                            <div class="drop-zone-content">
+                                <i class="fa fa-cloud-upload fa-3x"/>
+                                <p>Solte o arquivo aqui</p>
+                            </div>
+                        </div>
                         <div class="chat-header">
                             <div class="chat-contact">
                                 <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
@@ -101,6 +110,9 @@
                                 </div>
                             </div>
                             <div class="chat-actions">
+                                <button class="btn-chat-action" title="Buscar" t-on-click="toggleMessageSearch">
+                                    <i class="fa fa-search"/>
+                                </button>
                                 <button class="btn-chat-action" title="Atribuir" t-on-click="assignConversation">
                                     <i class="fa fa-user-plus"/>
                                 </button>
@@ -113,13 +125,37 @@
                             </div>
                         </div>
 
+                        <!-- Message Search Bar -->
+                        <div t-if="state.showMessageSearch" class="message-search-bar">
+                            <div class="search-input-wrapper">
+                                <i class="fa fa-search"/>
+                                <input type="text" placeholder="Buscar mensagem..." 
+                                       t-model="state.messageSearchQuery"
+                                       t-on-keydown="onSearchKeydown"/>
+                                <span t-if="state.messageSearchResults.length" class="search-count">
+                                    <t t-esc="state.messageSearchIndex + 1"/> de <t t-esc="state.messageSearchResults.length"/>
+                                </span>
+                            </div>
+                            <div class="search-nav">
+                                <button class="btn-search-nav" t-on-click="() => navigateSearchResult('prev')" t-att-disabled="state.messageSearchIndex <= 0">
+                                    <i class="fa fa-chevron-up"/>
+                                </button>
+                                <button class="btn-search-nav" t-on-click="() => navigateSearchResult('next')" t-att-disabled="state.messageSearchIndex >= state.messageSearchResults.length - 1">
+                                    <i class="fa fa-chevron-down"/>
+                                </button>
+                                <button class="btn-search-nav" t-on-click="toggleMessageSearch">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="chat-messages" t-ref="messagesContainer">
                             <div t-if="state.loadingMessages" class="text-center p-4">
                                 <i class="fa fa-spinner fa-spin fa-2x"/>
                             </div>
                             <div t-else="" class="messages-list">
                                 <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
-                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}">
+                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}" t-att-data-msg-id="msg.id">
                                         <div class="message-bubble">
                                             <!-- Media content based on message type -->
                                             <div class="message-content-wrapper">
@@ -179,16 +215,66 @@
                                     <i class="fa fa-times"/>
                                 </button>
                             </div>
+
+                            <!-- Quick Reply Picker -->
+                            <div t-if="state.showQuickReplies" class="quick-reply-picker">
+                                <div class="qr-header">
+                                    <i class="fa fa-bolt"/>
+                                    <span>Respostas Rápidas</span>
+                                </div>
+                                <div class="qr-list">
+                                    <t t-foreach="filteredQuickReplies()" t-as="qr" t-key="qr.id">
+                                        <div t-attf-class="qr-item {{ qr_index === state.quickReplyIndex ? 'active' : '' }}"
+                                             t-on-click="() => this.selectQuickReply(qr)">
+                                            <div class="qr-shortcut">
+                                                <span t-if="qr.shortcut" class="qr-slash" t-esc="qr.shortcut"/>
+                                                <span class="qr-name" t-esc="qr.name"/>
+                                            </div>
+                                            <div class="qr-preview" t-esc="qr.content.substring(0, 80) + (qr.content.length > 80 ? '...' : '')"/>
+                                        </div>
+                                    </t>
+                                    <div t-if="!filteredQuickReplies().length" class="qr-empty">
+                                        <i class="fa fa-info-circle"/>
+                                        Nenhuma resposta rápida encontrada
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Emoji Picker -->
+                            <div t-if="state.showEmojiPicker" class="emoji-picker">
+                                <div class="emoji-tabs">
+                                    <t t-foreach="getEmojiCategories()" t-as="cat" t-key="cat.id">
+                                        <button t-attf-class="emoji-tab {{ state.emojiCategory === cat.id ? 'active' : '' }}"
+                                                t-on-click="() => { this.state.emojiCategory = cat.id; }"
+                                                t-att-title="cat.label">
+                                            <t t-esc="cat.icon"/>
+                                        </button>
+                                    </t>
+                                </div>
+                                <div class="emoji-grid">
+                                    <t t-foreach="getEmojisForCategory(state.emojiCategory)" t-as="emoji" t-key="emoji_index">
+                                        <button class="emoji-btn" t-on-click="() => this.onEmojiSelected(emoji)">
+                                            <t t-esc="emoji"/>
+                                        </button>
+                                    </t>
+                                </div>
+                            </div>
+
                             <div class="composer-actions">
+                                <button class="btn-composer" title="Emoji" t-on-click="toggleEmojiPicker">
+                                    <i class="fa fa-smile-o"/>
+                                </button>
                                 <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
                                     <i class="fa fa-paperclip"/>
                                 </button>
                                 <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
                             </div>
                             <div class="composer-input">
-                                <textarea rows="1" placeholder="Escreva uma mensagem..." 
+                                <textarea rows="1" placeholder="Escreva uma mensagem... (/ para respostas rápidas)" 
+                                    t-ref="composerTextarea"
                                     t-model="state.composerText" 
-                                    t-on-keydown="onComposerKeydown"/>
+                                    t-on-keydown="onComposerKeydown"
+                                    t-on-input="onComposerInput"/>
                             </div>
                             <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
                                 <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>

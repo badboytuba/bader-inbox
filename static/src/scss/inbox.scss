@@ -1971,3 +1971,363 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
     transform: scale(0.8);
     transition: all 0.2s ease;
 }
+
+// ========================================
+// PHASE 1: QUICK REPLY PICKER
+// ========================================
+.quick-reply-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    max-height: 260px;
+    background: #1A2332;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    z-index: 20;
+    animation: slideUp 0.15s ease-out;
+
+    .qr-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: rgba(255, 255, 255, 0.04);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+
+        .fa-bolt {
+            color: $bader-green;
+        }
+    }
+
+    .qr-list {
+        max-height: 210px;
+        overflow-y: auto;
+
+        &::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 2px;
+        }
+    }
+
+    .qr-item {
+        padding: 10px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        transition: background 0.1s;
+
+        &:hover,
+        &.active {
+            background: rgba($bader-green, 0.1);
+        }
+
+        .qr-shortcut {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 3px;
+
+            .qr-slash {
+                background: rgba($bader-green, 0.2);
+                color: $bader-green;
+                padding: 1px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 600;
+                font-family: monospace;
+            }
+
+            .qr-name {
+                color: white;
+                font-size: 13px;
+                font-weight: 500;
+            }
+        }
+
+        .qr-preview {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            line-height: 1.4;
+            padding-left: 0;
+        }
+    }
+
+    .qr-empty {
+        padding: 20px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 13px;
+
+        i {
+            margin-right: 6px;
+        }
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+// ========================================
+// PHASE 1: EMOJI PICKER
+// ========================================
+.emoji-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    width: 320px;
+    background: #1A2332;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 20;
+    animation: slideUp 0.15s ease-out;
+
+    .emoji-tabs {
+        display: flex;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 4px 8px 0;
+        gap: 2px;
+
+        .emoji-tab {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 4px;
+            border: none;
+            background: none;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            transition: background 0.15s;
+            border-bottom: 2px solid transparent;
+
+            &:hover {
+                background: rgba(255, 255, 255, 0.06);
+            }
+
+            &.active {
+                border-bottom-color: $bader-green;
+                background: rgba($bader-green, 0.08);
+            }
+        }
+    }
+
+    .emoji-grid {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 2px;
+        padding: 8px;
+        max-height: 220px;
+        overflow-y: auto;
+
+        &::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 2px;
+        }
+
+        .emoji-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: none;
+            font-size: 22px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.1s;
+
+            &:hover {
+                background: rgba(255, 255, 255, 0.1);
+                transform: scale(1.15);
+            }
+        }
+    }
+}
+
+// ========================================
+// PHASE 1: MESSAGE SEARCH BAR
+// ========================================
+.message-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    animation: slideDown 0.15s ease-out;
+
+    .search-input-wrapper {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        padding: 6px 12px;
+
+        .fa-search {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 13px;
+        }
+
+        input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: white;
+            font-size: 13px;
+
+            &::placeholder {
+                color: rgba(255, 255, 255, 0.3);
+            }
+        }
+
+        .search-count {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+    }
+
+    .search-nav {
+        display: flex;
+        gap: 2px;
+
+        .btn-search-nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+
+            &:hover:not(:disabled) {
+                background: rgba(255, 255, 255, 0.12);
+                color: white;
+            }
+
+            &:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+            }
+        }
+    }
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+// Search highlight on messages
+.message.search-highlight {
+    .message-bubble {
+        box-shadow: 0 0 0 2px $bader-green, 0 0 16px rgba($bader-green, 0.3);
+        transition: box-shadow 0.3s ease;
+    }
+}
+
+// ========================================
+// PHASE 1: DRAG & DROP OVERLAY
+// ========================================
+.drop-zone-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 56, 65, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    border: 3px dashed $bader-green;
+    border-radius: 12px;
+    animation: fadeIn 0.2s ease;
+
+    .drop-zone-content {
+        text-align: center;
+        color: white;
+
+        .fa-cloud-upload {
+            color: $bader-green;
+            margin-bottom: 12px;
+            animation: bounce 1s infinite;
+        }
+
+        p {
+            font-size: 16px;
+            font-weight: 500;
+            margin: 0;
+            opacity: 0.9;
+        }
+    }
+}
+
+// Make chat-composer position: relative for absolute children
+.chat-composer {
+    position: relative;
+}
+
+@keyframes bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}

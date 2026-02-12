@@ -32,6 +32,26 @@ export class BaderInboxMain extends Component {
             composerText: "",
             sendingMessage: false,
 
+            // Quick Replies
+            quickReplies: [],
+            showQuickReplies: false,
+            quickReplyFilter: "",
+            quickReplyIndex: 0,
+
+            // Emoji Picker
+            showEmojiPicker: false,
+            emojiCategory: "people",
+            emojiSearch: "",
+
+            // Message Search
+            showMessageSearch: false,
+            messageSearchQuery: "",
+            messageSearchResults: [],
+            messageSearchIndex: -1,
+
+            // Drag & Drop
+            isDragOver: false,
+
             // UI
             showContactPanel: true,
             viewMode: "list", // "list" or "kanban"
@@ -71,11 +91,13 @@ export class BaderInboxMain extends Component {
 
         this.messagesRef = useRef("messagesContainer");
         this.fileInputRef = useRef("fileInput");
+        this.composerRef = useRef("composerTextarea");
         this.avatarColors = ["green", "blue", "purple", "orange", "pink", "red"];
         this.qrPollInterval = null;
         this.conversationPollInterval = null;
         this._contactSearchTimeout = null;
         this.messagePollInterval = null;
+        this._notificationsEnabled = false;
         this._boundBusHandler = this._onBusNotification.bind(this);
 
         onWillStart(async () => {
@@ -83,6 +105,8 @@ export class BaderInboxMain extends Component {
             await this.loadChannels();
             await this.loadConversations();
             await this.loadPipelines();
+            await this.loadQuickReplies();
+            this._requestNotificationPermission();
 
             // Check if we need to open a specific conversation (from PhoneWhatsAppWidget)
             const params = this.props.action?.params || {};
@@ -642,10 +666,282 @@ export class BaderInboxMain extends Component {
     }
 
     onComposerKeydown(event) {
+        // Quick Reply navigation
+        if (this.state.showQuickReplies) {
+            const filtered = this.filteredQuickReplies();
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                this.state.quickReplyIndex = Math.min(this.state.quickReplyIndex + 1, filtered.length - 1);
+                return;
+            }
+            if (event.key === "ArrowUp") {
+                event.preventDefault();
+                this.state.quickReplyIndex = Math.max(this.state.quickReplyIndex - 1, 0);
+                return;
+            }
+            if (event.key === "Enter" && filtered.length > 0) {
+                event.preventDefault();
+                this.selectQuickReply(filtered[this.state.quickReplyIndex]);
+                return;
+            }
+            if (event.key === "Escape") {
+                this.state.showQuickReplies = false;
+                return;
+            }
+        }
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             this.sendMessage();
         }
+    }
+
+    onComposerInput(event) {
+        const text = event.target.value;
+        // Detect / at start of line for quick replies
+        if (text === "/" || text.startsWith("/")) {
+            this.state.showQuickReplies = true;
+            this.state.quickReplyFilter = text.slice(1).toLowerCase();
+            this.state.quickReplyIndex = 0;
+        } else {
+            this.state.showQuickReplies = false;
+        }
+    }
+
+    // ──── QUICK REPLIES ────
+    async loadQuickReplies() {
+        try {
+            this.state.quickReplies = await this.orm.searchRead(
+                "bader.inbox.template",
+                [["active", "=", true]],
+                ["id", "name", "shortcut", "content", "category"],
+                { order: "use_count desc, sequence asc", limit: 50 }
+            );
+        } catch (e) {
+            console.warn("Quick replies not available:", e);
+        }
+    }
+
+    filteredQuickReplies() {
+        if (!this.state.quickReplyFilter) return this.state.quickReplies;
+        const q = this.state.quickReplyFilter;
+        return this.state.quickReplies.filter(r =>
+            (r.shortcut && r.shortcut.toLowerCase().includes(q)) ||
+            r.name.toLowerCase().includes(q) ||
+            r.content.toLowerCase().includes(q)
+        );
+    }
+
+    selectQuickReply(template) {
+        this.state.composerText = template.content;
+        this.state.showQuickReplies = false;
+        this.state.quickReplyFilter = "";
+        // Increment use counter
+        this.orm.call("bader.inbox.template", "write", [[template.id], { use_count: (template.use_count || 0) + 1 }]).catch(() => { });
+        // Focus composer
+        setTimeout(() => {
+            const ta = this.composerRef.el;
+            if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
+        }, 50);
+    }
+
+    // ──── EMOJI PICKER ────
+    toggleEmojiPicker() {
+        this.state.showEmojiPicker = !this.state.showEmojiPicker;
+        this.state.emojiSearch = "";
+        if (this.state.showEmojiPicker) this.state.showQuickReplies = false;
+    }
+
+    insertEmoji(emoji) {
+        const ta = this.composerRef.el;
+        if (ta) {
+            const start = ta.selectionStart || this.state.composerText.length;
+            const before = this.state.composerText.slice(0, start);
+            const after = this.state.composerText.slice(start);
+            this.state.composerText = before + emoji + after;
+            setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + emoji.length; }, 10);
+        } else {
+            this.state.composerText += emoji;
+        }
+    }
+
+    getEmojiCategories() {
+        return [
+            { id: "recent", icon: "🕐", label: "Recentes" },
+            { id: "people", icon: "😀", label: "Pessoas" },
+            { id: "nature", icon: "🐻", label: "Natureza" },
+            { id: "food", icon: "🍕", label: "Comida" },
+            { id: "travel", icon: "✈️", label: "Viagem" },
+            { id: "objects", icon: "💡", label: "Objetos" },
+            { id: "symbols", icon: "❤️", label: "Símbolos" },
+        ];
+    }
+
+    getEmojisForCategory(catId) {
+        const q = this.state.emojiSearch.toLowerCase();
+        const data = {
+            people: ["😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗", "😚", "😙", "🥲", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🫢", "🤫", "🤔", "🫡", "🤐", "🤨", "😐", "😑", "😶", "🫥", "😏", "😒", "🙄", "😬", "😮‍💨", "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "🥳", "🥸", "😎", "🤓", "🧐", "😕", "🫤", "😟", "🙁", "😮", "😯", "😲", "😳", "🥺", "🥹", "😦", "😧", "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩", "😫", "🥱", "😤", "😡", "😠", "🤬", "👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "🫳", "🫴", "👌", "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "🫵", "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "🫶", "👐", "🤲", "🤝", "🙏"],
+            nature: ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🦅", "🦆", "🦉", "🐴", "🦄", "🐝", "🐛", "🦋", "🐌", "🐞", "🌸", "💐", "🌹", "🌺", "🌻", "🌼", "🌷", "🌱", "🌲", "🌳", "🌴", "🌵", "🍀", "🍁", "🍂", "🍃", "🌍", "🌙", "⭐", "🌟", "⚡", "🔥", "🌈", "☀️", "🌤️", "⛅", "🌧️", "❄️", "💧", "🌊"],
+            food: ["🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍈", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝", "🍅", "🥑", "🍆", "🥔", "🥕", "🌽", "🌶️", "🫑", "🥒", "🥬", "🥦", "🧄", "🧅", "🍄", "🥜", "🍞", "🥐", "🥖", "🥨", "🧀", "🍖", "🍗", "🥩", "🥓", "🍔", "🍟", "🍕", "🌭", "🥪", "🌮", "🌯", "🥗", "🍝", "🍜", "🍲", "🍛", "🍣", "🍱", "🥟", "🍤", "🍙", "🍰", "🎂", "🧁", "🍫", "🍬", "🍭", "🍮", "🍩", "🍪", "☕", "🍵", "🥤", "🍺", "🍷", "🥂", "🍸", "🍹"],
+            travel: ["🚗", "🚕", "🚌", "🏎️", "🚑", "🚒", "✈️", "🚀", "🛸", "🚁", "⛵", "🚢", "🏠", "🏢", "🏥", "🏫", "🏟️", "🗼", "🗽", "⛪", "🕌", "🛕", "🏰", "🏯", "🏝️", "🏖️", "🏔️", "⛰️", "🗻", "🌋", "🏕️", "🎪", "🎡", "🎢", "🎠", "⛲", "🌁", "🌉", "🌅", "🌄"],
+            objects: ["⌚", "📱", "💻", "⌨️", "🖥️", "🖨️", "📷", "📹", "🎥", "📞", "📺", "📻", "🎙️", "⏰", "🔋", "💡", "🔦", "🕯️", "📦", "📬", "📝", "📁", "📋", "📌", "📎", "🔑", "🔒", "🔓", "🔨", "🪛", "🔧", "💰", "💳", "💎", "🎁", "🎈", "🎉", "🎊", "🏆", "🥇", "🥈", "🥉", "⚽", "🏀", "🎾", "🎮", "🎯", "🎲", "🧩", "🎭", "🎨", "🎵", "🎶", "🎸", "🎹", "🥁", "🎻", "🎺"],
+            symbols: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "✅", "❌", "⭕", "❗", "❓", "💯", "⚠️", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "🟤", "▪️", "▫️", "🔶", "🔷", "🔸", "🔹", "💠", "🔘", "✨", "💫", "🌟", "⚡", "💥", "🔔", "🎵", "🎶"],
+        };
+        if (catId === "recent") {
+            const stored = localStorage.getItem("bader_recent_emojis");
+            return stored ? JSON.parse(stored) : ["👍", "❤️", "😂", "🙏", "😊", "👋", "🔥", "✅", "👏", "😍"];
+        }
+        let emojis = data[catId] || [];
+        if (q) {
+            // Simple search: not needed for emojis, just return all
+            return emojis;
+        }
+        return emojis;
+    }
+
+    onEmojiSelected(emoji) {
+        this.insertEmoji(emoji);
+        // Save to recents
+        try {
+            const stored = localStorage.getItem("bader_recent_emojis");
+            let recents = stored ? JSON.parse(stored) : [];
+            recents = [emoji, ...recents.filter(e => e !== emoji)].slice(0, 30);
+            localStorage.setItem("bader_recent_emojis", JSON.stringify(recents));
+        } catch (e) { }
+    }
+
+    // ──── DESKTOP NOTIFICATIONS ────
+    _requestNotificationPermission() {
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+        this._notificationsEnabled = "Notification" in window && Notification.permission === "granted";
+    }
+
+    _showDesktopNotification(title, body, conversationId) {
+        if (!this._notificationsEnabled || document.hasFocus()) return;
+        try {
+            const n = new Notification(title, {
+                body: body,
+                icon: "/bader_inbox/static/src/img/icon.png",
+                tag: `bader-inbox-${conversationId}`,
+                silent: false,
+            });
+            n.onclick = () => {
+                window.focus();
+                if (conversationId) this.openConversationById(conversationId);
+                n.close();
+            };
+            setTimeout(() => n.close(), 8000);
+        } catch (e) { }
+    }
+
+    // ──── MESSAGE SEARCH ────
+    toggleMessageSearch() {
+        this.state.showMessageSearch = !this.state.showMessageSearch;
+        if (!this.state.showMessageSearch) {
+            this.state.messageSearchQuery = "";
+            this.state.messageSearchResults = [];
+            this.state.messageSearchIndex = -1;
+        }
+    }
+
+    async searchMessages() {
+        const q = this.state.messageSearchQuery.trim();
+        if (!q || q.length < 2 || !this.state.selectedConversation) return;
+        try {
+            this.state.messageSearchResults = await this.orm.searchRead(
+                "bader.inbox.message",
+                [
+                    ["conversation_id", "=", this.state.selectedConversation.id],
+                    ["content", "ilike", q],
+                    ["message_type", "=", "text"],
+                ],
+                ["id", "content", "create_date", "direction"],
+                { order: "create_date desc", limit: 50 }
+            );
+            this.state.messageSearchIndex = this.state.messageSearchResults.length > 0 ? 0 : -1;
+            if (this.state.messageSearchIndex >= 0) {
+                this._scrollToMessage(this.state.messageSearchResults[0].id);
+            }
+        } catch (e) {
+            console.error("Search error:", e);
+        }
+    }
+
+    navigateSearchResult(direction) {
+        if (!this.state.messageSearchResults.length) return;
+        if (direction === "next") {
+            this.state.messageSearchIndex = Math.min(this.state.messageSearchIndex + 1, this.state.messageSearchResults.length - 1);
+        } else {
+            this.state.messageSearchIndex = Math.max(this.state.messageSearchIndex - 1, 0);
+        }
+        const msg = this.state.messageSearchResults[this.state.messageSearchIndex];
+        if (msg) this._scrollToMessage(msg.id);
+    }
+
+    _scrollToMessage(msgId) {
+        setTimeout(() => {
+            const container = this.messagesRef.el;
+            if (!container) return;
+            const el = container.querySelector(`[data-msg-id="${msgId}"]`);
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("search-highlight");
+                setTimeout(() => el.classList.remove("search-highlight"), 2000);
+            }
+        }, 100);
+    }
+
+    onSearchKeydown(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            this.searchMessages();
+        } else if (event.key === "Escape") {
+            this.toggleMessageSearch();
+        }
+    }
+
+    // ──── DRAG & DROP ────
+    onDragEnterChat(ev) {
+        ev.preventDefault();
+        if (!this.state.selectedConversation) return;
+        this.state.isDragOver = true;
+    }
+
+    onDragOverChat(ev) {
+        ev.preventDefault();
+    }
+
+    onDragLeaveChat(ev) {
+        ev.preventDefault();
+        // Only hide if leaving the main container
+        if (!ev.currentTarget.contains(ev.relatedTarget)) {
+            this.state.isDragOver = false;
+        }
+    }
+
+    onDropChat(ev) {
+        ev.preventDefault();
+        this.state.isDragOver = false;
+        if (!this.state.selectedConversation) return;
+        const files = ev.dataTransfer?.files;
+        if (files && files.length > 0) {
+            this._processDroppedFile(files[0]);
+        }
+    }
+
+    _processDroppedFile(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64Data = reader.result.split(',')[1];
+            this.state.attachment = {
+                name: file.name,
+                data: base64Data,
+                type: this._getMediaType(file.type),
+                preview: reader.result
+            };
+        };
+        reader.readAsDataURL(file);
     }
 
     // ==========================================
@@ -979,6 +1275,13 @@ export class BaderInboxMain extends Component {
             if (type === "bader_inbox_new_message") {
                 // New message received
                 refreshConversations = true;
+
+                // Desktop notification for incoming messages
+                if (payload.message && payload.message.direction === "in") {
+                    const convName = payload.contact_name || payload.phone || "Nova mensagem";
+                    const body = payload.message.content || payload.message.message_type || "";
+                    this._showDesktopNotification(convName, body, payload.conversation_id);
+                }
 
                 // If this conversation is currently open, refresh messages immediately
                 if (this.state.selectedConversation &&
