@@ -2998,7 +2998,7 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
 
     .link-preview-domain {
         font-size: 10px;
-        color: $bader-primary;
+        color: $bader-green;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
@@ -3052,7 +3052,7 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
     position: relative;
 
     &:hover {
-        color: $bader-primary !important;
+        color: $bader-green !important;
     }
 
     &[disabled] {
@@ -3069,7 +3069,7 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
     padding: 1px 5px;
     border-radius: 6px;
     background: rgba(37, 211, 102, 0.12);
-    color: $bader-primary;
+    color: $bader-green;
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.5px;
@@ -3086,7 +3086,7 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
     transition: color 0.15s;
 
     &:hover {
-        color: $bader-primary;
+        color: $bader-green;
     }
 }
 
@@ -3095,13 +3095,13 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
     padding: 6px 10px;
     border-radius: 6px;
     background: rgba(37, 211, 102, 0.06);
-    border-left: 2px solid $bader-primary;
+    border-left: 2px solid $bader-green;
     font-size: 12px;
     color: rgba(255, 255, 255, 0.7);
     font-style: italic;
 
     .fa-language {
         margin-right: 4px;
-        color: $bader-primary;
+        color: $bader-green;
     }
 }
