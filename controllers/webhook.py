@@ -87,33 +87,6 @@ class BaderInboxWebhook(http.Controller):
                 except Exception as e:
                     _logger.warning(f"Media URL download failed for {message_id}: {e}")
             
-            # 3) Fallback: Evolution API getBase64FromMediaMessage
-            if not data and message.whatsapp_message_id:
-                try:
-                    conv = message.conversation_id
-                    channel = conv.channel_id
-                    if channel and channel.evolution_instance_name:
-                        api = request.env["bader.inbox.evolution_api"].sudo()
-                        media_key = {
-                            "remoteJid": conv.whatsapp_id or f"{conv.phone}@s.whatsapp.net",
-                            "id": message.whatsapp_message_id,
-                            "fromMe": message.direction == "out",
-                        }
-                        result = api.get_base64_from_media(channel.evolution_instance_name, media_key)
-                        if result and result.get("base64"):
-                            data = base64.b64decode(result["base64"])
-                            # Cache it
-                            try:
-                                message.write({
-                                    "media_data": result["base64"],
-                                    "media_mimetype": result.get("mimetype") or message.media_mimetype,
-                                })
-                                _logger.info(f"Media cached from Evolution API for message {message_id}")
-                            except Exception as ce:
-                                _logger.warning(f"Failed to cache media: {ce}")
-                except Exception as e:
-                    _logger.warning(f"Evolution API media download failed for {message_id}: {e}")
-            
             if not data:
                 _logger.warning(f"No media data available for message {message_id}")
                 return request.not_found()
@@ -222,24 +195,28 @@ class BaderInboxWebhook(http.Controller):
         return phone, whatsapp_id, phone_source
 
     def _process_media_download(self, channel, message, key):
-        """Download media content for a message"""
+        """Download media content for a message from its media_url.
+        
+        NOTE: This API has no getBase64FromMediaMessage endpoint.
+        Media must be downloaded from the URL provided in the webhook payload.
+        """
         try:
-            api = request.env["bader.inbox.evolution_api"].sudo()
-            instance_name = channel.evolution_instance_name
-            media_key = {
-                "remoteJid": key.get("remoteJid", ""),
-                "id": key.get("id", ""),
-                "fromMe": key.get("fromMe", False),
-            }
-            media_result = api.get_base64_from_media(instance_name, media_key)
-            if media_result and media_result.get("base64"):
-                message.sudo().write({
-                    "media_data": media_result["base64"],
-                    "media_mimetype": media_result.get("mimetype") or message.media_mimetype,
-                })
-                _logger.info(f"Media downloaded for message {message.id}")
+            if not message.media_url:
+                _logger.warning(f"No media_url for message {message.id}, cannot download")
+                return
+            
+            resp = req_lib.get(message.media_url, timeout=30, stream=True)
+            if resp.status_code == 200:
+                media_data = base64.b64encode(resp.content).decode()
+                update_vals = {"media_data": media_data}
+                # Update mimetype from response headers if not set
+                ct = resp.headers.get("Content-Type")
+                if ct and not message.media_mimetype:
+                    update_vals["media_mimetype"] = ct.split(";")[0]
+                message.sudo().write(update_vals)
+                _logger.info(f"Media downloaded from URL for message {message.id}")
             else:
-                _logger.warning(f"Failed to download media for message {message.id}")
+                _logger.warning(f"Media download HTTP {resp.status_code} for message {message.id}")
         except Exception as me:
             _logger.error(f"Media download error: {me}")
 
@@ -415,6 +392,9 @@ class BaderInboxWebhook(http.Controller):
 
     def _handle_message_update(self, channel, data):
         """Handle message status update (delivery/read receipts).
+        
+        NOTE: The custom Baileys API does NOT support messages.update events.
+        This handler is kept as a safety net in case future API versions add it.
         
         Payload: {event: 'messages.update', data: [{key: {id, remoteJid, fromMe}, update: {status: N}}]}
         Status codes: 0=ERROR, 1=PENDING, 2=SENT/SERVER_ACK, 3=DELIVERED/DELIVERY_ACK, 4=READ/READ, 5=PLAYED

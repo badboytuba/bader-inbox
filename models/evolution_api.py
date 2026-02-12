@@ -10,10 +10,18 @@ _logger = logging.getLogger(__name__)
 
 
 class BaderInboxEvolutionAPI(models.AbstractModel):
-    """Helper class for Evolution API communication"""
+    """Helper class for WhatsApp API communication (Custom Baileys-based API)
+    
+    NOTE: This is NOT the official Evolution API v1/v2.
+    It's a custom Baileys-based API with different endpoints.
+    - Events are lowercase: messages.upsert, connection.update, qrcode.updated
+    - No generic /message/sendMedia — use /message/image, /message/audio, etc.
+    - No /chat/getBase64FromMediaMessage — download media from URL in webhook payload
+    - No messages.update event — status tracking not supported by this API
+    """
     
     _name = "bader.inbox.evolution_api"
-    _description = "Evolution API Helper"
+    _description = "WhatsApp API Helper (Baileys)"
 
     def _get_config(self):
         """Get API configuration"""
@@ -59,12 +67,12 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     def create_instance(self, instance_name, webhook_url=None):
         """Create new WhatsApp instance with webhook configured"""
         data = {"instanceName": instance_name}
-        # Include webhook in creation for Evolution API versions that support it
+        # Include webhook in creation (lowercase event names for Baileys API)
         if webhook_url:
             data["webhook"] = {
                 "url": webhook_url,
                 "enabled": True,
-                "events": ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "QRCODE_UPDATED"]
+                "events": ["messages.upsert", "connection.update", "qrcode.updated"]
             }
         result = self._request("POST", "/instance/create", data)
         return {"success": "instance" in result or "instanceName" in result, **result}
@@ -101,11 +109,11 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         }
 
     def set_webhook(self, instance_name, webhook_url):
-        """Configure webhook for instance"""
+        """Configure webhook for instance (lowercase event names for Baileys API)"""
         data = {
             "webhookUrl": webhook_url,
             "enabled": True,
-            "events": ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "QRCODE_UPDATED"]
+            "events": ["messages.upsert", "connection.update", "qrcode.updated"]
         }
         return self._request("POST", f"/webhook/set/{instance_name}", data)
 
@@ -122,47 +130,35 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         }
 
     def send_media(self, instance_name, phone, media_type, media_url=None, media_data=None, filename=None, caption=None):
-        """Send media message via URL or Base64"""
+        """Send media message via type-specific endpoints.
         
-        # Priority 1: Send Base64 if available (New generic endpoint /message/sendMedia)
-        if media_data:
-            # Evolution API v2 generic media endpoint
-            endpoint = "/message/sendMedia"
-            
-            # Ensure base64 prefix is stripped
-            if "," in media_data:
-                media_data = media_data.split(",")[1]
-            
-            data = {
-                "number": phone,
-                "mediatype": media_type,
-                "media": media_data,
-                "fileName": filename or "file",
-                "caption": caption or "",
-            }
-            # mimetype is optional if API can detect, but better to pass if we knew it
-            # bader_inbox Message model stores media_mimetype
-            
-            result = self._request("POST", f"{endpoint}/{instance_name}", data)
-            return {
-                "success": "key" in result or result.get("status") == "sent",
-                "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
-            }
-
-        # Priority 2: Send URL (specific endpoints)
+        This API uses separate endpoints per media type:
+        - /message/image/{instance}
+        - /message/audio/{instance}
+        - /message/video/{instance}
+        - /message/document/{instance}
+        """
         endpoint_map = {
             "image": "/message/image",
             "audio": "/message/audio",
             "video": "/message/video",
             "document": "/message/document",
+            "sticker": "/message/image",  # fallback stickers to image
         }
         endpoint = endpoint_map.get(media_type, "/message/document")
         
-        url_key = f"{media_type}Url" if media_type != "document" else "documentUrl"
-        data = {
-            "number": phone,
-            url_key: media_url,
-        }
+        data = {"number": phone}
+        
+        if media_data:
+            # Send as base64
+            if "," in media_data:
+                media_data = media_data.split(",")[1]
+            data["media"] = media_data
+        elif media_url:
+            # Send as URL — use type-specific URL key
+            url_key = f"{media_type}Url" if media_type != "document" else "documentUrl"
+            data[url_key] = media_url
+        
         if caption:
             data["caption"] = caption
         if filename:
@@ -173,37 +169,6 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "success": "key" in result or result.get("status") == "sent",
             "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
         }
-
-    def get_base64_from_media(self, instance_name, message_key):
-        """Download media content as base64 from Evolution API
-        
-        Args:
-            instance_name: Evolution API instance name
-            message_key: The message key dict with remoteJid, id, fromMe
-        
-        Returns:
-            dict with base64 data and mimetype, or None on failure
-        """
-        try:
-            data = {"key": message_key}
-            result = self._request(
-                "POST", 
-                f"/chat/getBase64FromMediaMessage/{instance_name}",
-                data
-            )
-            if result and isinstance(result, dict):
-                base64_data = result.get("base64") or result.get("data")
-                mimetype = result.get("mimetype") or result.get("mediaType", "")
-                if base64_data:
-                    # Strip data URI prefix if present
-                    if "," in base64_data and base64_data.startswith("data:"):
-                        base64_data = base64_data.split(",", 1)[1]
-                    return {"base64": base64_data, "mimetype": mimetype}
-            _logger.warning(f"No base64 data returned for media: {result}")
-            return None
-        except Exception as e:
-            _logger.error(f"Error downloading media: {e}")
-            return None
 
     def instance_exists(self, instance_name):
         """Check if an instance exists on Evolution API.
