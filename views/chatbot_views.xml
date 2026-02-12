@@ -32,11 +32,13 @@
                             <field name="trigger_type"/>
                             <field name="trigger_keywords" placeholder="preço,orçamento" attrs="{'invisible': [('trigger_type', '!=', 'keyword')]}"/>
                             <field name="trigger_delay_minutes" attrs="{'invisible': [('trigger_type', '!=', 'no_reply')]}"/>
+                            <field name="trigger_tag_ids" widget="many2many_tags" attrs="{'invisible': [('trigger_type', '!=', 'tag_added')]}"/>
                         </group>
                         <group string="⚙️ Config">
                             <field name="active"/>
                             <field name="priority"/>
                             <field name="channel_ids" widget="many2many_tags"/>
+                            <field name="only_outside_hours"/>
                         </group>
                     </group>
                     <group string="⚡ Ação">
@@ -44,10 +46,20 @@
                     </group>
                     <group attrs="{'invisible': [('action_type', '!=', 'reply')]}">
                         <field name="reply_template_id"/>
-                        <field name="reply_content" placeholder="Olá {name}!" attrs="{'invisible': [('reply_template_id', '!=', False)]}"/>
+                        <field name="reply_content" placeholder="Olá {name}! Vars: {phone} {agent} {tag} {hours}" attrs="{'invisible': [('reply_template_id', '!=', False)]}"/>
                     </group>
                     <group attrs="{'invisible': [('action_type', '!=', 'assign')]}">
                         <field name="assign_user_id"/>
+                    </group>
+                    <group attrs="{'invisible': [('action_type', '!=', 'tag')]}">
+                        <field name="add_tag_ids" widget="many2many_tags"/>
+                    </group>
+                    <group attrs="{'invisible': [('action_type', '!=', 'notify')]}">
+                        <field name="notify_user_ids" widget="many2many_tags"/>
+                    </group>
+                    <separator string="🔗 Encadeamento"/>
+                    <group>
+                        <field name="next_rule_id" string="Depois executar"/>
                     </group>
                     <group string="📊 Estatísticas">
                         <field name="trigger_count" readonly="1"/>

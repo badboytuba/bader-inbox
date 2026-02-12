@@ -73,6 +73,14 @@ export class BaderInboxMain extends Component {
             scheduleDate: "",
             scheduleTime: "",
 
+            // AI Assistant (Phase 3)
+            aiSuggestions: [],
+            loadingAI: false,
+            aiEnabled: false,
+
+            // Translation (Phase 3)
+            translations: {},
+
             // UI
             showContactPanel: true,
             viewMode: "list", // "list", "kanban", or "dashboard"
@@ -128,6 +136,7 @@ export class BaderInboxMain extends Component {
             await this.loadPipelines();
             await this.loadQuickReplies();
             await this.loadTags();
+            this.checkAIConfig();
             this._requestNotificationPermission();
 
             // Check if we need to open a specific conversation (from PhoneWhatsAppWidget)
@@ -263,7 +272,7 @@ export class BaderInboxMain extends Component {
             this.state.messages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content"],
                 { order: "create_date asc" }
             );
 
@@ -286,7 +295,7 @@ export class BaderInboxMain extends Component {
             const newMessages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content"],
                 { order: "create_date asc" }
             );
             // Only update if there are new messages
@@ -1533,6 +1542,90 @@ export class BaderInboxMain extends Component {
             this.notification.add("Agendamento cancelado", { type: "info" });
         } catch (e) {
             console.error("Error cancelling scheduled message:", e);
+        }
+    }
+
+    // ──── AI ASSISTANT (Phase 3) ────
+    async checkAIConfig() {
+        try {
+            const configs = await this.orm.searchRead(
+                "bader.inbox.ai_assistant",
+                [["active", "=", true]],
+                ["id", "api_key"],
+                { limit: 1 }
+            );
+            this.state.aiEnabled = configs.length > 0 && !!configs[0].api_key;
+        } catch (e) {
+            this.state.aiEnabled = false;
+        }
+    }
+
+    async getAISuggestions() {
+        if (!this.state.selectedConversation || this.state.loadingAI) return;
+        this.state.loadingAI = true;
+        this.state.aiSuggestions = [];
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.ai_assistant", "suggest_reply",
+                [this.state.selectedConversation.id]
+            );
+            if (result.suggestions && result.suggestions.length) {
+                this.state.aiSuggestions = result.suggestions;
+            } else if (result.error) {
+                this.notification.add(result.error, { type: "warning" });
+            }
+        } catch (e) {
+            console.error("AI suggestion error:", e);
+            this.notification.add("AI error", { type: "danger" });
+        }
+        this.state.loadingAI = false;
+    }
+
+    useAISuggestion(text) {
+        this.state.composerText = text;
+        this.state.aiSuggestions = [];
+    }
+
+    // ──── TRANSLATION (Phase 3) ────
+    async translateMessage(msgId) {
+        const key = `translating_${msgId}`;
+        this.state.translations[key] = true;
+        this.state.translations = { ...this.state.translations };
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.ai_assistant", "translate_message",
+                [msgId, "es"]
+            );
+            if (result.translated) {
+                const msg = this.state.messages.find(m => m.id === msgId);
+                if (msg) {
+                    msg.translated_content = result.translated;
+                    msg.detected_language = result.language || "";
+                }
+                this.state.translations[`show_${msgId}`] = true;
+            } else if (result.error) {
+                this.notification.add(result.error, { type: "warning" });
+            }
+        } catch (e) {
+            console.error("Translation error:", e);
+        }
+        delete this.state.translations[key];
+        this.state.translations = { ...this.state.translations };
+    }
+
+    toggleTranslation(msgId) {
+        const key = `show_${msgId}`;
+        this.state.translations[key] = !this.state.translations[key];
+        this.state.translations = { ...this.state.translations };
+    }
+
+    // ──── LINK PREVIEW HELPER (Phase 3) ────
+    parseLinkPreview(msg) {
+        if (!msg.link_preview) return null;
+        try {
+            return JSON.parse(msg.link_preview);
+        } catch (e) {
+            return null;
         }
     }
 

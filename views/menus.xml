@@ -28,4 +28,9 @@
         parent="menu_bader_inbox_config" 
         action="action_bader_inbox_pipeline" 
         sequence="30"/>
+
+    <menuitem id="menu_bader_inbox_ai_assistant" name="🤖 AI Assistente" 
+        parent="menu_bader_inbox_config" 
+        action="action_bader_inbox_ai_assistant" 
+        sequence="40"/>
 </odoo>

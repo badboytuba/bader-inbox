@@ -391,7 +391,14 @@ class BaderInboxWebhook(http.Controller):
             # Download media if needed
             if msg_type in ("image", "audio", "video", "document", "sticker") and key:
                 self._process_media_download(channel, new_message, key, message_content)
-            
+
+            # Extract link preview for text messages
+            if msg_type == "text" and content:
+                try:
+                    self._extract_link_preview(new_message)
+                except Exception:
+                    pass
+
             if direction == "in":
                 self._send_bus_notification(conversation, new_message, push_name, phone)
                 self._trigger_chatbot(conversation, new_message)
@@ -421,6 +428,56 @@ class BaderInboxWebhook(http.Controller):
             request.env["bus.bus"]._sendone("bader_inbox", "bader_inbox_new_message", payload)
         except Exception as e:
             _logger.warning(f"Bus notification error: {e}")
+
+    def _extract_link_preview(self, message):
+        """Extract OG tags from URLs in message content"""
+        import re as re_mod
+        if not message.content or message.message_type != "text":
+            return
+        url_pattern = r'https?://[^\s<>\"\']+' 
+        urls = re_mod.findall(url_pattern, message.content)
+        if not urls:
+            return
+        url = urls[0]
+        try:
+            resp = req_lib.get(url, timeout=5, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; BaderBot/1.0)"
+            }, allow_redirects=True)
+            if resp.status_code != 200:
+                return
+            html = resp.text[:50000]
+            def _og(prop):
+                m = re_mod.search(
+                    rf'<meta\s+(?:property|name)=["\']og:{prop}["\']\s+content=["\']([^"\']*)["\']',
+                    html, re_mod.IGNORECASE
+                )
+                if not m:
+                    m = re_mod.search(
+                        rf'<meta\s+content=["\']([^"\']*)["\']\\s+(?:property|name)=["\']og:{prop}["\']',
+                        html, re_mod.IGNORECASE
+                    )
+                return m.group(1) if m else None
+
+            title = _og("title")
+            if not title:
+                tm = re_mod.search(r'<title[^>]*>([^<]+)</title>', html, re_mod.IGNORECASE)
+                title = tm.group(1).strip() if tm else url
+
+            description = _og("description") or ""
+            image = _og("image") or ""
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc
+
+            preview = json.dumps({
+                "url": url,
+                "title": title[:200],
+                "description": description[:300],
+                "image": image,
+                "domain": domain
+            })
+            message.sudo().write({"link_preview": preview})
+        except Exception as e:
+            _logger.debug(f"Link preview extraction failed for {url}: {e}")
 
     def _trigger_chatbot(self, conversation, message):
         """Check and execute chatbot rules"""

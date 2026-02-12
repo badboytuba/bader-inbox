@@ -70,6 +70,13 @@ class BaderInboxMessage(models.Model):
     # Author (for outgoing)
     author_id = fields.Many2one("res.users", string="Sent By")
 
+    # Link Preview (Phase 3)
+    link_preview = fields.Text(string="Link Preview JSON")
+
+    # Multi-language (Phase 3)
+    detected_language = fields.Char(string="Detected Language", size=10)
+    translated_content = fields.Text(string="Translated Content")
+
     @api.model_create_multi
     def create(self, vals_list):
         messages = super().create(vals_list)

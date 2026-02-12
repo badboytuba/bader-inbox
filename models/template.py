@@ -44,10 +44,17 @@ class BaderInboxChatbot(models.Model):
         ("first_message", "First Message"),
         ("no_reply", "No Reply After X Minutes"),
         ("all", "All Messages"),
+        ("schedule", "Scheduled Time"),
+        ("tag_added", "Tag Added"),
+        ("assignment_changed", "Assignment Changed"),
     ], default="keyword", string="Trigger", required=True)
     
     trigger_keywords = fields.Char(string="Keywords", help="Comma-separated")
     trigger_delay_minutes = fields.Integer(default=5)
+    trigger_tag_ids = fields.Many2many(
+        "bader.inbox.tag", "chatbot_trigger_tag_rel",
+        string="Trigger Tags", help="Trigger when these tags are added"
+    )
     channel_ids = fields.Many2many("bader.inbox.channel", string="Channels")
     only_outside_hours = fields.Boolean(string="Only Outside Business Hours")
     business_hours_start = fields.Float(default=9.0)
@@ -58,6 +65,8 @@ class BaderInboxChatbot(models.Model):
         ("assign", "Assign to User"),
         ("tag", "Add Tag"),
         ("notify", "Notify User"),
+        ("create_lead", "Create CRM Lead"),
+        ("close_conversation", "Close Conversation"),
     ], default="reply", string="Action", required=True)
     
     reply_content = fields.Text(string="Reply Message")
@@ -65,6 +74,10 @@ class BaderInboxChatbot(models.Model):
     assign_user_id = fields.Many2one("res.users", string="Assign To")
     add_tag_ids = fields.Many2many("bader.inbox.tag", string="Add Tags")
     notify_user_ids = fields.Many2many("res.users", string="Notify Users")
+    next_rule_id = fields.Many2one(
+        "bader.inbox.chatbot", string="Then Execute",
+        help="Chain: execute this rule after current one"
+    )
     
     trigger_count = fields.Integer(default=0, readonly=True)
     last_triggered = fields.Datetime(readonly=True)
@@ -140,30 +153,38 @@ class BaderInboxChatbot(models.Model):
             "trigger_count": self.trigger_count + 1,
             "last_triggered": fields.Datetime.now(),
         })
+
+        # Dynamic variable replacement
+        def _replace_vars(text):
+            if not text:
+                return text
+            text = text.replace("{name}", conversation.contact_name or conversation.phone or "")
+            text = text.replace("{phone}", conversation.phone or "")
+            text = text.replace("{agent}", conversation.assigned_user_id.name if conversation.assigned_user_id else "")
+            tags = ", ".join(conversation.tag_ids.mapped("name")) if conversation.tag_ids else ""
+            text = text.replace("{tag}", tags)
+            from datetime import datetime
+            text = text.replace("{hours}", datetime.now().strftime("%H:%M"))
+            return text
         
         if self.action_type == "reply":
             content = self.reply_template_id.content if self.reply_template_id else self.reply_content
             if content:
-                content = content.replace("{name}", conversation.contact_name or conversation.phone or "")
-                # Sends message -> updates last_message_date -> breaks loop
+                content = _replace_vars(content)
                 self.env["bader.inbox.message"].send_message(conversation.id, content, "text")
                 
         elif self.action_type == "assign" and self.assign_user_id:
             conversation.assigned_user_id = self.assign_user_id
-            # Log action to prevent loop
             conversation.message_post(body=f"Chatbot: Auto-assigned to {self.assign_user_id.name}")
-            # Update last_message_date to prevent re-triggering immediately
             conversation.last_message_date = fields.Datetime.now()
             
         elif self.action_type == "tag" and self.add_tag_ids:
             conversation.tag_ids = [(4, tag.id) for tag in self.add_tag_ids]
-            # Log action
             tag_names = ", ".join(self.add_tag_ids.mapped("name"))
             conversation.message_post(body=f"Chatbot: Added tags {tag_names}")
             conversation.last_message_date = fields.Datetime.now()
             
         elif self.action_type == "notify" and self.notify_user_ids:
-            # Send internal notification
             subject = f"New WhatsApp from {conversation.computed_name}"
             body = f"Customer waiting for reply > {self.trigger_delay_minutes} min"
             for user in self.notify_user_ids:
@@ -175,3 +196,23 @@ class BaderInboxChatbot(models.Model):
                 )
             conversation.message_post(body=f"Chatbot: Notified {len(self.notify_user_ids)} users")
             conversation.last_message_date = fields.Datetime.now()
+
+        elif self.action_type == "create_lead":
+            lead = self.env["crm.lead"].create({
+                "name": f"WhatsApp: {conversation.computed_name}",
+                "phone": conversation.phone,
+                "contact_name": conversation.contact_name,
+                "description": f"Auto-created from WhatsApp conversation #{conversation.id}",
+                "type": "lead",
+            })
+            conversation.message_post(body=f"Chatbot: Created lead #{lead.id}")
+            conversation.last_message_date = fields.Datetime.now()
+
+        elif self.action_type == "close_conversation":
+            conversation.write({"state": "resolved"})
+            conversation.message_post(body="Chatbot: Conversation closed")
+            conversation.last_message_date = fields.Datetime.now()
+
+        # Chain execution
+        if self.next_rule_id and self.next_rule_id.active:
+            self.next_rule_id.execute_action(conversation, message)

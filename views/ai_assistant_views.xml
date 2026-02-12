@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_bader_inbox_ai_assistant_form" model="ir.ui.view">
+        <field name="name">bader.inbox.ai_assistant.form</field>
+        <field name="model">bader.inbox.ai_assistant</field>
+        <field name="arch" type="xml">
+            <form string="AI Assistant">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="AI Config Name"/></h1>
+                    </div>
+                    <group>
+                        <group string="Provider">
+                            <field name="active" widget="boolean_toggle"/>
+                            <field name="provider"/>
+                            <field name="api_key" password="True"/>
+                            <field name="model_name"/>
+                        </group>
+                        <group string="Parameters">
+                            <field name="temperature"/>
+                            <field name="max_tokens"/>
+                        </group>
+                    </group>
+                    <group string="System Prompt">
+                        <field name="system_prompt" nolabel="1" colspan="2"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bader_inbox_ai_assistant_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.ai_assistant.tree</field>
+        <field name="model">bader.inbox.ai_assistant</field>
+        <field name="arch" type="xml">
+            <tree string="AI Assistants">
+                <field name="name"/>
+                <field name="provider"/>
+                <field name="model_name"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_bader_inbox_ai_assistant" model="ir.actions.act_window">
+        <field name="name">AI Assistant</field>
+        <field name="res_model">bader.inbox.ai_assistant</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Configure AI Assistant</p>
+            <p>Add your OpenAI or Claude API key to enable AI-powered reply suggestions and translation.</p>
+        </field>
+    </record>
+</odoo>

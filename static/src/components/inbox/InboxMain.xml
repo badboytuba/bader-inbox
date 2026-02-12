@@ -208,8 +208,29 @@
                                                     <span t-esc="msg.content || 'Location'"/>
                                                 </div>
                                                 <div t-if="msg.content and msg.message_type !== 'location'" class="message-text" t-esc="msg.content"/>
+                                                <!-- Link Preview Card -->
+                                                <t t-set="preview" t-value="parseLinkPreview(msg)"/>
+                                                <a t-if="preview" t-att-href="preview.url" target="_blank" class="link-preview-card">
+                                                    <img t-if="preview.image" t-att-src="preview.image" class="link-preview-img" loading="lazy"/>
+                                                    <div class="link-preview-info">
+                                                        <div class="link-preview-title" t-esc="preview.title"/>
+                                                        <div t-if="preview.description" class="link-preview-desc" t-esc="preview.description"/>
+                                                        <div class="link-preview-domain" t-esc="preview.domain"/>
+                                                    </div>
+                                                </a>
+                                                <!-- Translation -->
+                                                <div t-if="state.translations['show_' + msg.id] and msg.translated_content" class="translated-text">
+                                                    <i class="fa fa-language"/> <t t-esc="msg.translated_content"/>
+                                                </div>
                                             </div>
                                             <div class="message-meta">
+                                                <!-- Language badge -->
+                                                <span t-if="msg.detected_language and msg.direction === 'in'" class="lang-badge" t-esc="msg.detected_language.toUpperCase()"/>
+                                                <!-- Translate button -->
+                                                <button t-if="msg.direction === 'in' and msg.content and state.aiEnabled" class="translate-btn" t-on-click="() => this.translateMessage(msg.id)"
+                                                        t-att-title="state.translations['show_' + msg.id] ? 'Ocultar tradução' : 'Traduzir'">
+                                                    <i t-attf-class="fa {{ state.translations['translating_' + msg.id] ? 'fa-spinner fa-spin' : 'fa-language' }}"/>
+                                                </button>
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
                                                 <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
                                                     <span t-if="msg.status === 'failed'"><i class="fa fa-times"/></span>
@@ -225,6 +246,16 @@
                         </div>
 
                         <div class="chat-composer">
+                            <!-- AI Suggestions -->
+                            <div t-if="state.aiSuggestions.length" class="ai-suggestions">
+                                <span class="ai-label">✨ Sugestões AI</span>
+                                <div class="ai-chips">
+                                    <button t-foreach="state.aiSuggestions" t-as="suggestion" t-key="suggestion_index"
+                                            class="ai-chip" t-on-click="() => this.useAISuggestion(suggestion)">
+                                        <t t-esc="suggestion"/>
+                                    </button>
+                                </div>
+                            </div>
                             <!-- Attachment Preview -->
                             <div t-if="state.attachment" class="attachment-preview">
                                 <div class="preview-content">
@@ -289,6 +320,10 @@
                                 </button>
                                 <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
                                     <i class="fa fa-paperclip"/>
+                                </button>
+                                <button t-if="state.aiEnabled" class="btn-composer btn-ai" title="Sugestões AI" t-on-click="getAISuggestions"
+                                        t-att-disabled="state.loadingAI">
+                                    <i t-attf-class="fa {{ state.loadingAI ? 'fa-spinner fa-spin' : 'fa-magic' }}"/>
                                 </button>
                                 <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
                             </div>
