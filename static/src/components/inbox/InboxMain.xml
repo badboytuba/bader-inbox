@@ -16,20 +16,16 @@
                     </div>
                     
                     <!-- Channel Status -->
-                    <t t-if="state.channels.length">
-                        <div class="channel-status mb-2">
-                            <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
-                                <span t-attf-class="badge {{ ch.state === 'connected' ? 'bg-success' : 'bg-warning' }} me-1">
-                                    <i class="fa fa-whatsapp"/> <t t-esc="ch.name"/>
-                                </span>
-                            </t>
-                        </div>
-                    </t>
-                    <t t-else="">
-                        <div class="alert alert-info py-2 small">
-                            <i class="fa fa-info-circle"/> Nenhum canal conectado. Clique em "+ Canal" para adicionar.
-                        </div>
-                    </t>
+                    <div t-if="state.channels.length" class="channel-status mb-2">
+                        <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
+                            <span t-attf-class="badge {{ ch.state === 'connected' ? 'bg-success' : 'bg-warning' }} me-1">
+                                <i class="fa fa-whatsapp"/> <t t-esc="ch.name"/>
+                            </span>
+                        </t>
+                    </div>
+                    <div t-else="" class="alert alert-info py-2 small">
+                        <i class="fa fa-info-circle"/> Nenhum canal conectado. Clique em "+ Canal" para adicionar.
+                    </div>
                     
                     <div class="filter-tabs">
                         <button t-attf-class="filter-tab {{ state.filter === 'all' ? 'active' : '' }}" t-on-click="() => this.setFilter('all')">
@@ -45,19 +41,15 @@
                 </div>
 
                 <div class="conversations-list">
-                    <t t-if="state.loadingConversations">
-                        <div class="empty-state">
+                    <div t-if="state.loadingConversations" class="empty-state">
                             <i class="fa fa-spinner fa-spin"/>
                             <p>Carregando...</p>
                         </div>
-                    </t>
-                    <t t-elif="!filteredConversations.length">
-                        <div class="empty-state">
+                    <div t-elif="!filteredConversations.length" class="empty-state">
                             <i class="fa fa-inbox"/>
                             <p>Nenhuma conversa</p>
                         </div>
-                    </t>
-                    <t t-else="">
+                    <div t-else="" class="conversations-items">
                         <t t-foreach="filteredConversations" t-as="conv" t-key="conv.id">
                             <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }}" 
                                  t-on-click="() => this.selectConversation(conv)">
@@ -79,7 +71,7 @@
                                 </div>
                             </div>
                         </t>
-                    </t>
+                    </div>
                 </div>
             </div>
 
@@ -98,8 +90,8 @@
                 </div>
 
                 <!-- ═══ LIST VIEW (Chat) ═══ -->
-                <t t-if="state.viewMode === 'list'">
-                    <t t-if="state.selectedConversation">
+                <div t-if="state.viewMode === 'list'" class="list-view-container">
+                    <div t-if="state.selectedConversation" class="chat-view">
                         <div class="chat-header">
                             <div class="chat-contact">
                                 <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
@@ -124,12 +116,10 @@
                         </div>
 
                         <div class="chat-messages" t-ref="messagesContainer">
-                            <t t-if="state.loadingMessages">
-                                <div class="text-center p-4">
-                                    <i class="fa fa-spinner fa-spin fa-2x"/>
-                                </div>
-                            </t>
-                            <t t-else="">
+                            <div t-if="state.loadingMessages" class="text-center p-4">
+                                <i class="fa fa-spinner fa-spin fa-2x"/>
+                            </div>
+                            <div t-else="" class="messages-list">
                                 <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
                                     <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}">
                                         <div class="message-bubble">
@@ -174,29 +164,23 @@
                                         </div>
                                     </div>
                                 </t>
-                            </t>
+                            </div>
                         </div>
 
                         <div class="chat-composer">
                             <!-- Attachment Preview -->
-                            <t t-if="state.attachment">
-                                <div class="attachment-preview">
-                                    <div class="preview-content">
-                                        <t t-if="state.attachment.type === 'image'">
-                                            <img t-att-src="state.attachment.preview" class="preview-image"/>
-                                        </t>
-                                        <t t-else="">
-                                            <div class="preview-file">
-                                                <i t-attf-class="fa {{ state.attachment.type === 'audio' ? 'fa-music' : state.attachment.type === 'video' ? 'fa-video-camera' : 'fa-file' }}"/>
-                                            </div>
-                                        </t>
-                                        <span class="preview-name" t-esc="state.attachment.name"/>
+                            <div t-if="state.attachment" class="attachment-preview">
+                                <div class="preview-content">
+                                    <img t-if="state.attachment.type === 'image'" t-att-src="state.attachment.preview" class="preview-image"/>
+                                    <div t-else="" class="preview-file">
+                                        <i t-attf-class="fa {{ state.attachment.type === 'audio' ? 'fa-music' : state.attachment.type === 'video' ? 'fa-video-camera' : 'fa-file' }}"/>
                                     </div>
-                                    <button class="btn-remove-attachment" t-on-click="removeAttachment">
-                                        <i class="fa fa-times"/>
-                                    </button>
+                                    <span class="preview-name" t-esc="state.attachment.name"/>
                                 </div>
-                            </t>
+                                <button class="btn-remove-attachment" t-on-click="removeAttachment">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
                             <div class="composer-actions">
                                 <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
                                     <i class="fa fa-paperclip"/>
@@ -212,25 +196,23 @@
                                 <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
                             </button>
                         </div>
-                    </t>
-                    <t t-else="">
-                        <div class="empty-chat">
-                            <div class="empty-icon">
-                                <i class="fa fa-comments"/>
-                            </div>
-                            <h3>Bader Inbox</h3>
-                            <p>Selecione uma conversa para começar</p>
-                            <t t-if="!state.channels.length">
-                                <button class="btn btn-success btn-lg mt-3" t-on-click="openAddChannelModal">
-                                    <i class="fa fa-whatsapp"/> Conectar WhatsApp
-                                </button>
-                            </t>
+                    </div>
+                    <div t-else="" class="empty-chat">
+                        <div class="empty-icon">
+                            <i class="fa fa-comments"/>
                         </div>
-                    </t>
-                </t>
+                        <h3>Bader Inbox</h3>
+                        <p>Selecione uma conversa para começar</p>
+                        <t t-if="!state.channels.length">
+                            <button class="btn btn-success btn-lg mt-3" t-on-click="openAddChannelModal">
+                                <i class="fa fa-whatsapp"/> Conectar WhatsApp
+                            </button>
+                        </t>
+                    </div>
+                </div>
 
                 <!-- ═══ KANBAN VIEW ═══ -->
-                <t t-if="state.viewMode === 'kanban'">
+                <div t-if="state.viewMode === 'kanban'" class="kanban-view-container">
                     <div class="kanban-header">
                         <div class="pipeline-selector">
                             <label>Pipeline:</label>
@@ -251,12 +233,10 @@
                     </div>
 
                     <div class="kanban-board">
-                        <t t-if="state.loadingKanban">
-                            <div class="text-center p-4 w-100">
+                        <div t-if="state.loadingKanban" class="text-center p-4 w-100">
                                 <i class="fa fa-spinner fa-spin fa-2x"/>
                             </div>
-                        </t>
-                        <t t-elif="state.kanbanStages.length">
+                        <div t-elif="state.kanbanStages.length" class="kanban-stages">
                             <t t-foreach="state.kanbanStages" t-as="stage" t-key="stage.id">
                                 <div class="kanban-column"
                                      t-on-dragover="onDragOver"
@@ -303,23 +283,20 @@
                                     </div>
                                 </div>
                             </t>
-                        </t>
-                        <t t-else="">
-                            <div class="empty-chat">
+                        </div>
+                        <div t-else="" class="empty-chat">
                                 <div class="empty-icon">
                                     <i class="fa fa-columns"/>
                                 </div>
                                 <h3>Sem Pipeline Selecionado</h3>
                                 <p>Selecione ou crie um pipeline em ⚙️ Configuração</p>
                             </div>
-                        </t>
                     </div>
-                </t>
+                </div>
             </div>
 
             <!-- RIGHT PANEL: Contact Details -->
-            <t t-if="state.showContactPanel and state.selectedConversation">
-                <div class="bader-inbox-right">
+            <div t-if="state.showContactPanel and state.selectedConversation" class="bader-inbox-right">
                     <div class="contact-header">
                         <div t-attf-class="contact-avatar-large {{ getAvatarColor(state.selectedConversation.id) }}">
                             <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
@@ -393,7 +370,6 @@
                         </button>
                     </div>
                 </div>
-            </t>
         </div>
 
         <!-- ADD CHANNEL MODAL -->
