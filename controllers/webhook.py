@@ -393,26 +393,34 @@ class BaderInboxWebhook(http.Controller):
     def _handle_message_update(self, channel, data):
         """Handle message status update (delivery/read receipts).
         
-        NOTE: The custom Baileys API does NOT support messages.update events.
-        This handler is kept as a safety net in case future API versions add it.
-        
-        Payload: {event: 'messages.update', data: [{key: {id, remoteJid, fromMe}, update: {status: N}}]}
-        Status codes: 0=ERROR, 1=PENDING, 2=SENT/SERVER_ACK, 3=DELIVERED/DELIVERY_ACK, 4=READ/READ, 5=PLAYED
+        Baileys API payload format:
+        {
+            "event": "messages.update",
+            "instance": "bader_17_bader",
+            "messageUpdate": {
+                "key": {"remoteJid": "...", "fromMe": true, "id": "BAE5..."},
+                "status": 3,
+                "statusText": "delivered"
+            }
+        }
+        Status codes: 2=SENT (✓), 3=DELIVERED (✓✓), 4=READ (✓✓ blue)
         """
         try:
-            updates = data.get("data", [])
-            if not isinstance(updates, list):
-                updates = [updates] if updates else []
+            # Baileys API uses "messageUpdate" field
+            update_obj = data.get("messageUpdate") or data.get("data")
+            if not update_obj:
+                _logger.warning("No messageUpdate in status payload")
+                return _json_ok()
+            
+            # Handle both single object and array formats
+            updates = update_obj if isinstance(update_obj, list) else [update_obj]
             
             Message = request.env["bader.inbox.message"].sudo()
             
             status_map = {
-                0: "failed",
-                1: "pending",
                 2: "sent",
                 3: "delivered",
                 4: "read",
-                5: "read",  # PLAYED (audio) = read
             }
             
             for update_item in updates:
@@ -420,13 +428,12 @@ class BaderInboxWebhook(http.Controller):
                     continue
                 
                 key = update_item.get("key", {})
-                update_data = update_item.get("update", {})
-                
                 msg_id = key.get("id")
                 if not msg_id:
                     continue
                 
-                raw_status = update_data.get("status")
+                # Status is directly on messageUpdate, not nested in "update"
+                raw_status = update_item.get("status")
                 if raw_status is None:
                     continue
                 
@@ -445,7 +452,7 @@ class BaderInboxWebhook(http.Controller):
                 current_priority = status_priority.get(message.status, 0)
                 new_priority = status_priority.get(new_status, 0)
                 
-                if new_status == "failed" or new_priority > current_priority:
+                if new_priority > current_priority:
                     message.write({
                         "status": new_status,
                         "status_timestamp": fields.Datetime.now(),

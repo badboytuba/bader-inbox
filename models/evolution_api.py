@@ -14,10 +14,9 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     
     NOTE: This is NOT the official Evolution API v1/v2.
     It's a custom Baileys-based API with different endpoints.
-    - Events are lowercase: messages.upsert, connection.update, qrcode.updated
+    - Events are lowercase: messages.upsert, messages.update, connection.update, qrcode.updated
     - No generic /message/sendMedia — use /message/image, /message/audio, etc.
     - No /chat/getBase64FromMediaMessage — download media from URL in webhook payload
-    - No messages.update event — status tracking not supported by this API
     """
     
     _name = "bader.inbox.evolution_api"
@@ -72,7 +71,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             data["webhook"] = {
                 "url": webhook_url,
                 "enabled": True,
-                "events": ["messages.upsert", "connection.update", "qrcode.updated"]
+                "events": ["messages.upsert", "messages.update", "connection.update", "qrcode.updated"]
             }
         result = self._request("POST", "/instance/create", data)
         return {"success": "instance" in result or "instanceName" in result, **result}
@@ -113,7 +112,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         data = {
             "webhookUrl": webhook_url,
             "enabled": True,
-            "events": ["messages.upsert", "connection.update", "qrcode.updated"]
+            "events": ["messages.upsert", "messages.update", "connection.update", "qrcode.updated"]
         }
         return self._request("POST", f"/webhook/set/{instance_name}", data)
 
