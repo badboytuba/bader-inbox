@@ -302,9 +302,50 @@ class BaderInboxWebhook(http.Controller):
                 _logger.warning(f"No message object in payload. Keys: {list(data.keys())}")
                 return _json_error("No message data")
             
+            # DEBUG: Log the full message object keys to understand structure
+            _logger.info(f"MSG_OBJ keys: {list(msg_obj.keys())}")
+            
             key = msg_obj.get("key", {})
-            message_content = msg_obj.get("content") or msg_obj.get("message", {})
             push_name = msg_obj.get("pushName", "")
+            
+            # Extract message content from multiple possible locations
+            # Evolution API (Baileys) may place content in different fields:
+            # - "message" (dict with conversation/imageMessage/etc.)
+            # - "content" (sometimes same structure as message)
+            # - Direct text fields
+            message_content = None
+            for content_key in ("message", "content", "messageContent"):
+                candidate = msg_obj.get(content_key)
+                if candidate and isinstance(candidate, dict) and len(candidate) > 0:
+                    message_content = candidate
+                    _logger.info(f"Content found in '{content_key}': keys={list(candidate.keys())}")
+                    break
+                elif candidate and isinstance(candidate, str) and candidate.strip():
+                    message_content = candidate
+                    _logger.info(f"Content found as string in '{content_key}': {candidate[:80]}")
+                    break
+            
+            if not message_content:
+                # Fallback: check messageType field for simple messages
+                msg_type_field = msg_obj.get("messageType", "")
+                _logger.info(f"No content dict found. messageType={msg_type_field}, trying fallback extraction")
+                
+                # For conversation type, text might be directly accessible
+                if msg_type_field == "conversation":
+                    # The text might be in msg_obj itself
+                    raw_text = msg_obj.get("body") or msg_obj.get("text") or ""
+                    if raw_text:
+                        message_content = raw_text
+                    else:
+                        # Build a synthetic content dict
+                        message_content = {"conversation": ""}
+                elif msg_type_field == "extendedTextMessage":
+                    raw_text = msg_obj.get("body") or msg_obj.get("text") or ""
+                    message_content = {"extendedTextMessage": {"text": raw_text}}
+                else:
+                    message_content = {}
+                
+                _logger.warning(f"Content fallback used. Full msg_obj keys: {list(msg_obj.keys())}, messageType: {msg_type_field}")
             
             phone, whatsapp_id, phone_source = self._extract_phone_info(key)
             
@@ -322,6 +363,7 @@ class BaderInboxWebhook(http.Controller):
             
             # Parse content
             msg_type, content, media_info = self._parse_message_content(message_content)
+            _logger.info(f"Parsed: type={msg_type}, content_len={len(content) if content else 0}, media_keys={list(media_info.keys()) if media_info else []}")
             
             from_me = key.get("fromMe", False)
             direction = "out" if from_me else "in"
@@ -332,18 +374,22 @@ class BaderInboxWebhook(http.Controller):
             if not new_message:
                 return _json_ok({"status": "duplicate"})
             
-            _logger.info(f"Message created: id={new_message.id}, type={msg_type}")
+            _logger.info(f"Message created: id={new_message.id}, type={msg_type}, content='{(content or '')[:50]}'")
+            
+            # Store raw key/content for ALL messages (useful for debugging and deferred media download)
+            try:
+                update_vals = {}
+                if key:
+                    update_vals["whatsapp_key_json"] = json.dumps(key)
+                if isinstance(message_content, dict):
+                    update_vals["whatsapp_content_json"] = json.dumps(message_content)
+                if update_vals:
+                    new_message.sudo().write(update_vals)
+            except Exception as wk_err:
+                _logger.warning(f"Failed to store WA key/content: {wk_err}")
             
             # Download media if needed
             if msg_type in ("image", "audio", "video", "document", "sticker") and key:
-                # Store raw key/content for deferred download via API
-                try:
-                    new_message.sudo().write({
-                        "whatsapp_key_json": json.dumps(key),
-                        "whatsapp_content_json": json.dumps(message_content) if isinstance(message_content, dict) else "",
-                    })
-                except Exception:
-                    pass  # Non-critical, download will still try
                 self._process_media_download(channel, new_message, key, message_content)
             
             if direction == "in":
@@ -391,10 +437,12 @@ class BaderInboxWebhook(http.Controller):
     def _parse_message_content(self, content):
         """Parse message content from API format
         
-        The "content" field contains the actual message data:
+        The "content" / "message" field contains the actual message data:
         - Text: {"conversation": "texto"} or {"extendedTextMessage": {"text": "..."}}
         - Image: {"imageMessage": {"caption": "...", "mimetype": "...", "url": "..."}}
         - Audio: {"audioMessage": {...}}
+        - Document: {"documentMessage": {"mimetype": "...", "fileName": "...", "url": "..."}}
+        - Document with caption: {"documentWithCaptionMessage": {"message": {"documentMessage": {...}}}}
         - etc.
         """
         msg_type = "text"
@@ -408,10 +456,18 @@ class BaderInboxWebhook(http.Controller):
         if isinstance(content, str):
             return msg_type, content, media_info
         
+        if not isinstance(content, dict):
+            _logger.warning(f"Unexpected content type: {type(content)}")
+            return msg_type, str(content), media_info
+        
+        # Log content keys for debugging
+        _logger.info(f"_parse_message_content keys: {list(content.keys())}")
+        
         if "conversation" in content:
             text = content["conversation"]
         elif "extendedTextMessage" in content:
-            text = content["extendedTextMessage"].get("text", "")
+            etm = content["extendedTextMessage"]
+            text = etm.get("text", "") if isinstance(etm, dict) else str(etm)
         elif "imageMessage" in content:
             msg_type = "image"
             img = content["imageMessage"]
@@ -430,7 +486,23 @@ class BaderInboxWebhook(http.Controller):
             msg_type = "document"
             doc = content["documentMessage"]
             text = doc.get("caption", "")
-            media_info = {"media_mimetype": doc.get("mimetype"), "media_filename": doc.get("fileName"), "media_url": doc.get("url")}
+            media_info = {
+                "media_mimetype": doc.get("mimetype"),
+                "media_filename": doc.get("fileName") or doc.get("filename"),
+                "media_url": doc.get("url"),
+            }
+        elif "documentWithCaptionMessage" in content:
+            # Baileys wraps documents with captions in this extra layer
+            msg_type = "document"
+            wrapper = content["documentWithCaptionMessage"]
+            inner_msg = wrapper.get("message", {}) if isinstance(wrapper, dict) else {}
+            doc = inner_msg.get("documentMessage", {})
+            text = doc.get("caption", "")
+            media_info = {
+                "media_mimetype": doc.get("mimetype"),
+                "media_filename": doc.get("fileName") or doc.get("filename"),
+                "media_url": doc.get("url"),
+            }
         elif "stickerMessage" in content:
             msg_type = "sticker"
             stk = content["stickerMessage"]
@@ -440,6 +512,32 @@ class BaderInboxWebhook(http.Controller):
             loc = content["locationMessage"]
             media_info = {"latitude": loc.get("degreesLatitude"), "longitude": loc.get("degreesLongitude"), "location_name": loc.get("name")}
             text = loc.get("address", "")
+        elif "reactionMessage" in content:
+            msg_type = "reaction"
+            reaction = content["reactionMessage"]
+            text = reaction.get("text", "") if isinstance(reaction, dict) else str(reaction)
+        elif "protocolMessage" in content:
+            # Protocol messages (delete, edit, etc.) - skip
+            _logger.info("Skipping protocolMessage")
+            return msg_type, "", media_info
+        elif "ephemeralMessage" in content:
+            # Ephemeral (disappearing) messages - extract inner message
+            ephemeral = content["ephemeralMessage"]
+            if isinstance(ephemeral, dict) and "message" in ephemeral:
+                return self._parse_message_content(ephemeral["message"])
+        elif "viewOnceMessageV2" in content:
+            # View once messages - extract inner message
+            view_once = content["viewOnceMessageV2"]
+            if isinstance(view_once, dict) and "message" in view_once:
+                return self._parse_message_content(view_once["message"])
+        else:
+            # Unknown content type — log it for debugging
+            _logger.warning(f"Unknown message content format. Keys: {list(content.keys())}")
+            # Try to extract any text-like field as fallback
+            for fallback_key in ("text", "body", "caption"):
+                if fallback_key in content:
+                    text = content[fallback_key]
+                    break
         
         return msg_type, text, media_info
 
