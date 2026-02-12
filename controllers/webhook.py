@@ -68,7 +68,31 @@ class BaderInboxWebhook(http.Controller):
                 except Exception:
                     data = None
             
-            # 2) Download from media_url (WA CDN) if not stored
+            # 2) Try downloadMedia API endpoint using stored key/content
+            if not data and message.whatsapp_key_json and message.whatsapp_content_json:
+                try:
+                    msg_key = json.loads(message.whatsapp_key_json)
+                    msg_content = json.loads(message.whatsapp_content_json)
+                    channel = message.conversation_id.channel_id
+                    instance_name = channel.evolution_instance_name if channel else None
+                    if instance_name:
+                        api = request.env["bader.inbox.evolution_api"].sudo()
+                        result = api.download_media(instance_name, msg_key, msg_content)
+                        if result and result.get("base64"):
+                            data = base64.b64decode(result["base64"])
+                            # Cache for future requests
+                            try:
+                                update_vals = {"media_data": result["base64"]}
+                                if result.get("mimetype") and not message.media_mimetype:
+                                    update_vals["media_mimetype"] = result["mimetype"]
+                                message.write(update_vals)
+                                _logger.info(f"Media cached via API for message {message_id}")
+                            except Exception as ce:
+                                _logger.warning(f"Failed to cache API media: {ce}")
+                except Exception as e:
+                    _logger.warning(f"downloadMedia API failed for serve_media {message_id}: {e}")
+            
+            # 3) Download from media_url (WA CDN) if not stored
             if not data and message.media_url:
                 try:
                     resp = req_lib.get(message.media_url, timeout=15, stream=True)
@@ -194,29 +218,50 @@ class BaderInboxWebhook(http.Controller):
         
         return phone, whatsapp_id, phone_source
 
-    def _process_media_download(self, channel, message, key):
-        """Download media content for a message from its media_url.
+    def _process_media_download(self, channel, message, key, message_content=None):
+        """Download media content for a message.
         
-        NOTE: This API has no getBase64FromMediaMessage endpoint.
-        Media must be downloaded from the URL provided in the webhook payload.
+        Strategy:
+        1) Use the new /message/downloadMedia/{instance} endpoint (key + content)
+        2) Fallback: download from media_url if available
         """
         try:
-            if not message.media_url:
-                _logger.warning(f"No media_url for message {message.id}, cannot download")
-                return
+            instance_name = channel.evolution_instance_name
             
-            resp = req_lib.get(message.media_url, timeout=30, stream=True)
-            if resp.status_code == 200:
-                media_data = base64.b64encode(resp.content).decode()
-                update_vals = {"media_data": media_data}
-                # Update mimetype from response headers if not set
-                ct = resp.headers.get("Content-Type")
-                if ct and not message.media_mimetype:
-                    update_vals["media_mimetype"] = ct.split(";")[0]
-                message.sudo().write(update_vals)
-                _logger.info(f"Media downloaded from URL for message {message.id}")
-            else:
-                _logger.warning(f"Media download HTTP {resp.status_code} for message {message.id}")
+            # Strategy 1: Use downloadMedia API endpoint
+            if instance_name and key and message_content:
+                try:
+                    api = request.env["bader.inbox.evolution_api"]
+                    result = api.download_media(instance_name, key, message_content)
+                    if result and result.get("base64"):
+                        update_vals = {"media_data": result["base64"]}
+                        if result.get("mimetype") and not message.media_mimetype:
+                            update_vals["media_mimetype"] = result["mimetype"]
+                        message.sudo().write(update_vals)
+                        _logger.info(f"Media downloaded via API for message {message.id}")
+                        return
+                except Exception as api_err:
+                    _logger.warning(f"downloadMedia API failed for message {message.id}: {api_err}")
+            
+            # Strategy 2: Fallback to direct URL download
+            if message.media_url:
+                try:
+                    resp = req_lib.get(message.media_url, timeout=30, stream=True)
+                    if resp.status_code == 200:
+                        media_data = base64.b64encode(resp.content).decode()
+                        update_vals = {"media_data": media_data}
+                        ct = resp.headers.get("Content-Type")
+                        if ct and not message.media_mimetype:
+                            update_vals["media_mimetype"] = ct.split(";")[0]
+                        message.sudo().write(update_vals)
+                        _logger.info(f"Media downloaded from URL for message {message.id}")
+                        return
+                    else:
+                        _logger.warning(f"Media URL download HTTP {resp.status_code} for message {message.id}")
+                except Exception as url_err:
+                    _logger.warning(f"Media URL download failed for message {message.id}: {url_err}")
+            
+            _logger.warning(f"No media download method available for message {message.id}")
         except Exception as me:
             _logger.error(f"Media download error: {me}")
 
@@ -291,7 +336,15 @@ class BaderInboxWebhook(http.Controller):
             
             # Download media if needed
             if msg_type in ("image", "audio", "video", "document", "sticker") and key:
-                self._process_media_download(channel, new_message, key)
+                # Store raw key/content for deferred download via API
+                try:
+                    new_message.sudo().write({
+                        "whatsapp_key_json": json.dumps(key),
+                        "whatsapp_content_json": json.dumps(message_content) if isinstance(message_content, dict) else "",
+                    })
+                except Exception:
+                    pass  # Non-critical, download will still try
+                self._process_media_download(channel, new_message, key, message_content)
             
             if direction == "in":
                 self._send_bus_notification(conversation, new_message, push_name, phone)

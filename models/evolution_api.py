@@ -15,8 +15,9 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     NOTE: This is NOT the official Evolution API v1/v2.
     It's a custom Baileys-based API with different endpoints.
     - Events are lowercase: messages.upsert, messages.update, connection.update, qrcode.updated
-    - No generic /message/sendMedia — use /message/image, /message/audio, etc.
-    - No /chat/getBase64FromMediaMessage — download media from URL in webhook payload
+    - Media: /message/image, /message/audio, etc. (accepts base64 via 'media' field or URL)
+    - Download media: /message/downloadMedia/{instance} (POST with key + content from webhook)
+    - Instance status: returns 404 if not found, 503 if disconnected
     """
     
     _name = "bader.inbox.evolution_api"
@@ -95,8 +96,22 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
 
 
     def get_instance_status(self, instance_name):
-        """Get instance connection status"""
+        """Get instance connection status.
+        
+        API returns:
+        - 200 with status info if connected
+        - 404 if instance doesn't exist
+        - 503 if instance exists but is disconnected
+        """
         result = self._request("GET", f"/instance/status/{instance_name}")
+        # Handle error responses (404, 503)
+        if result.get("success") is False:
+            error_str = str(result.get("error", "")).lower()
+            if "404" in error_str:
+                return {"connected": False, "status": "not_found", "phone": "", "name": ""}
+            elif "503" in error_str:
+                return {"connected": False, "status": "disconnected", "phone": "", "name": ""}
+            return {"connected": False, "status": "error", "phone": "", "name": ""}
         # Extract connection info
         connected = result.get("status") == "connected" or result.get("state") == "open"
         instance = result.get("instance", {})
@@ -168,6 +183,33 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "success": "key" in result or result.get("status") == "sent",
             "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
         }
+
+    def download_media(self, instance_name, message_key, message_content):
+        """Download media from a received message using the API endpoint.
+        
+        POST /api/message/downloadMedia/{instance}
+        Body: {"key": {...}, "content": {...}}
+        Returns base64 encoded media data.
+        """
+        data = {
+            "key": message_key,
+            "content": message_content,
+        }
+        try:
+            result = self._request("POST", f"/message/downloadMedia/{instance_name}", data)
+            if isinstance(result, dict):
+                base64_data = result.get("base64") or result.get("data") or result.get("media")
+                mimetype = result.get("mimetype") or result.get("mediaType", "")
+                if base64_data:
+                    # Strip data URI prefix if present
+                    if base64_data.startswith("data:") and "," in base64_data:
+                        base64_data = base64_data.split(",", 1)[1]
+                    return {"base64": base64_data, "mimetype": mimetype}
+            _logger.warning(f"No media data returned: {result}")
+            return None
+        except Exception as e:
+            _logger.error(f"Error downloading media: {e}")
+            return None
 
     def instance_exists(self, instance_name):
         """Check if an instance exists on Evolution API.

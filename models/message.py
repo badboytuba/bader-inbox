@@ -44,6 +44,9 @@ class BaderInboxMessage(models.Model):
     media_filename = fields.Char(string="Filename")
     media_mimetype = fields.Char(string="MIME Type")
     media_url = fields.Char(string="Media URL")
+    # Raw webhook data for deferred media download via API
+    whatsapp_key_json = fields.Text(string="WA Key JSON")
+    whatsapp_content_json = fields.Text(string="WA Content JSON")
     
     # Location
     latitude = fields.Float(string="Latitude")
