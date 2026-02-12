@@ -134,53 +134,34 @@
                                     <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}">
                                         <div class="message-bubble">
                                             <!-- Media content based on message type -->
-                                            <t t-if="msg.message_type === 'image'">
-                                                <div class="message-media">
+                                            <div class="message-content-wrapper">
+                                                <div t-if="msg.message_type === 'image'" class="message-media">
                                                     <img t-att-src="getMediaUrl(msg)" class="message-image" 
                                                          t-on-click="() => window.open(getMediaUrl(msg), '_blank')"
                                                          alt="Image" loading="lazy"/>
                                                 </div>
-                                                <t t-if="msg.content">
-                                                    <div class="message-text" t-esc="msg.content"/>
-                                                </t>
-                                            </t>
-                                            <t t-elif="msg.message_type === 'audio'">
-                                                <div class="message-media">
+                                                <div t-if="msg.message_type === 'audio'" class="message-media">
                                                     <audio controls="" preload="none">
                                                         <source t-att-src="getMediaUrl(msg)" t-att-type="msg.media_mimetype || 'audio/ogg'"/>
                                                     </audio>
                                                 </div>
-                                            </t>
-                                            <t t-elif="msg.message_type === 'video'">
-                                                <div class="message-media">
+                                                <div t-if="msg.message_type === 'video'" class="message-media">
                                                     <video controls="" preload="none" class="message-video">
                                                         <source t-att-src="getMediaUrl(msg)" t-att-type="msg.media_mimetype || 'video/mp4'"/>
                                                     </video>
                                                 </div>
-                                                <t t-if="msg.content">
-                                                    <div class="message-text" t-esc="msg.content"/>
-                                                </t>
-                                            </t>
-                                            <t t-elif="msg.message_type === 'document'">
-                                                <div class="message-document">
+                                                <div t-if="msg.message_type === 'document'" class="message-document">
                                                     <a t-att-href="getMediaUrl(msg)" target="_blank" class="document-link">
                                                         <i class="fa fa-file-o"/>
                                                         <span t-esc="msg.media_filename || 'Document'"/>
                                                     </a>
                                                 </div>
-                                                <t t-if="msg.content">
-                                                    <div class="message-text" t-esc="msg.content"/>
-                                                </t>
-                                            </t>
-                                            <t t-elif="msg.message_type === 'location'">
-                                                <div class="message-location">
+                                                <div t-if="msg.message_type === 'location'" class="message-location">
                                                     <i class="fa fa-map-marker"/>
                                                     <span t-esc="msg.content || 'Location'"/>
                                                 </div>
-                                            </t>
-                                            <t t-else="">
-                                                <div class="message-text" t-esc="msg.content"/>
-                                            </t>
+                                                <div t-if="msg.content and msg.message_type !== 'location'" class="message-text" t-esc="msg.content"/>
+                                            </div>
                                             <div class="message-meta">
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
                                                 <t t-if="msg.direction === 'out'">
