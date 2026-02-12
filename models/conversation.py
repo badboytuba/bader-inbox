@@ -57,6 +57,10 @@ class BaderInboxConversation(models.Model):
     # Tags
     tag_ids = fields.Many2many("bader.inbox.tag", string="Tags")
     
+    # AI Agent
+    ai_active = fields.Boolean(string="AI Active", default=True,
+        help="Whether the AI agent auto-responds in this conversation")
+    
     # Pipeline assignments
     pipeline_assignment_ids = fields.One2many(
         "bader.inbox.conversation.pipeline", "conversation_id",

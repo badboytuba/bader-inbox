@@ -3105,3 +3105,29 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
         color: $bader-green;
     }
 }
+
+// ═══════════════════════════════════
+// AI AGENT TOGGLE BUTTON
+// ═══════════════════════════════════
+.btn-ai-toggle {
+    transition: all 0.3s ease;
+    position: relative;
+
+    &.ai-on {
+        color: $bader-green !important;
+        text-shadow: 0 0 8px rgba(37, 211, 102, 0.5);
+
+        &:hover {
+            background: rgba(37, 211, 102, 0.15);
+        }
+    }
+
+    &.ai-off {
+        color: rgba(255, 255, 255, 0.35) !important;
+
+        &:hover {
+            color: rgba(255, 255, 255, 0.6) !important;
+            background: rgba(255, 255, 255, 0.08);
+        }
+    }
+}

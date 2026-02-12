@@ -1,54 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- ═══════════════════════════════════ -->
+    <!-- AI AGENT FORM VIEW                 -->
+    <!-- ═══════════════════════════════════ -->
     <record id="view_bader_inbox_ai_assistant_form" model="ir.ui.view">
         <field name="name">bader.inbox.ai_assistant.form</field>
         <field name="model">bader.inbox.ai_assistant</field>
         <field name="arch" type="xml">
-            <form string="AI Assistant">
+            <form string="AI Agent">
+                <header>
+                    <field name="active" widget="boolean_toggle"/>
+                </header>
                 <sheet>
                     <div class="oe_title">
-                        <h1><field name="name" placeholder="AI Config Name"/></h1>
+                        <h1><field name="name" placeholder="Agent Name (e.g. Bader Sales AI)"/></h1>
                     </div>
                     <group>
-                        <group string="Provider">
-                            <field name="active" widget="boolean_toggle"/>
-                            <field name="provider"/>
-                            <field name="api_key" password="True"/>
-                            <field name="model_name"/>
+                        <group>
+                            <field name="auto_reply" widget="boolean_toggle"/>
+                            <field name="auto_reply_delay" attrs="{'invisible': [('auto_reply', '=', False)]}"/>
+                            <field name="only_unassigned"/>
                         </group>
-                        <group string="Parameters">
-                            <field name="temperature"/>
-                            <field name="max_tokens"/>
+                        <group>
+                            <field name="total_conversations" readonly="1"/>
+                            <field name="total_messages" readonly="1"/>
                         </group>
                     </group>
-                    <group string="System Prompt">
-                        <field name="system_prompt" nolabel="1" colspan="2"/>
-                    </group>
+
+                    <notebook>
+                        <!-- TAB 1: Provider Config -->
+                        <page string="🔧 Configuração" name="config">
+                            <group>
+                                <group string="Provider">
+                                    <field name="provider"/>
+                                    <field name="api_key" password="True"/>
+                                    <field name="model_name"/>
+                                </group>
+                                <group string="Parâmetros">
+                                    <field name="temperature"/>
+                                    <field name="max_tokens"/>
+                                    <field name="max_tool_calls"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <!-- TAB 2: Access Permissions -->
+                        <page string="🔑 Permissões" name="permissions">
+                            <group string="Módulos Odoo que o agente pode acessar">
+                                <field name="access_products"/>
+                                <field name="access_stock"/>
+                                <field name="access_crm"/>
+                                <field name="access_quotes"/>
+                                <field name="access_calendar"/>
+                                <field name="access_contacts"/>
+                            </group>
+                            <div class="alert alert-info" role="alert">
+                                <strong>ℹ️ Info:</strong> O agente só pode usar as ferramentas correspondentes aos módulos ativados.
+                                <br/>Exemplo: Se "Criar Presupuestos" está desativado, o agente não poderá gerar orçamentos.
+                            </div>
+                        </page>
+
+                        <!-- TAB 3: System Prompt -->
+                        <page string="💬 Prompt" name="prompt">
+                            <group>
+                                <field name="system_prompt" nolabel="1" placeholder="Instruções para o agente AI..."/>
+                            </group>
+                            <separator string="Mensagens Automáticas"/>
+                            <group>
+                                <field name="welcome_message"/>
+                                <field name="fallback_message"/>
+                            </group>
+                        </page>
+
+                        <!-- TAB 4: Channels -->
+                        <page string="📱 Canais" name="channels">
+                            <group>
+                                <field name="channel_ids" widget="many2many_tags" 
+                                    placeholder="Vazio = todos os canais"/>
+                            </group>
+                            <div class="alert alert-warning" role="alert">
+                                Se nenhum canal for selecionado, o agente estará ativo em <strong>todos</strong> os canais.
+                            </div>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
     </record>
 
+    <!-- ═══════════════════════════════════ -->
+    <!-- AI AGENT TREE VIEW                 -->
+    <!-- ═══════════════════════════════════ -->
     <record id="view_bader_inbox_ai_assistant_tree" model="ir.ui.view">
         <field name="name">bader.inbox.ai_assistant.tree</field>
         <field name="model">bader.inbox.ai_assistant</field>
         <field name="arch" type="xml">
-            <tree string="AI Assistants">
+            <tree string="AI Agents">
                 <field name="name"/>
                 <field name="provider"/>
                 <field name="model_name"/>
+                <field name="auto_reply" widget="boolean_toggle"/>
+                <field name="access_products" widget="boolean_toggle"/>
+                <field name="access_crm" widget="boolean_toggle"/>
+                <field name="access_quotes" widget="boolean_toggle"/>
+                <field name="total_messages"/>
                 <field name="active" widget="boolean_toggle"/>
             </tree>
         </field>
     </record>
 
+    <!-- ═══════════════════════════════════ -->
+    <!-- AI AGENT ACTION                    -->
+    <!-- ═══════════════════════════════════ -->
     <record id="action_bader_inbox_ai_assistant" model="ir.actions.act_window">
-        <field name="name">AI Assistant</field>
+        <field name="name">🤖 AI Agent</field>
         <field name="res_model">bader.inbox.ai_assistant</field>
         <field name="view_mode">tree,form</field>
         <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">Configure AI Assistant</p>
-            <p>Add your OpenAI or Claude API key to enable AI-powered reply suggestions and translation.</p>
+            <p class="o_view_nocontent_smiling_face">Configure your AI Agent</p>
+            <p>Create an AI agent that automatically responds to WhatsApp messages, 
+            searches products, creates quotes, schedules meetings, and more — 
+            all integrated with Odoo.</p>
         </field>
     </record>
 </odoo>

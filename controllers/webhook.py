@@ -402,6 +402,8 @@ class BaderInboxWebhook(http.Controller):
             if direction == "in":
                 self._send_bus_notification(conversation, new_message, push_name, phone)
                 self._trigger_chatbot(conversation, new_message)
+                # AI Agent auto-reply
+                self._trigger_ai_agent(channel, conversation, content)
             
             return _json_ok()
             
@@ -491,6 +493,42 @@ class BaderInboxWebhook(http.Controller):
         except Exception as e:
             _logger.warning(f"Chatbot error: {e}")
 
+    def _trigger_ai_agent(self, channel, conversation, message_text):
+        """Check and execute AI Agent auto-reply"""
+        try:
+            if not message_text:
+                return
+
+            AIAgent = request.env["bader.inbox.ai_assistant"].sudo()
+            agent = AIAgent._get_agent_for_channel(channel.id)
+            if not agent:
+                return
+
+            # Check if AI is active for this conversation
+            if not conversation.ai_active:
+                return
+
+            # Check if conversation is assigned to human
+            if agent.only_unassigned and conversation.assigned_user_id:
+                return
+
+            # Process with AI
+            result = agent.process_message(conversation.id, message_text)
+            if result.get("skip") or result.get("error"):
+                _logger.debug(f"AI Agent skipped: {result}")
+                return
+
+            response = result.get("response", "")
+            if not response:
+                return
+
+            # Send response via Evolution API
+            Message = request.env["bader.inbox.message"].sudo()
+            Message.send_message(conversation.id, response, msg_type="text")
+            _logger.info(f"AI Agent replied to conversation {conversation.id}")
+
+        except Exception as e:
+            _logger.warning(f"AI Agent error: {e}")
     def _parse_message_content(self, content):
         """Parse message content from API format
         

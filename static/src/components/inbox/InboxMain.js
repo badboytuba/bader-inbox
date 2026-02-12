@@ -207,7 +207,7 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
-                    "tag_ids"
+                    "tag_ids", "ai_active"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -236,7 +236,7 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
-                    "tag_ids"
+                    "tag_ids", "ai_active"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -1631,6 +1631,22 @@ export class BaderInboxMain extends Component {
 
     getUserInitials() {
         return this.getInitials(this.user.name || "U");
+    }
+
+    // ──── AI AGENT TOGGLE ────
+    async toggleAI() {
+        const conv = this.state.selectedConversation;
+        if (!conv) return;
+        const newVal = !conv.ai_active;
+        try {
+            await this.orm.write("bader.inbox.conversation", [conv.id], {
+                ai_active: newVal,
+            });
+            conv.ai_active = newVal;
+            this.state.selectedConversation = { ...conv };
+        } catch (e) {
+            console.error("Toggle AI error:", e);
+        }
     }
 }
 
