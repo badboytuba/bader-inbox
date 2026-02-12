@@ -164,13 +164,12 @@
                                             </div>
                                             <div class="message-meta">
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
-                                                <t t-if="msg.direction === 'out'">
-                                                    <span t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
-                                                        <i t-if="msg.status === 'failed'" class="fa fa-times"/>
-                                                        <i t-if="msg.status !== 'failed'" class="fa fa-check"/>
-                                                        <i t-if="msg.status === 'delivered' or msg.status === 'read'" class="fa fa-check"/>
-                                                    </span>
-                                                </t>
+                                                <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
+                                                    <t t-if="msg.status === 'failed'"><i class="fa fa-times"/></t>
+                                                    <t t-elif="msg.status === 'delivered' or msg.status === 'read'"><i class="fa fa-check"/><i class="fa fa-check"/></t>
+                                                    <t t-else=""><i class="fa fa-check"/></t>
+                                                </span>
+                                                <span t-else="" class="message-status-placeholder"/>
                                             </div>
                                         </div>
                                     </div>

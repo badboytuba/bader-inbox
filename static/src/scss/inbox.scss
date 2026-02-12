@@ -669,6 +669,10 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                             color: #EF4444;
                         }
                     }
+
+                    .message-status-placeholder {
+                        display: none;
+                    }
                 }
             }
         }
