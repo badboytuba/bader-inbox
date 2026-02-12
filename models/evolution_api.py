@@ -228,8 +228,8 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         Returns base64 encoded media data.
         """
         data = {
-            "key": message_key,
-            "content": message_content,
+            "messageKey": message_key,
+            "messageContent": message_content,
         }
         try:
             result = self._request("POST", f"/message/downloadMedia/{instance_name}", data)
