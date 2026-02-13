@@ -19,7 +19,7 @@
     "author": "Bader Business",
     "website": "https://github.com/badboytuba/bader-inbox",
     "category": "Productivity/Discuss",
-    "depends": ["base", "contacts", "crm", "mail", "bus"],
+    "depends": ["base", "contacts", "crm", "mail", "bus", "sale_management", "calendar"],
     "external_dependencies": {"python": ["requests"]},
     "data": [
         "security/security.xml",

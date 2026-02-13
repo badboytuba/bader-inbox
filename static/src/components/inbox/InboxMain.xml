@@ -143,9 +143,9 @@
                                     <i class="fa fa-check"/>
                                 </button>
                                 <button t-attf-class="btn-chat-action btn-ai-toggle {{ state.selectedConversation.ai_active ? 'ai-on' : 'ai-off' }}"
-                                        t-att-title="state.selectedConversation.ai_active ? '🤖 AI Ativo - Clique para desativar' : '🤖 AI Inativo - Clique para ativar'"
+                                        t-att-title="state.selectedConversation.ai_active ? 'AI Ativo - Clique para desativar' : 'AI Inativo - Clique para ativar'"
                                         t-on-click="toggleAI">
-                                    <i class="fa fa-robot" style="font-size: 14px;">🤖</i>
+                                    <span style="font-size: 16px;">🤖</span>
                                 </button>
                                 <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Esconder detalhes' : 'Ver detalhes'">
                                     <i class="fa fa-user"/>

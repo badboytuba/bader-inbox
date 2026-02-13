@@ -529,6 +529,7 @@ class BaderInboxWebhook(http.Controller):
 
         except Exception as e:
             _logger.warning(f"AI Agent error: {e}")
+
     def _parse_message_content(self, content):
         """Parse message content from API format
         
