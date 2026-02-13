@@ -24,4 +24,4 @@ access_bader_inbox_note_user,bader.inbox.note.user,model_bader_inbox_note,base.g
 access_bader_inbox_scheduled_message_all,bader.inbox.scheduled.message.all,model_bader_inbox_scheduled_message,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_scheduled_message_user,bader.inbox.scheduled.message.user,model_bader_inbox_scheduled_message,base.group_user,1,1,1,0
 access_bader_inbox_ai_assistant_all,bader.inbox.ai.assistant.all,model_bader_inbox_ai_assistant,bader_inbox.group_bader_inbox_user,1,1,1,1
-access_bader_inbox_ai_assistant_user,bader.inbox.ai.assistant.user,model_bader_inbox_ai_assistant,base.group_user,1,0,0,0
+access_bader_inbox_ai_assistant_user,bader.inbox.ai.assistant.user,model_bader_inbox_ai_assistant,base.group_user,1,1,1,1
