@@ -62,13 +62,14 @@
 
                         <!-- TAB 3: System Prompt -->
                         <page string="💬 Prompt" name="prompt">
-                            <group>
-                                <field name="system_prompt" nolabel="1" placeholder="Instruções para o agente AI..."/>
-                            </group>
+                            <separator string="System Prompt"/>
+                            <field name="system_prompt" nolabel="1" 
+                                placeholder="Instruções para o agente AI... Ex: Você é um assistente de vendas da Bader..."
+                                widget="text"/>
                             <separator string="Mensagens Automáticas"/>
                             <group>
-                                <field name="welcome_message"/>
-                                <field name="fallback_message"/>
+                                <field name="welcome_message" placeholder="Mensagem de boas-vindas (opcional)"/>
+                                <field name="fallback_message" placeholder="Mensagem de erro/fallback (opcional)"/>
                             </group>
                         </page>
 
