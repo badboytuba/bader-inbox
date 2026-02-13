@@ -512,6 +512,11 @@ class BaderInboxWebhook(http.Controller):
             if agent.only_unassigned and conversation.assigned_user_id:
                 return
 
+            # Check schedule (business hours)
+            if not agent.is_within_schedule():
+                _logger.debug("AI Agent skipped: outside schedule")
+                return
+
             # Process with AI
             result = agent.process_message(conversation.id, message_text)
             if result.get("skip") or result.get("error"):

@@ -207,6 +207,56 @@ class BaderInboxAIAssistant(models.Model):
     total_conversations = fields.Integer(string="Conversations Handled", default=0, readonly=True)
     total_messages = fields.Integer(string="Messages Sent", default=0, readonly=True)
 
+    # ── Schedule / Horário ──
+    schedule_mode = fields.Selection([
+        ("always", "Sempre ativo (24/7)"),
+        ("outside_hours", "Fora do horário comercial"),
+        ("during_hours", "Durante o horário comercial"),
+    ], string="Modo de Horário", default="always",
+        help="Define quando o agente responde automaticamente")
+    schedule_start = fields.Float(string="Início (hora)", default=9.0,
+        help="Hora de início do horário comercial (ex: 9.0 = 09:00)")
+    schedule_end = fields.Float(string="Fim (hora)", default=18.0,
+        help="Hora de fim do horário comercial (ex: 18.0 = 18:00)")
+    schedule_timezone = fields.Selection([
+        ("Europe/Madrid", "🇪🇸 Espanha (Madrid)"),
+        ("Europe/Lisbon", "🇵🇹 Portugal (Lisboa)"),
+        ("America/Argentina/Buenos_Aires", "🇦🇷 Argentina (Buenos Aires)"),
+        ("America/Sao_Paulo", "🇧🇷 Brasil (São Paulo)"),
+        ("UTC", "UTC"),
+    ], string="Timezone", default="Europe/Madrid")
+    schedule_weekend = fields.Boolean(string="Ativo nos fins de semana",
+        default=True, help="Se ativado, o agente responde nos sábados e domingos")
+
+    def is_within_schedule(self):
+        """Check if AI agent should respond based on current time and schedule config"""
+        if self.schedule_mode == "always":
+            return True
+
+        try:
+            import pytz
+            tz = pytz.timezone(self.schedule_timezone or "UTC")
+        except Exception:
+            return True
+
+        now = datetime.now(tz)
+        current_hour = now.hour + now.minute / 60.0
+        is_weekend = now.weekday() >= 5  # Saturday=5, Sunday=6
+
+        # Weekend check
+        if is_weekend and self.schedule_weekend and self.schedule_mode == "outside_hours":
+            return True
+        if is_weekend and not self.schedule_weekend:
+            return False
+
+        is_business_hours = self.schedule_start <= current_hour < self.schedule_end
+
+        if self.schedule_mode == "outside_hours":
+            return not is_business_hours
+        elif self.schedule_mode == "during_hours":
+            return is_business_hours
+        return True
+
     # ──────────────────────────────────────
     # CONFIG HELPERS
     # ──────────────────────────────────────

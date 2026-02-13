@@ -83,6 +83,34 @@
                                 Se nenhum canal for selecionado, o agente estará ativo em <strong>todos</strong> os canais.
                             </div>
                         </page>
+
+                        <!-- TAB 5: Schedule -->
+                        <page string="⏰ Horário" name="schedule">
+                            <group>
+                                <group string="Modo">
+                                    <field name="schedule_mode"/>
+                                </group>
+                                <group string="Horário Comercial" attrs="{'invisible': [('schedule_mode', '=', 'always')]}">
+                                    <field name="schedule_start" widget="float_time"/>
+                                    <field name="schedule_end" widget="float_time"/>
+                                </group>
+                            </group>
+                            <group attrs="{'invisible': [('schedule_mode', '=', 'always')]}">
+                                <group string="Configuração">
+                                    <field name="schedule_timezone"/>
+                                    <field name="schedule_weekend"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-info" role="alert" attrs="{'invisible': [('schedule_mode', '!=', 'outside_hours')]}">
+                                <strong>ℹ️ Fora do horário comercial:</strong> O agente AI responderá automaticamente
+                                a mensagens recebidas <strong>fora</strong> do horário configurado acima.
+                                <br/>Exemplo: Se o horário é 09:00-18:00, o agente responde das 18:00 às 09:00.
+                            </div>
+                            <div class="alert alert-info" role="alert" attrs="{'invisible': [('schedule_mode', '!=', 'during_hours')]}">
+                                <strong>ℹ️ Durante o horário comercial:</strong> O agente AI responderá
+                                <strong>somente durante</strong> o horário configurado acima.
+                            </div>
+                        </page>
                     </notebook>
                 </sheet>
             </form>
