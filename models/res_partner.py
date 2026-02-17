@@ -19,6 +19,10 @@ class ResPartner(models.Model):
         for partner in self:
             partner.bader_inbox_conversation_count = len(partner.bader_inbox_conversation_ids)
 
+    # AI Agent memory - persists between conversation sessions
+    ai_memory = fields.Text(string="AI Memory",
+        help="JSON data with customer preferences, interests, and notes collected by the AI agent")
+
 
 class CrmLead(models.Model):
     _inherit = "crm.lead"

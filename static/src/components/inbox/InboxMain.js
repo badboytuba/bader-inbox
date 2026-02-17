@@ -24,6 +24,7 @@ export class BaderInboxMain extends Component {
             selectedConversation: null,
             loadingConversations: true,
             filter: "all",
+            channelFilter: null,
             searchQuery: "",
 
             // Messages
@@ -56,6 +57,8 @@ export class BaderInboxMain extends Component {
             allTags: [],
             activeTagFilter: null,
             showTagManager: false,
+            newTagName: "",
+            newTagColor: 0,
 
             // Notes
             notes: [],
@@ -78,12 +81,30 @@ export class BaderInboxMain extends Component {
             loadingAI: false,
             aiEnabled: false,
 
+            // Product Catalog Send
+            showProductCatalog: false,
+            productSearchQuery: "",
+            productResults: [],
+            productSearching: false,
+            sendingProduct: null,
+
             // Translation (Phase 3)
             translations: {},
 
             // UI
             showContactPanel: true,
             viewMode: "list", // "list", "kanban", or "dashboard"
+            darkMode: false,
+            replyingTo: null,
+            showReactionPicker: null,
+
+            // Dashboard (F20/F21/F23)
+            dashboardData: null,
+            loadingDashboard: false,
+
+            // F9: Voice Recording
+            isRecording: false,
+            recordingTime: 0,
 
             // Channels
             channels: [],
@@ -116,6 +137,32 @@ export class BaderInboxMain extends Component {
             contactSearchResults: [],
             searchingContacts: false,
             selectedChannelId: null,
+
+            // CRM - Contact Opportunities
+            contactOpportunities: [],
+            loadingOpportunities: false,
+
+            // Activities
+            contactActivities: [],
+            loadingActivities: false,
+
+            // Sales - Quotations & Orders
+            contactQuotations: [],
+            contactOrders: [],
+            loadingSales: false,
+            salesTotalQuoted: 0,
+            salesTotalOrdered: 0,
+
+            // Customer 360° Stats
+            customerStats: {
+                totalMessages: 0,
+                lifetimeValue: 0,
+                pipelineValue: 0,
+                lastOrderDate: null,
+                daysSinceLastOrder: null,
+                customerStatus: "new",
+                totalOrders: 0,
+            },
         });
 
         this.messagesRef = useRef("messagesContainer");
@@ -151,6 +198,12 @@ export class BaderInboxMain extends Component {
         onMounted(() => {
             this.busService.addEventListener("notification", this._boundBusHandler);
 
+            // F1: Restore dark mode from localStorage
+            if (localStorage.getItem("bader_inbox_dark_mode") === "true") {
+                this.state.darkMode = true;
+                const el = document.querySelector(".bader-inbox-container");
+                if (el) el.classList.add("dark-mode");
+            }
             // Reduced polling intervals (now mostly for fallback/sync)
             this.conversationPollInterval = setInterval(() => {
                 this._refreshConversations();
@@ -192,13 +245,22 @@ export class BaderInboxMain extends Component {
         this.state.loadingConversations = true;
         try {
             let domain = [];
-            if (this.state.filter === "unread") {
-                domain.push(["unread_count", ">", 0]);
-            } else if (this.state.filter === "mine") {
-                domain.push(["assigned_user_id", "=", this.user.userId]);
+            if (this.state.filter === "closed") {
+                domain.push(["state", "=", "resolved"]);
+            } else {
+                // All non-closed filters exclude resolved conversations
+                domain.push(["state", "!=", "resolved"]);
+                if (this.state.filter === "unread") {
+                    domain.push(["unread_count", ">", 0]);
+                } else if (this.state.filter === "mine") {
+                    domain.push(["assigned_user_id", "=", this.user.userId]);
+                }
             }
             if (this.state.activeTagFilter) {
                 domain.push(["tag_ids", "in", [this.state.activeTagFilter]]);
+            }
+            if (this.state.channelFilter) {
+                domain.push(["channel_id", "=", this.state.channelFilter]);
             }
 
             this.state.conversations = await this.orm.searchRead(
@@ -207,7 +269,9 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
-                    "tag_ids", "ai_active"
+                    "tag_ids", "ai_active",
+                    "ai_lead_score", "ai_lead_temperature", "ai_resolution",
+                    "ai_response_count", "ai_tools_used", "ai_escalation_reason"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -236,7 +300,9 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
-                    "tag_ids", "ai_active"
+                    "tag_ids", "ai_active",
+                    "ai_lead_score", "ai_lead_temperature", "ai_resolution",
+                    "ai_response_count", "ai_tools_used", "ai_escalation_reason"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -324,7 +390,9 @@ export class BaderInboxMain extends Component {
                     "bader.inbox.conversation",
                     [["id", "=", conversationId]],
                     ["id", "computed_name", "phone", "last_message", "last_message_date",
-                        "unread_count", "state", "assigned_user_id", "partner_id", "channel_id"]
+                        "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                        "ai_lead_score", "ai_lead_temperature", "ai_resolution",
+                        "ai_response_count", "ai_tools_used", "ai_escalation_reason"]
                 );
                 if (conversations.length) {
                     this.state.conversations.unshift(conversations[0]);
@@ -580,18 +648,41 @@ export class BaderInboxMain extends Component {
         this.loadConversations();
     }
 
+    setChannelFilter(channelId) {
+        this.state.channelFilter = this.state.channelFilter === channelId ? null : channelId;
+        this.loadConversations();
+    }
+
+    onChannelDropdownChange(ev) {
+        const value = ev.target.value;
+        this.state.channelFilter = value ? parseInt(value) : null;
+        this.loadConversations();
+    }
+
+    onSearchInput() {
+        // t-model already updates state.searchQuery  
+        // filteredConversations getter handles the filtering reactively
+    }
+
     filterByTag(tagId) {
         this.state.activeTagFilter = this.state.activeTagFilter === tagId ? null : tagId;
         this.loadConversations();
     }
 
     get filteredConversations() {
-        if (!this.state.searchQuery) return this.state.conversations;
-        const query = this.state.searchQuery.toLowerCase();
-        return this.state.conversations.filter(c =>
-            (c.computed_name || "").toLowerCase().includes(query) ||
-            (c.phone || "").includes(query)
-        );
+        let convs = this.state.conversations;
+        if (this.state.searchQuery) {
+            const query = this.state.searchQuery.toLowerCase();
+            convs = convs.filter(c =>
+                (c.computed_name || "").toLowerCase().includes(query) ||
+                (c.phone || "").includes(query)
+            );
+        }
+        return convs;
+    }
+
+    get totalUnread() {
+        return this.state.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
     }
 
     async assignConversation() {
@@ -618,16 +709,37 @@ export class BaderInboxMain extends Component {
         }
     }
 
+    async reopenConversation() {
+        if (!this.state.selectedConversation) return;
+        try {
+            await this.orm.write("bader.inbox.conversation", [this.state.selectedConversation.id], {
+                state: "open"
+            });
+            this.state.selectedConversation.state = "open";
+            this.notification.add(_t("Conversa reaberta!"), { type: "info" });
+            this.loadConversations();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
     // ==========================================
     // MESSAGE ACTIONS
     // ==========================================
 
     async sendMessage() {
-        if (!this.state.selectedConversation) return;
+        const content = (this.state.composerText || "").trim();
+        if ((!content && !this.state.attachment) || !this.state.selectedConversation || this.state.sendingMessage) return;
 
-        const content = this.state.composerText.trim();
-        // Allow empty content if sending media
-        if (!content && !this.state.attachment) return;
+        // F26: Rate limiting — max 10 messages per minute
+        if (!this._msgTimestamps) this._msgTimestamps = [];
+        const now = Date.now();
+        this._msgTimestamps = this._msgTimestamps.filter(t => now - t < 60000);
+        if (this._msgTimestamps.length >= 10) {
+            this.notification.add(_t("Limite de envio: máximo 10 mensagens/minuto"), { type: "warning" });
+            return;
+        }
+        this._msgTimestamps.push(now);
 
         this.state.sendingMessage = true;
         try {
@@ -656,12 +768,41 @@ export class BaderInboxMain extends Component {
             }
 
             this.state.composerText = "";
+            // Reset textarea height after send
+            const ta = this.composerRef.el;
+            if (ta) ta.style.height = "auto";
             await this.loadMessages(this.state.selectedConversation.id);
         } catch (e) {
             console.error(e);
             this.notification.add(_t("Erro ao enviar mensagem"), { type: "danger" });
         }
         this.state.sendingMessage = false;
+    }
+
+    // ──── F15: EXPORT CONVERSATION ────
+    exportConversation() {
+        if (!this.state.selectedConversation || !this.state.messages.length) {
+            this.notification.add(_t("Sem mensagens para exportar"), { type: "warning" });
+            return;
+        }
+        const conv = this.state.selectedConversation;
+        const contactName = conv.computed_name || conv.phone || "Desconhecido";
+        const header = "Data;Direcção;Contacto;Conteúdo\n";
+        const rows = this.state.messages.map(m => {
+            const date = m.create_date || "";
+            const dir = m.direction === "out" ? "Enviado" : "Recebido";
+            const content = (m.content || m.message_type || "").replace(/"/g, '""').replace(/\n/g, ' ');
+            return `"${date}";"${dir}";"${contactName}";"${content}"`;
+        }).join("\n");
+        const csv = "\uFEFF" + header + rows; // UTF-8 BOM for Excel
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `conversa_${contactName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        this.notification.add(_t("Conversa exportada com sucesso!"), { type: "success" });
     }
 
     triggerFileInput() {
@@ -731,8 +872,14 @@ export class BaderInboxMain extends Component {
     }
 
     onComposerInput(event) {
-        const text = event.target.value;
+        const el = event.target;
+
+        // Auto-resize textarea
+        el.style.height = "auto";
+        el.style.height = Math.min(el.scrollHeight, 160) + "px";
+
         // Detect / at start of line for quick replies
+        const text = el.value;
         if (text === "/" || text.startsWith("/")) {
             this.state.showQuickReplies = true;
             this.state.quickReplyFilter = text.slice(1).toLowerCase();
@@ -844,6 +991,356 @@ export class BaderInboxMain extends Component {
         } catch (e) { }
     }
 
+    // ──── F1: DARK MODE TOGGLE ────
+    toggleDarkMode() {
+        this.state.darkMode = !this.state.darkMode;
+        const el = document.querySelector(".bader-inbox-container");
+        if (el) {
+            el.classList.toggle("dark-mode", this.state.darkMode);
+        }
+        localStorage.setItem("bader_inbox_dark_mode", this.state.darkMode.toString());
+    }
+
+    // ──── F4: READ/UNREAD TOGGLE ────
+    toggleReadStatus(conv) {
+        if (!conv) return;
+        conv.unread_count = conv.unread_count > 0 ? 0 : 1;
+    }
+
+    // ──── F10: REPLY IN CONTEXT ────
+    setReplyTo(msg) {
+        this.state.replyingTo = msg;
+        const textarea = this.composerRef.el;
+        if (textarea) textarea.focus();
+    }
+
+    // ──── F11: REACTIONS ────
+    toggleReactionPicker(msgId) {
+        this.state.showReactionPicker = this.state.showReactionPicker === msgId ? null : msgId;
+    }
+
+    addReaction(msgId, emoji) {
+        const msg = this.state.messages.find(m => m.id === msgId);
+        if (msg) {
+            if (!msg.reactions) msg.reactions = [];
+            const idx = msg.reactions.indexOf(emoji);
+            if (idx >= 0) {
+                msg.reactions.splice(idx, 1);
+            } else {
+                msg.reactions.push(emoji);
+            }
+        }
+        this.state.showReactionPicker = null;
+    }
+
+    // ──── F17: FORWARD MESSAGE ────
+    async forwardMessage(msg) {
+        if (!msg || !msg.content) {
+            this.notification.add(_t("Não é possível encaminhar esta mensagem"), { type: "warning" });
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(msg.content);
+            this.notification.add(_t("Mensagem copiada! Cole numa outra conversa para encaminhar."), { type: "info" });
+        } catch (e) {
+            this.notification.add(_t("Erro ao copiar mensagem"), { type: "danger" });
+        }
+    }
+
+    // ──── DASHBOARD VIEW MODE ────
+    setViewMode(mode) {
+        this.state.viewMode = mode;
+        if (mode === "dashboard" && !this.state.dashboardData) {
+            this.loadDashboardData();
+        }
+    }
+
+    // ──── F20/F21/F23: DASHBOARD ANALYTICS ────
+    async loadDashboardData() {
+        this.state.loadingDashboard = true;
+        try {
+            const now = new Date();
+            const sevenDaysAgo = new Date(now);
+            sevenDaysAgo.setDate(now.getDate() - 7);
+            const dateStr = sevenDaysAgo.toISOString().split("T")[0];
+
+            // Fetch conversations
+            const convs = await this.orm.searchRead("bader.inbox.conversation", [], ["id", "state", "assigned_user", "create_date", "last_message_date"]);
+
+            // Fetch messages from last 7 days
+            const msgs = await this.orm.searchRead("bader.inbox.message", [["create_date", ">=", dateStr]], ["direction", "create_date", "author_id", "conversation_id", "status"]);
+
+            // ── KPI ──
+            const openCount = convs.filter(c => c.state === "open" || c.state === "new").length;
+            const todayStr = now.toISOString().split("T")[0];
+            const resolvedToday = convs.filter(c => c.state === "resolved" && (c.last_message_date || "").startsWith(todayStr)).length;
+            const sentToday = msgs.filter(m => m.direction === "out" && (m.create_date || "").startsWith(todayStr)).length;
+            const receivedToday = msgs.filter(m => m.direction === "in" && (m.create_date || "").startsWith(todayStr)).length;
+
+            // ── Activity Chart (7 days) ──
+            const activity = [];
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date(now);
+                d.setDate(now.getDate() - i);
+                const ds = d.toISOString().split("T")[0];
+                activity.push({
+                    day: ds,
+                    sent: msgs.filter(m => m.direction === "out" && (m.create_date || "").startsWith(ds)).length,
+                    received: msgs.filter(m => m.direction === "in" && (m.create_date || "").startsWith(ds)).length,
+                });
+            }
+
+            // ── F20: Agent Performance ──
+            const agentMap = {};
+            msgs.filter(m => m.direction === "out" && m.author_id).forEach(m => {
+                const name = Array.isArray(m.author_id) ? m.author_id[1] : String(m.author_id);
+                if (!agentMap[name]) agentMap[name] = { agent: name, sent: 0, resolved: 0, avgResponseMin: 0, responseTimes: [] };
+                agentMap[name].sent++;
+            });
+            // Count resolved per agent
+            convs.filter(c => c.state === "resolved" && c.assigned_user).forEach(c => {
+                const name = Array.isArray(c.assigned_user) ? c.assigned_user[1] : String(c.assigned_user);
+                if (agentMap[name]) agentMap[name].resolved++;
+            });
+            const topAgents = Object.values(agentMap).sort((a, b) => b.sent - a.sent).slice(0, 5);
+
+            // ── F21: Heatmap (hour × day of week) ──
+            const heatmap = Array.from({ length: 7 }, () => Array(24).fill(0));
+            msgs.forEach(m => {
+                try {
+                    const dt = new Date(m.create_date);
+                    heatmap[dt.getDay()][dt.getHours()]++;
+                } catch (e) { }
+            });
+            const heatmapMax = Math.max(1, ...heatmap.flat());
+
+            // ── F23: SLA Alerts ──
+            const SLA_MINUTES = 15; // 15 min target
+            const slaBreaches = [];
+            // Group messages by conversation to find response gaps
+            const convMsgMap = {};
+            msgs.forEach(m => {
+                const cid = Array.isArray(m.conversation_id) ? m.conversation_id[0] : m.conversation_id;
+                if (!convMsgMap[cid]) convMsgMap[cid] = [];
+                convMsgMap[cid].push(m);
+            });
+            Object.entries(convMsgMap).forEach(([cid, cmsgs]) => {
+                cmsgs.sort((a, b) => new Date(a.create_date) - new Date(b.create_date));
+                for (let i = 0; i < cmsgs.length; i++) {
+                    if (cmsgs[i].direction === "in") {
+                        // Find next outgoing reply
+                        const nextOut = cmsgs.slice(i + 1).find(m => m.direction === "out");
+                        if (nextOut) {
+                            const diffMin = (new Date(nextOut.create_date) - new Date(cmsgs[i].create_date)) / 60000;
+                            if (diffMin > SLA_MINUTES) {
+                                const conv = convs.find(c => c.id === parseInt(cid));
+                                slaBreaches.push({
+                                    convId: parseInt(cid),
+                                    convName: conv ? (conv.computed_name || `#${cid}`) : `#${cid}`,
+                                    waitMinutes: Math.round(diffMin),
+                                    date: cmsgs[i].create_date,
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+            // Keep only last 10 SLA breaches
+            slaBreaches.sort((a, b) => new Date(b.date) - new Date(a.date));
+            const recentBreaches = slaBreaches.slice(0, 10);
+
+            // Calculate avg response time
+            let totalResponseMin = 0, responseCount = 0;
+            Object.values(convMsgMap).forEach(cmsgs => {
+                cmsgs.sort((a, b) => new Date(a.create_date) - new Date(b.create_date));
+                for (let i = 0; i < cmsgs.length; i++) {
+                    if (cmsgs[i].direction === "in") {
+                        const nextOut = cmsgs.slice(i + 1).find(m => m.direction === "out");
+                        if (nextOut) {
+                            totalResponseMin += (new Date(nextOut.create_date) - new Date(cmsgs[i].create_date)) / 60000;
+                            responseCount++;
+                        }
+                    }
+                }
+            });
+            const avgResponseTime = responseCount > 0 ? Math.round(totalResponseMin / responseCount) : 0;
+
+            this.state.dashboardData = {
+                open_count: openCount,
+                resolved_today: resolvedToday,
+                sent_today: sentToday,
+                received_today: receivedToday,
+                activity,
+                top_agents: topAgents,
+                heatmap,
+                heatmapMax,
+                sla_breaches: recentBreaches,
+                sla_target: SLA_MINUTES,
+                avg_response_time: avgResponseTime,
+                total_messages_7d: msgs.length,
+                total_conversations: convs.length,
+                sentiment: this._computeSentiment(msgs),
+            };
+        } catch (e) {
+            console.error("Dashboard load error:", e);
+            this.notification.add(_t("Erro ao carregar dashboard"), { type: "danger" });
+        }
+        this.state.loadingDashboard = false;
+    }
+
+    // ──── F22: SENTIMENT ANALYSIS ────
+    _computeSentiment(msgs) {
+        const positive = ["obrigado", "obrigada", "perfeito", "excelente", "ótimo", "ótima", "bom", "boa", "maravilhoso", "parabéns", "adorei", "gostei", "satisfeito", "recomendo", "top", "show", "incrível", "fantástico", "feliz"];
+        const negative = ["ruim", "péssimo", "péssima", "horrível", "problema", "erro", "reclamação", "insatisfeito", "lixo", "demora", "demoras", "cancelar", "reembolso", "pior", "nunca", "absurdo", "vergonha", "decepção", "raiva"];
+
+        let posCount = 0, negCount = 0, neuCount = 0;
+        const inMsgs = msgs.filter(m => m.direction === "in" && m.content);
+        inMsgs.forEach(m => {
+            const txt = (m.content || "").toLowerCase();
+            const hasPos = positive.some(w => txt.includes(w));
+            const hasNeg = negative.some(w => txt.includes(w));
+            if (hasPos && !hasNeg) posCount++;
+            else if (hasNeg && !hasPos) negCount++;
+            else neuCount++;
+        });
+        const total = posCount + negCount + neuCount || 1;
+        return {
+            positive: posCount,
+            negative: negCount,
+            neutral: neuCount,
+            posPercent: Math.round((posCount / total) * 100),
+            negPercent: Math.round((negCount / total) * 100),
+            neuPercent: Math.round((neuCount / total) * 100),
+            score: Math.round(((posCount - negCount) / total + 1) * 50), // 0-100 scale
+        };
+    }
+
+    // ──── F24: PERMISSION CHECK ────
+    get isAdmin() {
+        return this.env.services.user?.isAdmin || false;
+    }
+
+    // ──── F5: RESPONSIVE MOBILE NAVIGATION ────
+    showMobileSidebar() {
+        const el = document.querySelector(".bader-inbox-container");
+        if (el) {
+            el.classList.add("mobile-show-sidebar");
+            el.classList.remove("mobile-show-contact");
+        }
+    }
+
+    showMobileContact() {
+        const el = document.querySelector(".bader-inbox-container");
+        if (el) {
+            el.classList.add("mobile-show-contact");
+        }
+    }
+
+    mobileBackToChat() {
+        const el = document.querySelector(".bader-inbox-container");
+        if (el) {
+            el.classList.remove("mobile-show-sidebar", "mobile-show-contact");
+        }
+    }
+
+    // ──── F9: VOICE MESSAGE RECORDING ────
+    async startVoiceRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this._mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+            this._audioChunks = [];
+            this._mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) this._audioChunks.push(e.data);
+            };
+            this._mediaRecorder.start();
+            this.state.isRecording = true;
+            this.state.recordingTime = 0;
+            this._recordingInterval = setInterval(() => {
+                this.state.recordingTime++;
+                if (this.state.recordingTime >= 120) this.stopVoiceRecording(); // Max 2 min
+            }, 1000);
+        } catch (e) {
+            this.notification.add(_t("Não foi possível aceder ao microfone"), { type: "danger" });
+        }
+    }
+
+    async stopVoiceRecording() {
+        if (!this._mediaRecorder || this._mediaRecorder.state !== "recording") return;
+        return new Promise((resolve) => {
+            this._mediaRecorder.onstop = async () => {
+                clearInterval(this._recordingInterval);
+                this.state.isRecording = false;
+                const blob = new Blob(this._audioChunks, { type: "audio/webm" });
+                // Convert to base64 and send
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64 = reader.result.split(",")[1];
+                    if (this.state.selectedConversation) {
+                        try {
+                            await this.orm.call("bader.inbox.message", "send_message", [], {
+                                conversation_id: this.state.selectedConversation.id,
+                                content: "🎤 Mensagem de voz",
+                                msg_type: "audio",
+                                media_data: base64,
+                            });
+                            this.notification.add(_t("Áudio enviado!"), { type: "success" });
+                        } catch (e) {
+                            this.notification.add(_t("Erro ao enviar áudio"), { type: "danger" });
+                        }
+                    }
+                    // Cleanup
+                    this._mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                    this._mediaRecorder = null;
+                    this._audioChunks = [];
+                    resolve();
+                };
+                reader.readAsDataURL(blob);
+            };
+            this._mediaRecorder.stop();
+        });
+    }
+
+    cancelVoiceRecording() {
+        if (this._mediaRecorder) {
+            this._mediaRecorder.stream.getTracks().forEach(t => t.stop());
+            this._mediaRecorder = null;
+        }
+        clearInterval(this._recordingInterval);
+        this._audioChunks = [];
+        this.state.isRecording = false;
+        this.state.recordingTime = 0;
+    }
+
+    _formatRecordingTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, "0")}`;
+    }
+
+    // ──── SOUND NOTIFICATION (F8) ────
+    _playNotificationSound() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const playTone = (freq, startTime, duration) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.15, startTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(startTime);
+                osc.stop(startTime + duration);
+            };
+            const now = ctx.currentTime;
+            playTone(880, now, 0.15);        // A5
+            playTone(1100, now + 0.12, 0.15); // ~C#6
+        } catch (e) {
+            // AudioContext may not be available
+        }
+    }
+
     // ──── DESKTOP NOTIFICATIONS ────
     _requestNotificationPermission() {
         if ("Notification" in window && Notification.permission === "default") {
@@ -879,6 +1376,44 @@ export class BaderInboxMain extends Component {
         this.state.notesTab = "info";
         await this.loadMessages(conv.id);
         this.loadConvPipelines(conv.id);
+
+        // Auto-link partner if not yet linked
+        if (!conv.partner_id) {
+            try {
+                const linked = await this.orm.call(
+                    "bader.inbox.conversation",
+                    "auto_link_partner",
+                    [conv.id]
+                );
+                if (linked) {
+                    // Re-read conversation to pick up the new partner_id
+                    const freshConvs = await this.orm.searchRead(
+                        "bader.inbox.conversation",
+                        [["id", "=", conv.id]],
+                        ["computed_name", "phone", "partner_id", "channel_id",
+                            "unread_count", "state", "assigned_user_id", "tag_ids",
+                            "contact_name", "ai_lead_score", "ai_lead_temperature",
+                            "ai_resolution", "ai_escalation_reason", "ai_response_count"],
+                        { limit: 1 }
+                    );
+                    if (freshConvs.length) {
+                        Object.assign(conv, freshConvs[0]);
+                        const idx = this.state.conversations.findIndex(c => c.id === conv.id);
+                        if (idx >= 0) Object.assign(this.state.conversations[idx], freshConvs[0]);
+                        this.state.selectedConversation = conv;
+                    }
+                }
+            } catch (e) {
+                console.error("Auto-link partner failed", e);
+            }
+        }
+
+        await Promise.all([
+            this.loadContactOpportunities(conv),
+            this.loadContactSales(conv),
+            this.loadContactActivities(conv),
+        ]);
+        this.loadCustomerStats(conv);
         const idx = this.state.conversations.findIndex(c => c.id === conv.id);
         if (idx >= 0) {
             this.state.conversations[idx].unread_count = 0;
@@ -1069,7 +1604,7 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "conversation_id", "stage_id", "contact_name",
                     "phone", "last_message", "unread_count", "priority",
-                    "assigned_user_id", "kanban_state", "notes"
+                    "assigned_user_id", "kanban_state", "notes", "tag_ids"
                 ],
                 { order: "priority desc, id" }
             );
@@ -1093,6 +1628,16 @@ export class BaderInboxMain extends Component {
     }
 
     // Drag and Drop
+
+    getCardTags(card) {
+        // Try card.tag_ids first (if related field exists on pipeline model)
+        if (card.tag_ids && card.tag_ids.length) return card.tag_ids;
+        // Fallback: look up from conversations by conversation_id
+        const convId = Array.isArray(card.conversation_id) ? card.conversation_id[0] : card.conversation_id;
+        const conv = this.state.conversations.find(c => c.id === convId);
+        return conv?.tag_ids || [];
+    }
+
     onDragStart(ev, card) {
         ev.dataTransfer.setData("text/plain", JSON.stringify({
             cardId: card.id,
@@ -1239,14 +1784,384 @@ export class BaderInboxMain extends Component {
 
     async createOpportunity() {
         if (!this.state.selectedConversation) return;
+        const conv = this.state.selectedConversation;
         this.action.doAction({
             type: "ir.actions.act_window",
             res_model: "crm.lead",
             views: [[false, "form"]],
             target: "new",
             context: {
-                default_name: `WhatsApp - ${this.state.selectedConversation.computed_name || this.state.selectedConversation.phone}`,
-                default_phone: this.state.selectedConversation.phone,
+                default_name: `WhatsApp - ${conv.computed_name || conv.phone}`,
+                default_phone: conv.phone,
+                default_partner_id: conv.partner_id?.[0],
+            }
+        }, {
+            onClose: async () => {
+                await this._refreshConversationAndCRM(conv.id);
+            }
+        });
+    }
+
+    async openOpportunity(oppId) {
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "crm.lead",
+            res_id: oppId,
+            views: [[false, "form"]],
+            target: "new",
+        });
+    }
+
+    async loadContactOpportunities(conv) {
+        const partnerId = conv?.partner_id?.[0];
+        if (!partnerId) {
+            this.state.contactOpportunities = [];
+            return;
+        }
+        this.state.loadingOpportunities = true;
+        try {
+            const opps = await this.orm.searchRead(
+                "crm.lead",
+                [["partner_id", "=", partnerId]],
+                ["name", "stage_id", "expected_revenue", "probability", "create_date", "user_id", "type"],
+                { order: "create_date desc", limit: 10 }
+            );
+            this.state.contactOpportunities = opps;
+        } catch (e) {
+            console.error("Failed to load opportunities", e);
+            this.state.contactOpportunities = [];
+        }
+        this.state.loadingOpportunities = false;
+    }
+
+    // ──── ACTIVITIES TAB ────
+    async loadContactActivities(conv) {
+        const partnerId = conv?.partner_id?.[0];
+        if (!partnerId) {
+            this.state.contactActivities = [];
+            return;
+        }
+        this.state.loadingActivities = true;
+        try {
+            // Get today's date in YYYY-MM-DD format
+            const today = new Date().toISOString().split('T')[0];
+
+            // Find CRM leads for this partner
+            const leadIds = await this.orm.searchRead(
+                "crm.lead",
+                [["partner_id", "=", partnerId]],
+                ["id"],
+                { limit: 50 }
+            );
+
+            let activities = [];
+
+            if (leadIds.length) {
+                // Get model ID for crm.lead
+                const modelData = await this.orm.searchRead(
+                    "ir.model",
+                    [["model", "=", "crm.lead"]],
+                    ["id"],
+                    { limit: 1 }
+                );
+
+                if (modelData.length) {
+                    activities = await this.orm.searchRead(
+                        "mail.activity",
+                        [
+                            ["res_model_id", "=", modelData[0].id],
+                            ["res_id", "in", leadIds.map(l => l.id)],
+                        ],
+                        ["summary", "note", "date_deadline", "activity_type_id", "user_id", "res_id", "res_model"],
+                        { order: "date_deadline asc" }
+                    );
+                }
+            }
+
+            // Also check activities on the partner itself
+            const partnerModelData = await this.orm.searchRead(
+                "ir.model",
+                [["model", "=", "res.partner"]],
+                ["id"],
+                { limit: 1 }
+            );
+
+            if (partnerModelData.length) {
+                const partnerActivities = await this.orm.searchRead(
+                    "mail.activity",
+                    [
+                        ["res_model_id", "=", partnerModelData[0].id],
+                        ["res_id", "=", partnerId],
+                    ],
+                    ["summary", "note", "date_deadline", "activity_type_id", "user_id", "res_id", "res_model"],
+                    { order: "date_deadline asc" }
+                );
+                activities = [...activities, ...partnerActivities];
+            }
+
+            // Classify each activity
+            activities.forEach(act => {
+                if (act.date_deadline < today) {
+                    act._status = 'overdue';
+                } else if (act.date_deadline === today) {
+                    act._status = 'today';
+                } else {
+                    act._status = 'planned';
+                }
+            });
+
+            // Sort: overdue first, then today, then planned
+            const order = { overdue: 0, today: 1, planned: 2 };
+            activities.sort((a, b) => (order[a._status] - order[b._status]) || a.date_deadline.localeCompare(b.date_deadline));
+
+            this.state.contactActivities = activities;
+        } catch (e) {
+            console.error("Failed to load activities", e);
+            this.state.contactActivities = [];
+        }
+        this.state.loadingActivities = false;
+    }
+
+    async markActivityDone(activityId) {
+        try {
+            await this.orm.call("mail.activity", "action_done", [activityId]);
+            this.notification.add("Actividad completada", { type: "success" });
+            // Reload activities
+            if (this.state.selectedConversation) {
+                await this.loadContactActivities(this.state.selectedConversation);
+            }
+        } catch (e) {
+            console.error("Failed to mark activity done", e);
+            this.notification.add("Error al completar actividad", { type: "danger" });
+        }
+    }
+
+    async openActivity(activityId) {
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "mail.activity",
+            res_id: activityId,
+            views: [[false, "form"]],
+            target: "new",
+        }, {
+            onClose: async () => {
+                if (this.state.selectedConversation) {
+                    await this.loadContactActivities(this.state.selectedConversation);
+                }
+            }
+        });
+    }
+
+    getOppStageColor(stageName) {
+        const name = (stageName || "").toLowerCase();
+        if (name.includes("new") || name.includes("nuev") || name.includes("nov")) return "#3B82F6";
+        if (name.includes("qualif") || name.includes("calific")) return "#06B6D4";
+        if (name.includes("propos") || name.includes("propues")) return "#F59E0B";
+        if (name.includes("won") || name.includes("ganad")) return "#10B981";
+        if (name.includes("lost") || name.includes("perdid")) return "#EF4444";
+        return "#8B5CF6";
+    }
+
+    formatCurrency(amount) {
+        if (!amount && amount !== 0) return "0,00";
+        return new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+    }
+
+    // ──── SALES TAB ────
+    async loadContactSales(conv) {
+        const partnerId = conv?.partner_id?.[0];
+        if (!partnerId) {
+            this.state.contactQuotations = [];
+            this.state.contactOrders = [];
+            this.state.salesTotalQuoted = 0;
+            this.state.salesTotalOrdered = 0;
+            return;
+        }
+        this.state.loadingSales = true;
+        try {
+            const allSales = await this.orm.searchRead(
+                "sale.order",
+                [["partner_id", "=", partnerId]],
+                ["name", "state", "amount_total", "date_order", "create_date", "user_id", "order_line"],
+                { order: "create_date desc", limit: 20 }
+            );
+            this.state.contactQuotations = allSales.filter(s => ["draft", "sent"].includes(s.state));
+            this.state.contactOrders = allSales.filter(s => ["sale", "done"].includes(s.state));
+            this.state.salesTotalQuoted = this.state.contactQuotations.reduce((sum, q) => sum + (q.amount_total || 0), 0);
+            this.state.salesTotalOrdered = this.state.contactOrders.reduce((sum, o) => sum + (o.amount_total || 0), 0);
+        } catch (e) {
+            console.error("Failed to load sales", e);
+            this.state.contactQuotations = [];
+            this.state.contactOrders = [];
+        }
+        this.state.loadingSales = false;
+    }
+
+    async openSaleOrder(orderId) {
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "sale.order",
+            res_id: orderId,
+            views: [[false, "form"]],
+            target: "new",
+        });
+    }
+
+    async createQuotation() {
+        if (!this.state.selectedConversation) return;
+        const conv = this.state.selectedConversation;
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "sale.order",
+            views: [[false, "form"]],
+            target: "new",
+            context: {
+                default_partner_id: conv.partner_id?.[0],
+            }
+        }, {
+            onClose: async () => {
+                await this._refreshConversationAndCRM(conv.id);
+            }
+        });
+    }
+
+    getOrderStateLabel(state) {
+        const labels = { draft: "Borrador", sent: "Enviado", sale: "Pedido", done: "Completado", cancel: "Cancelado" };
+        return labels[state] || state;
+    }
+
+    getOrderStateColor(state) {
+        const colors = { draft: "#6B7280", sent: "#3B82F6", sale: "#10B981", done: "#059669", cancel: "#EF4444" };
+        return colors[state] || "#8B5CF6";
+    }
+
+    // ──── CUSTOMER 360° STATS ────
+    async loadCustomerStats(conv) {
+        const stats = {
+            totalMessages: 0,
+            lifetimeValue: 0,
+            pipelineValue: 0,
+            lastOrderDate: null,
+            daysSinceLastOrder: null,
+            customerStatus: "new",
+            totalOrders: 0,
+        };
+
+        try {
+            // Total messages in this conversation
+            stats.totalMessages = (this.state.messages || []).length;
+
+            // Wait for sales data to be ready
+            const partnerId = conv?.partner_id?.[0];
+            if (partnerId) {
+                // Lifetime value from confirmed orders
+                const orders = this.state.contactOrders || [];
+                stats.totalOrders = orders.length;
+                stats.lifetimeValue = orders.reduce((sum, o) => sum + (o.amount_total || 0), 0);
+
+                // Last order date
+                if (orders.length > 0) {
+                    const sorted = [...orders].sort((a, b) => (b.date_order || "").localeCompare(a.date_order || ""));
+                    stats.lastOrderDate = sorted[0].date_order;
+                    if (stats.lastOrderDate) {
+                        const lastDate = new Date(stats.lastOrderDate);
+                        const today = new Date();
+                        stats.daysSinceLastOrder = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+                    }
+                }
+
+                // Pipeline value (open opps + quotations)
+                const opps = this.state.contactOpportunities || [];
+                const quotes = this.state.contactQuotations || [];
+                stats.pipelineValue = opps.reduce((sum, o) => sum + (o.expected_revenue || 0), 0)
+                    + quotes.reduce((sum, q) => sum + (q.amount_total || 0), 0);
+
+                // Customer status classification
+                if (stats.lifetimeValue > 5000) {
+                    stats.customerStatus = "vip";
+                } else if (stats.daysSinceLastOrder !== null && stats.daysSinceLastOrder <= 60) {
+                    stats.customerStatus = "active";
+                } else if (stats.daysSinceLastOrder !== null && stats.daysSinceLastOrder > 60) {
+                    stats.customerStatus = "inactive";
+                } else if (stats.totalOrders === 0) {
+                    stats.customerStatus = "new";
+                } else {
+                    stats.customerStatus = "active";
+                }
+            }
+        } catch (e) {
+            console.error("Failed to compute customer stats", e);
+        }
+
+        this.state.customerStats = stats;
+    }
+
+    getCustomerStatusLabel(status) {
+        const labels = { vip: "VIP", active: "Activo", inactive: "Inactivo", new: "Nuevo" };
+        return labels[status] || status;
+    }
+
+    getCustomerStatusColor(status) {
+        const colors = { vip: "#F59E0B", active: "#10B981", inactive: "#EF4444", new: "#3B82F6" };
+        return colors[status] || "#6B7280";
+    }
+
+    async createOdooTask() {
+        if (!this.state.selectedConversation) return;
+        const conv = this.state.selectedConversation;
+
+        // Determine which record to attach the activity to
+        let resModel = "res.partner";
+        let resId = conv.partner_id?.[0];
+
+        // If there are CRM opportunities, link activity to the first one
+        if (this.state.contactOpportunities && this.state.contactOpportunities.length > 0) {
+            resModel = "crm.lead";
+            resId = this.state.contactOpportunities[0].id;
+        }
+
+        if (!resId) {
+            this.notification.add("No hay contacto vinculado para crear actividad", { type: "warning" });
+            return;
+        }
+
+        // Get the res_model id for mail.activity
+        const modelIds = await this.orm.call("ir.model", "search_read", [], {
+            domain: [["model", "=", resModel]],
+            fields: ["id"],
+            limit: 1,
+        });
+
+        if (!modelIds.length) return;
+
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "mail.activity",
+            views: [[false, "form"]],
+            target: "new",
+            context: {
+                default_res_model_id: modelIds[0].id,
+                default_res_id: resId,
+                default_user_id: this.user.userId,
+                default_summary: `WhatsApp - ${conv.computed_name || conv.phone}`,
+                default_note: `Conversación WhatsApp: ${conv.phone}`,
+            }
+        }, {
+            onClose: async () => {
+                await this._refreshConversationAndCRM(conv.id);
+            }
+        });
+    }
+
+    async registerCall() {
+        if (!this.state.selectedConversation) return;
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "crm.phonecall",
+            views: [[false, "form"]],
+            target: "new",
+            context: {
+                default_name: `Chamada - ${this.state.selectedConversation.computed_name || this.state.selectedConversation.phone}`,
                 default_partner_id: this.state.selectedConversation.partner_id?.[0],
             }
         });
@@ -1254,7 +2169,8 @@ export class BaderInboxMain extends Component {
 
     async viewPartner() {
         if (!this.state.selectedConversation) return;
-        const partnerId = this.state.selectedConversation.partner_id?.[0];
+        const conv = this.state.selectedConversation;
+        const partnerId = conv.partner_id?.[0];
 
         if (partnerId) {
             this.action.doAction({
@@ -1263,6 +2179,10 @@ export class BaderInboxMain extends Component {
                 res_id: partnerId,
                 views: [[false, "form"]],
                 target: "new",
+            }, {
+                onClose: async () => {
+                    await this._refreshConversationAndCRM(conv.id);
+                }
             });
         } else {
             this.action.doAction({
@@ -1271,10 +2191,57 @@ export class BaderInboxMain extends Component {
                 views: [[false, "form"]],
                 target: "new",
                 context: {
-                    default_name: this.state.selectedConversation.computed_name,
-                    default_phone: this.state.selectedConversation.phone,
+                    default_name: conv.computed_name,
+                    default_phone: conv.phone,
+                }
+            }, {
+                onClose: async () => {
+                    // Auto-link partner to conversation by phone match
+                    await this.orm.call(
+                        "bader.inbox.conversation",
+                        "auto_link_partner",
+                        [conv.id]
+                    );
+                    await this._refreshConversationAndCRM(conv.id);
                 }
             });
+        }
+    }
+
+    // ──── REFRESH AFTER CRM DIALOG ────
+    async _refreshConversationAndCRM(conversationId) {
+        try {
+            // Re-read conversation from DB to pick up partner_id changes
+            const convs = await this.orm.searchRead(
+                "bader.inbox.conversation",
+                [["id", "=", conversationId]],
+                ["computed_name", "phone", "partner_id", "channel_id",
+                    "unread_count", "state", "assigned_user_id", "tag_ids",
+                    "ai_lead_score", "ai_lead_temperature", "ai_resolution",
+                    "ai_escalation_reason", "ai_response_count"],
+                { limit: 1 }
+            );
+            if (convs.length) {
+                const updated = convs[0];
+                // Update in conversation list
+                const idx = this.state.conversations.findIndex(c => c.id === conversationId);
+                if (idx >= 0) {
+                    Object.assign(this.state.conversations[idx], updated);
+                }
+                // Update selected conversation
+                if (this.state.selectedConversation?.id === conversationId) {
+                    Object.assign(this.state.selectedConversation, updated);
+                }
+                // Reload CRM and sales data with fresh partner_id
+                await Promise.all([
+                    this.loadContactOpportunities(updated),
+                    this.loadContactSales(updated),
+                    this.loadContactActivities(updated),
+                ]);
+                this.loadCustomerStats(updated);
+            }
+        } catch (e) {
+            console.error("Failed to refresh CRM data", e);
         }
     }
 
@@ -1330,6 +2297,7 @@ export class BaderInboxMain extends Component {
 
                 // Desktop notification for incoming messages
                 if (payload.message && payload.message.direction === "in") {
+                    this._playNotificationSound();
                     const convName = payload.contact_name || payload.phone || "Nova mensagem";
                     const body = payload.message.content || payload.message.message_type || "";
                     this._showDesktopNotification(convName, body, payload.conversation_id);
@@ -1409,6 +2377,74 @@ export class BaderInboxMain extends Component {
         } catch (e) {
             console.error("Error toggling tag:", e);
         }
+    }
+
+    async createTag() {
+        const name = (this.state.newTagName || "").trim();
+        if (!name) return;
+        // Duplicate check (case-insensitive)
+        const exists = this.state.allTags.find(t => t.name.toLowerCase() === name.toLowerCase());
+        if (exists) {
+            this.notification.add(`Tag "${name}" ya existe`, { type: "warning" });
+            // Auto-assign existing tag to conversation
+            if (this.state.selectedConversation) {
+                const convTags = this.state.selectedConversation.tag_ids || [];
+                if (!convTags.includes(exists.id)) {
+                    await this.toggleTag(this.state.selectedConversation.id, exists.id);
+                }
+            }
+            this.state.newTagName = "";
+            return;
+        }
+        try {
+            const newTagId = await this.orm.create("bader.inbox.tag", [{ name, color: this.state.newTagColor }]);
+            await this.loadTags();
+            this.state.newTagName = "";
+            // Auto-assign to current conversation
+            if (this.state.selectedConversation) {
+                await this.toggleTag(this.state.selectedConversation.id, newTagId[0] || newTagId);
+            }
+            this.notification.add(`Tag "${name}" creado`, { type: "success" });
+        } catch (e) {
+            console.error("Error creating tag:", e);
+            this.notification.add("Error al crear tag", { type: "danger" });
+        }
+    }
+
+    async deleteTag(tagId) {
+        try {
+            await this.orm.unlink("bader.inbox.tag", [tagId]);
+            await this.loadTags();
+            // Remove from current conversation if assigned
+            if (this.state.selectedConversation) {
+                const conv = this.state.selectedConversation;
+                if ((conv.tag_ids || []).includes(tagId)) {
+                    conv.tag_ids = conv.tag_ids.filter(t => t !== tagId);
+                    this.state.selectedConversation = { ...conv };
+                }
+            }
+            this.notification.add("Tag eliminado", { type: "info" });
+        } catch (e) {
+            console.error("Error deleting tag:", e);
+            this.notification.add("Error al eliminar tag", { type: "danger" });
+        }
+    }
+
+    get tagColors() {
+        return [
+            { index: 0, hex: "#6B7280", name: "Gris" },
+            { index: 1, hex: "#EF4444", name: "Rojo" },
+            { index: 2, hex: "#F97316", name: "Naranja" },
+            { index: 3, hex: "#EAB308", name: "Amarillo" },
+            { index: 4, hex: "#22C55E", name: "Verde" },
+            { index: 5, hex: "#06B6D4", name: "Cyan" },
+            { index: 6, hex: "#3B82F6", name: "Azul" },
+            { index: 7, hex: "#8B5CF6", name: "Lila" },
+            { index: 8, hex: "#EC4899", name: "Rosa" },
+            { index: 9, hex: "#14B8A6", name: "Teal" },
+            { index: 10, hex: "#A855F7", name: "Púrpura" },
+            { index: 11, hex: "#F43F5E", name: "Coral" },
+        ];
     }
 
     getTagName(tagId) {
@@ -1633,16 +2669,113 @@ export class BaderInboxMain extends Component {
         return this.getInitials(this.user.name || "U");
     }
 
+    // ──── PRODUCT CATALOG SEND ────
+    toggleProductCatalog() {
+        this.state.showProductCatalog = !this.state.showProductCatalog;
+        if (this.state.showProductCatalog) {
+            this.state.productSearchQuery = "";
+            this.state.productResults = [];
+        }
+    }
+
+    async searchCatalogProducts() {
+        const q = (this.state.productSearchQuery || "").trim();
+        if (q.length < 2) {
+            this.state.productResults = [];
+            return;
+        }
+        this.state.productSearching = true;
+        try {
+            const results = await this.orm.call(
+                "bader.inbox.conversation",
+                "search_catalog_products",
+                [],
+                { query: q, limit: 12 }
+            );
+            this.state.productResults = results;
+        } catch (e) {
+            console.error("Catalog search error:", e);
+            this.state.productResults = [];
+        }
+        this.state.productSearching = false;
+    }
+
+    async sendProductCard(product) {
+        if (!this.state.selectedConversation || this.state.sendingProduct) return;
+        this.state.sendingProduct = product.id;
+        try {
+            // Build formatted caption
+            let caption = `📦 *${product.name}*\n`;
+            if (product.ref) caption += `🏷️ SKU: ${product.ref}\n`;
+            caption += `━━━━━━━━━━━━━━━━━━\n`;
+            if (product.offer && product.offer > 0) {
+                caption += `💰 ~PVP: ${product.currency}${product.pvp.toFixed(2)}~\n`;
+                caption += `🔥 *Oferta: ${product.currency}${product.offer.toFixed(2)}*\n`;
+            } else {
+                caption += `💰 *Precio: ${product.currency}${product.pvp.toFixed(2)}*\n`;
+            }
+            if (product.stock > 0) {
+                caption += `✅ En stock\n`;
+            }
+            caption += `━━━━━━━━━━━━━━━━━━\n`;
+            caption += `🛒 Ver producto: ${product.url}`;
+
+            if (product.image) {
+                // Send as image with caption — image is raw base64 from Odoo
+                await this.orm.call(
+                    "bader.inbox.message",
+                    "send_message",
+                    [this.state.selectedConversation.id, caption, "image", product.image, `${product.ref || 'product'}.png`]
+                );
+            } else {
+                // No image — send as text
+                await this.orm.call(
+                    "bader.inbox.message",
+                    "send_message",
+                    [this.state.selectedConversation.id, caption, "text"]
+                );
+            }
+
+            this.state.showProductCatalog = false;
+            this.notification.add(_t("Producto enviado"), { type: "success" });
+            await this.loadMessages(this.state.selectedConversation.id);
+        } catch (e) {
+            console.error("Send product error:", e);
+            this.notification.add(_t("Error al enviar producto"), { type: "danger" });
+        }
+        this.state.sendingProduct = null;
+    }
+
+    onCatalogSearchInput(ev) {
+        clearTimeout(this._catalogSearchTimeout);
+        this.state.productSearchQuery = ev.target.value;
+        this._catalogSearchTimeout = setTimeout(() => this.searchCatalogProducts(), 350);
+    }
+
+    onCatalogSearchKeydown(ev) {
+        if (ev.key === "Enter") {
+            ev.preventDefault();
+            clearTimeout(this._catalogSearchTimeout);
+            this.searchCatalogProducts();
+        }
+    }
+
     // ──── AI AGENT TOGGLE ────
     async toggleAI() {
         const conv = this.state.selectedConversation;
         if (!conv) return;
         const newVal = !conv.ai_active;
         try {
-            await this.orm.write("bader.inbox.conversation", [conv.id], {
-                ai_active: newVal,
-            });
+            const writeVals = { ai_active: newVal };
+            // When activating AI, clear assignment so agent can respond
+            if (newVal) {
+                writeVals.assigned_user_id = false;
+            }
+            await this.orm.write("bader.inbox.conversation", [conv.id], writeVals);
             conv.ai_active = newVal;
+            if (newVal) {
+                conv.assigned_user_id = false;
+            }
             this.state.selectedConversation = { ...conv };
         } catch (e) {
             console.error("Toggle AI error:", e);

@@ -13,7 +13,7 @@ class BaderInboxMessage(models.Model):
     
     _name = "bader.inbox.message"
     _description = "Bader Inbox Message"
-    _order = "create_date asc"
+    _order = "create_date asc, id asc"
 
     conversation_id = fields.Many2one(
         "bader.inbox.conversation", string="Conversation",
@@ -154,4 +154,11 @@ class BaderInboxMessage(models.Model):
             _logger.error(f"Send message error: {e}")
             message.status = "failed"
         
+        # F25: Audit log
+        self.env["bader.inbox.audit.log"].log_action(
+            "message_sent",
+            conversation_id=conversation_id,
+            details=f"Type: {msg_type}, Preview: {(content or '')[:50]}"
+        )
+
         return message

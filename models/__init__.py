@@ -12,3 +12,4 @@ from . import scheduled_message
 from . import settings
 from . import template
 from . import ai_assistant
+from . import audit_log

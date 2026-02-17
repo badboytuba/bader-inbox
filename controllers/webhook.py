@@ -399,8 +399,14 @@ class BaderInboxWebhook(http.Controller):
                 except Exception:
                     pass
 
+            # Send bus notification for ALL messages (incoming + outgoing from phone)
+            self._send_bus_notification(conversation, new_message, push_name, phone)
+
             if direction == "in":
-                self._send_bus_notification(conversation, new_message, push_name, phone)
+                # Auto-reopen resolved conversations when customer replies
+                if conversation.state == "resolved":
+                    conversation.sudo().write({"state": "open"})
+                    _logger.info(f"Auto-reopened resolved conversation {conversation.id}")
                 self._trigger_chatbot(conversation, new_message)
                 # AI Agent auto-reply
                 self._trigger_ai_agent(channel, conversation, content)
@@ -497,43 +503,58 @@ class BaderInboxWebhook(http.Controller):
         """Check and execute AI Agent auto-reply"""
         try:
             if not message_text:
+                _logger.info("AI Agent skipped: empty message_text")
                 return
 
             AIAgent = request.env["bader.inbox.ai_assistant"].sudo()
             agent = AIAgent._get_agent_for_channel(channel.id)
             if not agent:
+                _logger.info(f"AI Agent skipped: no agent configured for channel {channel.id}")
                 return
 
             # Check if AI is active for this conversation
             if not conversation.ai_active:
+                _logger.info(f"AI Agent skipped: ai_active=False for conv {conversation.id}")
                 return
 
             # Check if conversation is assigned to human
             if agent.only_unassigned and conversation.assigned_user_id:
+                _logger.info(f"AI Agent skipped: conv {conversation.id} assigned to user {conversation.assigned_user_id.id}")
                 return
 
             # Check schedule (business hours)
             if not agent.is_within_schedule():
-                _logger.debug("AI Agent skipped: outside schedule")
+                _logger.info("AI Agent skipped: outside schedule")
                 return
 
             # Process with AI
+            _logger.info(f"AI Agent processing: conv={conversation.id}, text='{message_text[:80]}'")
             result = agent.process_message(conversation.id, message_text)
-            if result.get("skip") or result.get("error"):
-                _logger.debug(f"AI Agent skipped: {result}")
+            _logger.info(f"AI Agent result: {result}")
+            
+            if result.get("skip"):
+                _logger.info(f"AI Agent skipped: {result.get('reason', 'unknown')}")
                 return
-
-            response = result.get("response", "")
+            if result.get("error"):
+                _logger.warning(f"AI Agent error result: {result.get('error')}")
+                # Still try to send fallback if available
+                response = result.get("response", "")
+                if not response:
+                    return
+            else:
+                response = result.get("response", "")
+            
             if not response:
+                _logger.info("AI Agent: no response generated")
                 return
 
             # Send response via Evolution API
             Message = request.env["bader.inbox.message"].sudo()
             Message.send_message(conversation.id, response, msg_type="text")
-            _logger.info(f"AI Agent replied to conversation {conversation.id}")
+            _logger.info(f"AI Agent replied to conversation {conversation.id}: '{response[:80]}'")
 
         except Exception as e:
-            _logger.warning(f"AI Agent error: {e}")
+            _logger.error(f"AI Agent exception: {e}", exc_info=True)
 
     def _parse_message_content(self, content):
         """Parse message content from API format

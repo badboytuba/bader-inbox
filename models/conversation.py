@@ -26,7 +26,7 @@ class BaderInboxConversation(models.Model):
     # Channel
     channel_id = fields.Many2one(
         "bader.inbox.channel", string="Channel",
-        required=True, ondelete="cascade"
+        ondelete="set null", index=True
     )
     
     # Messages
@@ -60,6 +60,38 @@ class BaderInboxConversation(models.Model):
     # AI Agent
     ai_active = fields.Boolean(string="AI Active", default=True,
         help="Whether the AI agent auto-responds in this conversation")
+
+    # AI Lead Qualification
+    ai_lead_score = fields.Integer(string="AI Lead Score", default=0,
+        help="Lead score 0-100 based on AI conversation analysis")
+    ai_lead_temperature = fields.Selection([
+        ("cold", "🧊 Cold"),
+        ("warm", "🌤️ Warm"),
+        ("hot", "🔥 Hot"),
+    ], string="Lead Temperature", compute="_compute_lead_temperature", store=True)
+
+    # AI Analytics
+    ai_response_count = fields.Integer(string="AI Responses", default=0)
+    ai_tools_used = fields.Text(string="AI Tools Used",
+        help="JSON tracking of tool usage counts")
+    ai_resolution = fields.Selection([
+        ("pending", "Pending"),
+        ("resolved", "Resolved by AI"),
+        ("escalated", "Escalated to Human"),
+    ], string="AI Resolution", default="pending")
+
+    # AI Escalation
+    ai_escalation_reason = fields.Text(string="Escalation Reason")
+
+    @api.depends("ai_lead_score")
+    def _compute_lead_temperature(self):
+        for rec in self:
+            if rec.ai_lead_score >= 60:
+                rec.ai_lead_temperature = "hot"
+            elif rec.ai_lead_score >= 25:
+                rec.ai_lead_temperature = "warm"
+            else:
+                rec.ai_lead_temperature = "cold"
     
     # Pipeline assignments
     pipeline_assignment_ids = fields.One2many(
@@ -106,10 +138,38 @@ class BaderInboxConversation(models.Model):
 
     @api.model
     def get_or_create(self, channel_id, phone, whatsapp_id=None, contact_name=None):
-        """Get existing or create new conversation"""
+        """Get existing or create new conversation.
+        
+        Uses PostgreSQL advisory lock to prevent race conditions when
+        multiple webhooks arrive simultaneously for the same phone+channel.
+        
+        Priority:
+        1. Existing conversation for this channel + phone
+        2. Orphaned conversation (same phone, no channel) — re-link it
+        3. Create new conversation
+        """
         phone = self._clean_phone(phone)
-        domain = [("channel_id", "=", channel_id), ("phone", "=", phone)]
-        conversation = self.search(domain, limit=1)
+        if not phone:
+            return self.browse()
+        
+        # Advisory lock: serialize concurrent requests for same channel+phone
+        # Uses a hash of (channel_id, phone) as the lock key
+        lock_key = hash((channel_id, phone)) % (2**31)
+        self.env.cr.execute("SELECT pg_advisory_xact_lock(%s)", [lock_key])
+        
+        # 1. Try exact match: same channel + phone
+        conversation = self.search(
+            [("channel_id", "=", channel_id), ("phone", "=", phone)], limit=1
+        )
+        
+        # 2. Re-link orphaned conversation (channel was deleted)
+        if not conversation:
+            conversation = self.search(
+                [("channel_id", "=", False), ("phone", "=", phone)], limit=1
+            )
+            if conversation:
+                conversation.write({"channel_id": channel_id})
+                _logger.info(f"Re-linked orphaned conversation {conversation.id} (phone={phone}) to channel {channel_id}")
         
         if not conversation:
             # Use last 9 digits for flexible matching against formatted partner phones
@@ -118,13 +178,23 @@ class BaderInboxConversation(models.Model):
                 "|", ("phone", "ilike", search_phone), ("mobile", "ilike", search_phone)
             ], limit=1)
             
-            conversation = self.create({
-                "channel_id": channel_id,
-                "phone": phone,
-                "whatsapp_id": whatsapp_id,
-                "contact_name": contact_name,
-                "partner_id": partner.id if partner else False,
-            })
+            try:
+                conversation = self.create({
+                    "channel_id": channel_id,
+                    "phone": phone,
+                    "whatsapp_id": whatsapp_id,
+                    "contact_name": contact_name,
+                    "partner_id": partner.id if partner else False,
+                })
+            except Exception as e:
+                # Unique violation fallback: another concurrent request created it
+                _logger.warning(f"Create failed (likely race condition), retrying search: {e}")
+                self.env.cr.rollback()
+                conversation = self.search(
+                    [("channel_id", "=", channel_id), ("phone", "=", phone)], limit=1
+                )
+                if not conversation:
+                    raise
         elif contact_name and not conversation.contact_name:
             conversation.contact_name = contact_name
         
@@ -251,6 +321,57 @@ class BaderInboxConversation(models.Model):
         self.ensure_one()
         self.state = "open"
 
+    def auto_link_partner(self):
+        """Auto-link partner to conversation by phone match.
+        
+        When multiple partner matches exist, prefer the one
+        with existing CRM leads or sale orders.
+        """
+        self.ensure_one()
+        conv = self.sudo()
+        if conv.partner_id:
+            return True  # Already linked or doesn't exist
+        
+        phone = conv.phone
+        if not phone:
+            return False
+        
+        # Normalize: strip +, spaces, dashes
+        clean = ''.join(c for c in phone if c.isdigit())
+        if len(clean) < 6:
+            return False
+        
+        # Search for ALL partners with matching phone or mobile
+        Partner = self.env["res.partner"].sudo()
+        partners = Partner.search([
+            "|", "|", "|",
+            ("phone", "like", clean[-9:]),
+            ("mobile", "like", clean[-9:]),
+            ("phone", "like", phone),
+            ("mobile", "like", phone),
+        ], limit=10)
+        
+        if not partners:
+            return False
+        
+        # If multiple matches, prefer the one with CRM/sales data
+        best = partners[0]
+        if len(partners) > 1:
+            CrmLead = self.env["crm.lead"].sudo()
+            SaleOrder = self.env["sale.order"].sudo()
+            for p in partners:
+                has_crm = CrmLead.search_count([("partner_id", "=", p.id)], limit=1)
+                has_sales = SaleOrder.search_count([("partner_id", "=", p.id)], limit=1)
+                if has_crm or has_sales:
+                    best = p
+                    break
+        
+        conv.partner_id = best.id
+        if conv.computed_name == conv.phone or not conv.contact_name:
+            conv.contact_name = best.name
+        _logger.info(f"Auto-linked partner {best.name} (ID {best.id}) to conversation {conv.id}")
+        return True
+
     def action_create_opportunity(self):
         """Create CRM opportunity"""
         self.ensure_one()
@@ -355,6 +476,64 @@ class BaderInboxConversation(models.Model):
             "activity": activity,
             "top_agents": top_agents,
         }
+
+
+    @api.model
+    def search_catalog_products(self, query="", limit=12):
+        """Search products for catalog send feature — returns image + prices + URL."""
+        Product = self.env["product.product"].sudo()
+        domain = [
+            ("sale_ok", "=", True),
+            ("active", "=", True),
+            "|", "|",
+            ("name", "ilike", query),
+            ("default_code", "ilike", query),
+            ("barcode", "ilike", query),
+        ]
+        products = Product.search(domain, limit=limit, order="name asc")
+        results = []
+        base_url = "https://qas.bader4business.com"
+        for p in products:
+            tmpl = p.product_tmpl_id
+            # Build website slug
+            slug = ""
+            if hasattr(tmpl, "website_url") and tmpl.website_url:
+                slug = tmpl.website_url
+            else:
+                # Fallback: build from template id
+                slug = "/shop/product/%d" % tmpl.id
+
+            # Get image (use image_256 for thumbnails)
+            image = ""
+            for img_field in ("image_256", "image_512", "image_1920"):
+                val = getattr(p, img_field, None)
+                if val:
+                    image = val.decode("utf-8") if isinstance(val, bytes) else val
+                    break
+
+            # Prices
+            pvp = p.list_price or 0.0
+            offer = 0.0
+            if hasattr(p, "offer_price") and p.offer_price:
+                offer = p.offer_price
+            elif hasattr(tmpl, "compare_list_price") and tmpl.compare_list_price and tmpl.compare_list_price > pvp:
+                # Odoo standard: compare_list_price is the "was" price
+                offer = pvp
+                pvp = tmpl.compare_list_price
+
+            results.append({
+                "id": p.id,
+                "name": p.name,
+                "ref": p.default_code or "",
+                "pvp": pvp,
+                "offer": offer,
+                "currency": p.currency_id.symbol or "€",
+                "image": image,
+                "url": base_url + slug,
+                "stock": p.qty_available if hasattr(p, "qty_available") else 0,
+                "category": p.categ_id.name if p.categ_id else "",
+            })
+        return results
 
 
 class BaderInboxTag(models.Model):

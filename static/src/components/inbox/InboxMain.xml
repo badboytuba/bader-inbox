@@ -4,42 +4,52 @@
         <div class="bader-inbox-container d-flex">
             <!-- LEFT PANEL: Conversations -->
             <div class="bader-inbox-left">
-                <div class="panel-header">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h3 class="mb-0">Conversas</h3>
-                        <button class="btn btn-sm btn-success" t-on-click="openAddChannelModal" title="Adicionar Canal WhatsApp">
-                            <i class="fa fa-plus"/> Canal
-                        </button>
-                        <button class="btn btn-sm btn-new-conversation" t-on-click="openNewConversationModal" title="Nova Conversa">
-                            <i class="fa fa-comment"/> +
-                        </button>
+                <div class="panel-header-v2">
+                    <!-- Top bar: Title + Actions -->
+                    <div class="panel-top-bar">
+                        <h3 class="panel-title">Conversaciones</h3>
+                        <div class="panel-actions">
+                            <button class="dark-mode-toggle" t-on-click="toggleDarkMode" t-att-title="state.darkMode ? 'Modo Claro' : 'Modo Oscuro'">
+                                <t t-if="state.darkMode">☀️</t>
+                                <t t-else="">🌙</t>
+                            </button>
+                            <button class="panel-action-btn" t-on-click="openAddChannelModal" title="Añadir Canal WhatsApp">
+                                <i class="fa fa-plus"/>
+                            </button>
+                            <button class="panel-action-btn accent" t-on-click="openNewConversationModal" title="Nueva Conversación">
+                                <i class="fa fa-comment"/>
+                            </button>
+                        </div>
                     </div>
-                    
-                    <!-- Channel Status -->
-                    <div t-if="state.channels.length" class="channel-status mb-2">
-                        <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
-                            <span t-attf-class="badge {{ ch.state === 'connected' ? 'bg-success' : 'bg-warning' }} me-1">
-                                <i class="fa fa-whatsapp"/> <t t-esc="ch.name"/>
-                            </span>
-                        </t>
-                    </div>
-                    <div t-else="" class="alert alert-info py-2 small">
-                        <i class="fa fa-info-circle"/> Nenhum canal conectado. Clique em "+ Canal" para adicionar.
-                    </div>
-                    
-                    <div class="filter-tabs">
-                        <button t-attf-class="filter-tab {{ state.filter === 'all' ? 'active' : '' }}" t-on-click="() => this.setFilter('all')">
-                            Todas
-                        </button>
-                        <button t-attf-class="filter-tab {{ state.filter === 'unread' ? 'active' : '' }}" t-on-click="() => this.setFilter('unread')">
-                            <i class="fa fa-circle text-success me-1" style="font-size: 8px;"/> Não lidas
-                        </button>
-                        <button t-attf-class="filter-tab {{ state.filter === 'mine' ? 'active' : '' }}" t-on-click="() => this.setFilter('mine')">
-                            Minhas
+
+                    <!-- Search Bar -->
+                    <div class="panel-search">
+                        <i class="fa fa-search panel-search-icon"/>
+                        <input type="text" class="panel-search-input" placeholder="Buscar conversación..."
+                               t-model="state.searchQuery" t-on-input="onSearchInput"/>
+                        <button t-if="state.searchQuery" class="panel-search-clear" t-on-click="() => { this.state.searchQuery = ''; }">
+                            <i class="fa fa-times"/>
                         </button>
                     </div>
 
-                    <!-- Tag Filters -->
+                    <!-- Channel Dropdown -->
+                    <div t-if="state.channels.length" class="channel-dropdown-wrapper">
+                        <select class="channel-dropdown" t-on-change="onChannelDropdownChange" t-att-value="state.channelFilter || ''">
+                            <option value="">📱 Todos los canales</option>
+                            <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
+                                <option t-att-value="ch.id" t-att-selected="state.channelFilter === ch.id">
+                                    <t t-if="ch.state === 'connected'">🟢</t>
+                                    <t t-else="">🟡</t>
+                                    <t t-esc="ch.name"/>
+                                </option>
+                            </t>
+                        </select>
+                    </div>
+                    <div t-else="" class="channel-empty-notice">
+                        <i class="fa fa-info-circle"/> Ningún canal. <span class="channel-add-link" t-on-click="openAddChannelModal">+ Añadir</span>
+                    </div>
+
+                    <!-- Tag Filters (horizontal, scrollable) -->
                     <div t-if="state.allTags.length" class="tag-filters">
                         <t t-foreach="state.allTags" t-as="tag" t-key="tag.id">
                             <button t-attf-class="tag-filter-btn {{ state.activeTagFilter === tag.id ? 'active' : '' }}"
@@ -52,18 +62,50 @@
                     </div>
                 </div>
 
+                <!-- Split: Vertical Sidebar Filters + Conversations -->
+                <div class="panel-body-split">
+                    <!-- Vertical Filter Sidebar -->
+                    <div class="filter-sidebar">
+                        <button t-attf-class="filter-sidebar-btn {{ state.filter === 'all' ? 'active' : '' }}" 
+                                t-on-click="() => this.setFilter('all')" title="Todas">
+                            <i class="fa fa-comments"/>
+                            <span>Todas</span>
+                        </button>
+                        <button t-attf-class="filter-sidebar-btn {{ state.filter === 'unread' ? 'active' : '' }}" 
+                                t-on-click="() => this.setFilter('unread')" title="No leídas">
+                            <i class="fa fa-envelope"/>
+                            <span>NL</span>
+                            <span t-if="totalUnread" class="filter-badge" t-esc="totalUnread"/>
+                        </button>
+                        <button t-attf-class="filter-sidebar-btn {{ state.filter === 'mine' ? 'active' : '' }}" 
+                                t-on-click="() => this.setFilter('mine')" title="Mías">
+                            <i class="fa fa-user"/>
+                            <span>Mías</span>
+                        </button>
+                        <button t-attf-class="filter-sidebar-btn closed {{ state.filter === 'closed' ? 'active' : '' }}" 
+                                t-on-click="() => this.setFilter('closed')" title="Cerradas">
+                            <i class="fa fa-archive"/>
+                            <span>Cerr.</span>
+                        </button>
+                    </div>
+
                 <div class="conversations-list">
-                    <div t-if="state.loadingConversations" class="empty-state">
-                            <i class="fa fa-spinner fa-spin"/>
-                            <p>Carregando...</p>
+                    <div t-if="state.loadingConversations" class="skeleton-loading">
+                            <div class="skeleton-conversation" t-foreach="[1,2,3,4,5]" t-as="i" t-key="i">
+                                <div class="skeleton-avatar"/>
+                                <div class="skeleton-content">
+                                    <div class="skeleton-line w-60"/>
+                                    <div class="skeleton-line w-80"/>
+                                </div>
+                            </div>
                         </div>
                     <div t-elif="!filteredConversations.length" class="empty-state">
                             <i class="fa fa-inbox"/>
-                            <p>Nenhuma conversa</p>
+                            <p>Sin conversaciones</p>
                         </div>
                     <div t-else="" class="conversations-items">
                         <t t-foreach="filteredConversations" t-as="conv" t-key="conv.id">
-                            <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }}" 
+                            <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }} {{ conv.unread_count > 0 ? 'unread' : '' }}" 
                                  t-on-click="() => this.selectConversation(conv)">
                                 <div t-attf-class="conv-avatar {{ getAvatarColor(conv.id) }}">
                                     <t t-esc="getInitials(conv.computed_name || conv.phone)"/>
@@ -71,11 +113,11 @@
                                 </div>
                                 <div class="conv-content">
                                     <div class="conv-header">
-                                        <span class="conv-name" t-esc="conv.computed_name || conv.phone"/>
+                                        <span t-attf-class="conv-name {{ conv.unread_count > 0 ? 'fw-bold' : '' }}" t-esc="conv.computed_name || conv.phone"/>
                                         <span class="conv-time" t-esc="formatTime(conv.last_message_date)"/>
                                     </div>
                                     <div class="conv-preview">
-                                        <span class="conv-message" t-esc="conv.last_message || 'Nova conversa'"/>
+                                        <span class="conv-message" t-esc="conv.last_message || 'Nueva conversación'"/>
                                         <span t-if="conv.unread_count > 0" class="conv-badge" t-esc="conv.unread_count"/>
                                     </div>
                                     <div t-if="conv.tag_ids and conv.tag_ids.length" class="conv-tags">
@@ -90,6 +132,7 @@
                         </t>
                     </div>
                 </div>
+                </div> <!-- /panel-body-split -->
             </div>
 
             <!-- CENTER PANEL: Chat or Kanban -->
@@ -119,10 +162,14 @@
                         <div t-if="state.isDragOver" class="drop-zone-overlay">
                             <div class="drop-zone-content">
                                 <i class="fa fa-cloud-upload fa-3x"/>
-                                <p>Solte o arquivo aqui</p>
+                                <p>Suelta el archivo aquí</p>
                             </div>
                         </div>
                         <div class="chat-header">
+                            <!-- F5: Mobile back button -->
+                            <button class="mobile-back-btn" t-on-click="showMobileSidebar" title="Volver">
+                                <i class="fa fa-arrow-left"/>
+                            </button>
                             <div class="chat-contact">
                                 <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
                                     <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
@@ -136,18 +183,24 @@
                                 <button class="btn-chat-action" title="Buscar" t-on-click="toggleMessageSearch">
                                     <i class="fa fa-search"/>
                                 </button>
-                                <button class="btn-chat-action" title="Atribuir" t-on-click="assignConversation">
+                                <button class="btn-chat-action" title="Asignar" t-on-click="assignConversation">
                                     <i class="fa fa-user-plus"/>
                                 </button>
-                                <button class="btn-chat-action" title="Resolver" t-on-click="resolveConversation">
+                                <button class="btn-chat-action" title="Exportar CSV" t-on-click="exportConversation">
+                                    <i class="fa fa-download"/>
+                                </button>
+                                <button t-if="state.selectedConversation.state !== 'resolved'" class="btn-chat-action" title="Resolver" t-on-click="resolveConversation">
                                     <i class="fa fa-check"/>
                                 </button>
+                                <button t-else="" class="btn-chat-action" title="Reabrir" t-on-click="reopenConversation" style="color: #f59e0b;">
+                                    <i class="fa fa-undo"/>
+                                </button>
                                 <button t-attf-class="btn-chat-action btn-ai-toggle {{ state.selectedConversation.ai_active ? 'ai-on' : 'ai-off' }}"
-                                        t-att-title="state.selectedConversation.ai_active ? 'AI Ativo - Clique para desativar' : 'AI Inativo - Clique para ativar'"
+                                        t-att-title="state.selectedConversation.ai_active ? 'AI Activo - Clic para desactivar' : 'AI Inactivo - Clic para activar'"
                                         t-on-click="toggleAI">
                                     <span style="font-size: 16px;">🤖</span>
                                 </button>
-                                <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Esconder detalhes' : 'Ver detalhes'">
+                                <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Ocultar detalles' : 'Ver detalles'">
                                     <i class="fa fa-user"/>
                                 </button>
                             </div>
@@ -157,7 +210,7 @@
                         <div t-if="state.showMessageSearch" class="message-search-bar">
                             <div class="search-input-wrapper">
                                 <i class="fa fa-search"/>
-                                <input type="text" placeholder="Buscar mensagem..." 
+                                <input type="text" placeholder="Buscar mensaje..." 
                                        t-model="state.messageSearchQuery"
                                        t-on-keydown="onSearchKeydown"/>
                                 <span t-if="state.messageSearchResults.length" class="search-count">
@@ -178,8 +231,10 @@
                         </div>
 
                         <div class="chat-messages" t-ref="messagesContainer">
-                            <div t-if="state.loadingMessages" class="text-center p-4">
-                                <i class="fa fa-spinner fa-spin fa-2x"/>
+                            <div t-if="state.loadingMessages" class="skeleton-messages">
+                                <div class="skeleton-msg skeleton-incoming"><div class="skeleton-msg-line" style="width:70%"/><div class="skeleton-msg-line" style="width:50%"/></div>
+                                <div class="skeleton-msg skeleton-outgoing"><div class="skeleton-msg-line" style="width:60%"/><div class="skeleton-msg-line" style="width:40%"/></div>
+                                <div class="skeleton-msg skeleton-incoming"><div class="skeleton-msg-line" style="width:80%"/><div class="skeleton-msg-line" style="width:45%"/></div>
                             </div>
                             <div t-else="" class="messages-list">
                                 <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
@@ -233,7 +288,7 @@
                                                 <span t-if="msg.detected_language and msg.direction === 'in'" class="lang-badge" t-esc="msg.detected_language.toUpperCase()"/>
                                                 <!-- Translate button -->
                                                 <button t-if="msg.direction === 'in' and msg.content and state.aiEnabled" class="translate-btn" t-on-click="() => this.translateMessage(msg.id)"
-                                                        t-att-title="state.translations['show_' + msg.id] ? 'Ocultar tradução' : 'Traduzir'">
+                                                        t-att-title="state.translations['show_' + msg.id] ? 'Ocultar traducción' : 'Traducir'">
                                                     <i t-attf-class="fa {{ state.translations['translating_' + msg.id] ? 'fa-spinner fa-spin' : 'fa-language' }}"/>
                                                 </button>
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
@@ -244,6 +299,24 @@
                                                 </span>
                                                 <span t-else="" class="message-status-placeholder"/>
                                             </div>
+                                            <!-- F10/F11/F17: Message Actions Bar -->
+                                            <div class="msg-actions-bar">
+                                                <button class="msg-action-btn" title="Responder" t-on-click="() => this.setReplyTo(msg)">
+                                                    <i class="fa fa-reply"/>
+                                                </button>
+                                                <button class="msg-action-btn" title="Reaccionar" t-on-click="() => this.toggleReactionPicker(msg.id)">
+                                                    <span>😊</span>
+                                                </button>
+                                                <button class="msg-action-btn" title="Reenviar" t-on-click="() => this.forwardMessage(msg)">
+                                                    <i class="fa fa-share"/>
+                                                </button>
+                                            </div>
+                                            <!-- F11: Reaction display -->
+                                            <div t-if="msg.reactions" class="msg-reactions">
+                                                <t t-foreach="msg.reactions" t-as="reaction" t-key="reaction">
+                                                    <span class="msg-reaction-badge" t-esc="reaction"/>
+                                                </t>
+                                            </div>
                                         </div>
                                     </div>
                                 </t>
@@ -251,9 +324,19 @@
                         </div>
 
                         <div class="chat-composer">
+                            <!-- F10: Reply Preview -->
+                            <div t-if="state.replyingTo" class="reply-preview">
+                                <div class="reply-preview-content">
+                                    <span class="reply-preview-name" t-esc="state.replyingTo.direction === 'in' ? (state.selectedConversation.computed_name || state.selectedConversation.phone) : 'Tú'"/>
+                                    <span class="reply-preview-text" t-esc="(state.replyingTo.content || state.replyingTo.message_type || '').substring(0, 80)"/>
+                                </div>
+                                <button class="reply-preview-close" t-on-click="() => this.state.replyingTo = null">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
                             <!-- AI Suggestions -->
                             <div t-if="state.aiSuggestions.length" class="ai-suggestions">
-                                <span class="ai-label">✨ Sugestões AI</span>
+                                <span class="ai-label">✨ Sugerencias AI</span>
                                 <div class="ai-chips">
                                     <button t-foreach="state.aiSuggestions" t-as="suggestion" t-key="suggestion_index"
                                             class="ai-chip" t-on-click="() => this.useAISuggestion(suggestion)">
@@ -279,7 +362,7 @@
                             <div t-if="state.showQuickReplies" class="quick-reply-picker">
                                 <div class="qr-header">
                                     <i class="fa fa-bolt"/>
-                                    <span>Respostas Rápidas</span>
+                                    <span>Respuestas Rápidas</span>
                                 </div>
                                 <div class="qr-list">
                                     <t t-foreach="filteredQuickReplies()" t-as="qr" t-key="qr.id">
@@ -294,7 +377,7 @@
                                     </t>
                                     <div t-if="!filteredQuickReplies().length" class="qr-empty">
                                         <i class="fa fa-info-circle"/>
-                                        Nenhuma resposta rápida encontrada
+                                        No se encontraron respuestas rápidas
                                     </div>
                                 </div>
                             </div>
@@ -323,36 +406,125 @@
                                 <button class="btn-composer" title="Emoji" t-on-click="toggleEmojiPicker">
                                     <i class="fa fa-smile-o"/>
                                 </button>
-                                <button class="btn-composer" title="Anexar arquivo" t-on-click="triggerFileInput">
+                                <button class="btn-composer" title="Adjuntar archivo" t-on-click="triggerFileInput">
                                     <i class="fa fa-paperclip"/>
                                 </button>
-                                <button t-if="state.aiEnabled" class="btn-composer btn-ai" title="Sugestões AI" t-on-click="getAISuggestions"
+                                <button t-if="state.aiEnabled" class="btn-composer btn-ai" title="Sugerencias AI" t-on-click="getAISuggestions"
                                         t-att-disabled="state.loadingAI">
                                     <i t-attf-class="fa {{ state.loadingAI ? 'fa-spinner fa-spin' : 'fa-magic' }}"/>
+                                </button>
+                                <button class="btn-composer btn-catalog" title="Enviar producto" t-on-click="toggleProductCatalog">
+                                    <i class="fa fa-shopping-bag"/>
                                 </button>
                                 <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
                             </div>
                             <div class="composer-input">
-                                <textarea rows="1" placeholder="Escreva uma mensagem... (/ para respostas rápidas)" 
+                                <!-- F9: Voice Recording Indicator -->
+                                <div t-if="state.isRecording" class="voice-recording-indicator">
+                                    <span class="recording-dot"/>
+                                    <span class="recording-timer" t-esc="Math.floor(state.recordingTime / 60) + ':' + String(state.recordingTime % 60).padStart(2, '0')"/>
+                                    <button class="recording-cancel-btn" t-on-click="cancelVoiceRecording" title="Cancelar">
+                                        <i class="fa fa-times"/>
+                                    </button>
+                                </div>
+                                <textarea t-else="" rows="1" placeholder="Escribe un mensaje... (/ para respuestas rápidas)" 
                                     t-ref="composerTextarea"
                                     t-model="state.composerText" 
                                     t-on-keydown="onComposerKeydown"
                                     t-on-input="onComposerInput"/>
                             </div>
                             <div class="send-group">
-                                <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
-                                    <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
-                                </button>
-                                <button class="btn-schedule" t-on-click="toggleScheduleModal" title="Agendar mensagem"
-                                        t-att-disabled="!state.composerText.trim()">
-                                    <i class="fa fa-clock-o"/>
-                                </button>
+                                <!-- F9: Voice/Send toggle -->
+                                <t t-if="state.isRecording">
+                                    <button class="btn-send" t-on-click="stopVoiceRecording" title="Enviar audio">
+                                        <i class="fa fa-paper-plane"/>
+                                    </button>
+                                </t>
+                                <t t-else="">
+                                    <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
+                                        <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
+                                    </button>
+                                    <button t-attf-class="voice-recorder-btn {{ state.isRecording ? 'recording' : '' }}" 
+                                            t-on-click="startVoiceRecording" title="Grabar audio">
+                                        <i class="fa fa-microphone"/>
+                                    </button>
+                                    <button class="btn-schedule" t-on-click="toggleScheduleModal" title="Programar mensaje"
+                                            t-att-disabled="!state.composerText.trim()">
+                                        <i class="fa fa-clock-o"/>
+                                    </button>
+                                </t>
+                            </div>
+
+                            <!-- Product Catalog Modal -->
+                            <div t-if="state.showProductCatalog" class="product-catalog-modal">
+                                <div class="catalog-overlay" t-on-click="toggleProductCatalog"/>
+                                <div class="catalog-panel">
+                                    <div class="catalog-header">
+                                        <div class="catalog-title">
+                                            <i class="fa fa-shopping-bag"/> Catálogo de Productos
+                                        </div>
+                                        <button class="catalog-close" t-on-click="toggleProductCatalog">
+                                            <i class="fa fa-times"/>
+                                        </button>
+                                    </div>
+                                    <div class="catalog-search">
+                                        <div class="catalog-search-wrap">
+                                            <i class="fa fa-search"/>
+                                            <input type="text" placeholder="Buscar por nombre o SKU..."
+                                                   t-att-value="state.productSearchQuery"
+                                                   t-on-input="onCatalogSearchInput"
+                                                   t-on-keydown="onCatalogSearchKeydown"/>
+                                            <i t-if="state.productSearching" class="fa fa-spinner fa-spin search-spinner"/>
+                                        </div>
+                                    </div>
+                                    <div class="catalog-results">
+                                        <t t-if="state.productResults.length">
+                                            <t t-foreach="state.productResults" t-as="prod" t-key="prod.id">
+                                                <div class="product-card">
+                                                    <div class="product-card-img">
+                                                        <img t-if="prod.image" t-att-src="'data:image/png;base64,' + prod.image" t-att-alt="prod.name"/>
+                                                        <div t-else="" class="product-no-img">
+                                                            <i class="fa fa-camera"/>
+                                                        </div>
+                                                        <span t-if="prod.offer" class="product-badge-offer">OFERTA</span>
+                                                        <span t-if="prod.stock" class="product-badge-stock">En stock</span>
+                                                    </div>
+                                                    <div class="product-card-info">
+                                                        <div class="product-name" t-esc="prod.name"/>
+                                                        <div t-if="prod.ref" class="product-sku">SKU: <t t-esc="prod.ref"/></div>
+                                                        <div class="product-prices">
+                                                            <t t-if="prod.offer">
+                                                                <span class="price-old"><t t-esc="prod.currency"/><t t-esc="prod.pvp.toFixed(2)"/></span>
+                                                                <span class="price-offer"><t t-esc="prod.currency"/><t t-esc="prod.offer.toFixed(2)"/></span>
+                                                            </t>
+                                                            <t t-else="">
+                                                                <span class="price-current"><t t-esc="prod.currency"/><t t-esc="prod.pvp.toFixed(2)"/></span>
+                                                            </t>
+                                                        </div>
+                                                    </div>
+                                                    <button class="product-send-btn" t-on-click="() =&gt; this.sendProductCard(prod)"
+                                                            t-att-disabled="state.sendingProduct === prod.id">
+                                                        <i t-attf-class="fa {{ state.sendingProduct === prod.id ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
+                                                    </button>
+                                                </div>
+                                            </t>
+                                        </t>
+                                        <div t-elif="state.productSearchQuery.length &gt;= 2 and !state.productSearching" class="catalog-empty">
+                                            <i class="fa fa-search"/>
+                                            <span>No se encontraron productos</span>
+                                        </div>
+                                        <div t-else="" class="catalog-empty">
+                                            <i class="fa fa-shopping-bag"/>
+                                            <span>Escribe para buscar productos</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Schedule Message Modal -->
                             <div t-if="state.showScheduleModal" class="schedule-modal">
                                 <div class="schedule-modal-content">
-                                    <h5><i class="fa fa-clock-o"/> Agendar Mensagem</h5>
+                                    <h5><i class="fa fa-clock-o"/> Programar Mensaje</h5>
                                     <div class="schedule-fields">
                                         <input type="date" class="form-control form-control-sm" t-model="state.scheduleDate"/>
                                         <input type="time" class="form-control form-control-sm" t-model="state.scheduleTime"/>
@@ -360,7 +532,7 @@
                                     <div class="schedule-actions">
                                         <button class="btn btn-sm btn-outline-secondary" t-on-click="toggleScheduleModal">Cancelar</button>
                                         <button class="btn btn-sm btn-success" t-on-click="scheduleMessage">
-                                            <i class="fa fa-clock-o"/> Agendar
+                                            <i class="fa fa-clock-o"/> Programar
                                         </button>
                                     </div>
                                 </div>
@@ -372,7 +544,7 @@
                             <i class="fa fa-comments"/>
                         </div>
                         <h3>Bader Inbox</h3>
-                        <p>Selecione uma conversa para começar</p>
+                        <p>Selecciona una conversación para comenzar</p>
                         <div t-if="!state.channels.length" class="connect-cta">
                             <button class="btn btn-success btn-lg mt-3" t-on-click="openAddChannelModal">
                                 <i class="fa fa-whatsapp"/> Conectar WhatsApp
@@ -385,10 +557,10 @@
                 <div t-if="state.viewMode === 'dashboard'" class="dashboard-view">
                     <div t-if="state.loadingDashboard" class="text-center py-5">
                         <i class="fa fa-spinner fa-spin fa-3x"/>
-                        <p class="mt-2">Carregando dados...</p>
+                        <p class="mt-2">Cargando datos...</p>
                     </div>
                     <div t-elif="state.dashboardData" class="dashboard-content">
-                        <h3 class="dashboard-title"><i class="fa fa-bar-chart"/> Métricas do Inbox</h3>
+                        <h3 class="dashboard-title"><i class="fa fa-bar-chart"/> Métricas del Inbox</h3>
 
                         <!-- KPI Cards -->
                         <div class="kpi-grid">
@@ -396,72 +568,192 @@
                                 <div class="kpi-icon" style="background: rgba(239,68,68,0.15); color: #EF4444"><i class="fa fa-comments"/></div>
                                 <div class="kpi-data">
                                     <span class="kpi-value" t-esc="state.dashboardData.open_count"/>
-                                    <span class="kpi-label">Conversas Abertas</span>
+                                    <span class="kpi-label">Conversaciones Abiertas</span>
                                 </div>
                             </div>
                             <div class="kpi-card">
                                 <div class="kpi-icon" style="background: rgba(16,185,129,0.15); color: #10B981"><i class="fa fa-check-circle"/></div>
                                 <div class="kpi-data">
                                     <span class="kpi-value" t-esc="state.dashboardData.resolved_today"/>
-                                    <span class="kpi-label">Resolvidas Hoje</span>
+                                    <span class="kpi-label">Resueltas Hoy</span>
                                 </div>
                             </div>
                             <div class="kpi-card">
                                 <div class="kpi-icon" style="background: rgba(59,130,246,0.15); color: #3B82F6"><i class="fa fa-paper-plane"/></div>
                                 <div class="kpi-data">
                                     <span class="kpi-value" t-esc="state.dashboardData.sent_today"/>
-                                    <span class="kpi-label">Enviadas Hoje</span>
+                                    <span class="kpi-label">Enviadas Hoy</span>
                                 </div>
                             </div>
                             <div class="kpi-card">
                                 <div class="kpi-icon" style="background: rgba(245,158,11,0.15); color: #F59E0B"><i class="fa fa-inbox"/></div>
                                 <div class="kpi-data">
                                     <span class="kpi-value" t-esc="state.dashboardData.received_today"/>
-                                    <span class="kpi-label">Recebidas Hoje</span>
+                                    <span class="kpi-label">Recibidas Hoy</span>
+                                </div>
+                            </div>
+                            <!-- F23: Avg Response Time KPI -->
+                            <div class="kpi-card">
+                                <div class="kpi-icon" style="background: rgba(139,92,246,0.15); color: #8B5CF6"><i class="fa fa-clock-o"/></div>
+                                <div class="kpi-data">
+                                    <span class="kpi-value"><t t-esc="state.dashboardData.avg_response_time"/> min</span>
+                                    <span class="kpi-label">Tiempo Medio Respuesta</span>
+                                </div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="kpi-icon" style="background: rgba(6,182,212,0.15); color: #06B6D4"><i class="fa fa-envelope"/></div>
+                                <div class="kpi-data">
+                                    <span class="kpi-value" t-esc="state.dashboardData.total_messages_7d"/>
+                                    <span class="kpi-label">Mensajes (7d)</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Activity Chart (CSS bars) -->
-                        <div class="chart-section">
-                            <h4>📈 Atividade (7 Dias)</h4>
+                        <div t-if="state.dashboardData.activity and state.dashboardData.activity.length" class="chart-section">
+                            <h4>📈 Actividad (7 Días)</h4>
+                            <t t-set="maxActivity" t-value="Math.max(1, ...state.dashboardData.activity.map(d => d.received + d.sent))"/>
                             <div class="bar-chart">
                                 <t t-foreach="state.dashboardData.activity" t-as="day" t-key="day.day">
                                     <div class="bar-group">
                                         <div class="bar-stack">
-                                            <div class="bar bar-received" t-attf-style="height: {{ Math.min((day.received / (Math.max(...state.dashboardData.activity.map(d => d.received + d.sent)) || 1)) * 100, 100) }}%" t-att-title="'Recebidas: ' + day.received"/>
-                                            <div class="bar bar-sent" t-attf-style="height: {{ Math.min((day.sent / (Math.max(...state.dashboardData.activity.map(d => d.received + d.sent)) || 1)) * 100, 100) }}%" t-att-title="'Enviadas: ' + day.sent"/>
+                                            <div class="bar bar-received" t-attf-style="height: {{ Math.min((day.received / maxActivity) * 100, 100) }}%" t-att-title="'Recibidas: ' + day.received"/>
+                                            <div class="bar bar-sent" t-attf-style="height: {{ Math.min((day.sent / maxActivity) * 100, 100) }}%" t-att-title="'Enviadas: ' + day.sent"/>
                                         </div>
                                         <span class="bar-label" t-esc="day.day.slice(5)"/>
                                     </div>
                                 </t>
                             </div>
                             <div class="chart-legend">
-                                <span><span class="legend-dot" style="background: #3B82F6"/> Recebidas</span>
+                                <span><span class="legend-dot" style="background: #3B82F6"/> Recibidas</span>
                                 <span><span class="legend-dot" style="background: #10B981"/> Enviadas</span>
                             </div>
                         </div>
 
-                        <!-- Top Agents -->
-                        <div t-if="state.dashboardData.top_agents.length" class="agents-section">
-                            <h4>🏆 Top Agentes (7 dias)</h4>
-                            <div class="agent-list">
-                                <t t-foreach="state.dashboardData.top_agents" t-as="agent" t-key="agent.agent">
-                                    <div class="agent-row">
-                                        <span class="agent-name" t-esc="agent.agent"/>
-                                        <div class="agent-bar-wrap">
-                                            <div class="agent-bar" t-attf-style="width: {{ (agent.count / (state.dashboardData.top_agents[0]?.count || 1)) * 100 }}%"/>
-                                        </div>
-                                        <span class="agent-count" t-esc="agent.count"/>
+                        <!-- F21: Activity Heatmap -->
+                        <div t-if="state.dashboardData.heatmap" class="chart-section">
+                            <h4>🗓️ Mapa de Calor de Actividad (7 días)</h4>
+                            <div class="heatmap-container">
+                                <div class="heatmap-row heatmap-header">
+                                    <span class="heatmap-day-label"/>
+                                    <t t-foreach="Array.from({length: 24}, (_, i) => i)" t-as="h" t-key="h">
+                                        <span t-if="h % 3 === 0" class="heatmap-hour-label" t-esc="h + 'h'"/>
+                                        <span t-else="" class="heatmap-hour-label"/>
+                                    </t>
+                                </div>
+                                <t t-set="dayNames" t-value="['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']"/>
+                                <t t-foreach="[1,2,3,4,5,6,0]" t-as="dayIdx" t-key="dayIdx">
+                                    <div t-if="state.dashboardData.heatmap[dayIdx]" class="heatmap-row">
+                                        <span class="heatmap-day-label" t-esc="dayNames[dayIdx]"/>
+                                        <t t-foreach="state.dashboardData.heatmap[dayIdx]" t-as="count" t-key="count_index">
+                                            <div class="heatmap-cell" 
+                                                 t-attf-style="opacity: {{ count > 0 ? Math.max(0.15, count / (state.dashboardData.heatmapMax || 1)) : 0.04 }}"
+                                                 t-att-title="count + ' mensajes'"/>
+                                        </t>
                                     </div>
                                 </t>
+                            </div>
+                        </div>
+
+                        <!-- F20: Top Agents Performance -->
+                        <div t-if="state.dashboardData.top_agents and state.dashboardData.top_agents.length" class="agents-section">
+                            <h4>🏆 Rendimiento Agentes (7 días)</h4>
+                            <table class="agent-table">
+                                <thead>
+                                    <tr>
+                                        <th>Agente</th>
+                                        <th>Enviadas</th>
+                                        <th>Resueltas</th>
+                                        <th>Volume</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="state.dashboardData.top_agents" t-as="agent" t-key="agent.agent">
+                                        <tr>
+                                            <td class="agent-name-cell">
+                                                <span class="agent-rank" t-esc="agent_index + 1"/>
+                                                <span t-esc="agent.agent"/>
+                                            </td>
+                                            <td t-esc="agent.sent"/>
+                                            <td t-esc="agent.resolved"/>
+                                            <td>
+                                                <div class="agent-bar-mini">
+                                                    <div class="agent-bar-fill" t-attf-style="width: {{ (agent.sent / (state.dashboardData.top_agents[0]?.sent || 1)) * 100 }}%"/>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- F23: SLA Alerts -->
+                        <div t-if="state.dashboardData.sla_breaches and state.dashboardData.sla_breaches.length" class="sla-section">
+                            <h4>⚠️ Alertas SLA (> <t t-esc="state.dashboardData.sla_target"/> min)</h4>
+                            <div class="sla-alerts">
+                                <t t-foreach="state.dashboardData.sla_breaches" t-as="breach" t-key="breach.date">
+                                    <div class="sla-alert-item">
+                                        <div class="sla-alert-icon">
+                                            <i t-attf-class="fa {{ breach.waitMinutes > 60 ? 'fa-exclamation-circle text-danger' : 'fa-warning text-warning' }}"/>
+                                        </div>
+                                        <div class="sla-alert-info">
+                                            <span class="sla-conv-name" t-esc="breach.convName"/>
+                                            <span class="sla-wait-time">
+                                                <t t-if="breach.waitMinutes >= 60">
+                                                    <t t-esc="Math.floor(breach.waitMinutes / 60)"/>h <t t-esc="breach.waitMinutes % 60"/>m
+                                                </t>
+                                                <t t-else="">
+                                                    <t t-esc="breach.waitMinutes"/> min
+                                                </t>
+                                            </span>
+                                        </div>
+                                        <span class="sla-date" t-esc="breach.date ? breach.date.slice(5, 16) : ''"/>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+
+                        <!-- F22: Sentiment Analysis -->
+                        <div t-if="state.dashboardData.sentiment" class="chart-section">
+                            <h4>💬 Análisis de Sentimiento (Mensajes Recibidos)</h4>
+                            <div class="sentiment-gauge">
+                                <div class="sentiment-score-circle" t-attf-style="--score-color: {{ state.dashboardData.sentiment.score >= 65 ? '#10B981' : state.dashboardData.sentiment.score >= 40 ? '#F59E0B' : '#EF4444' }}">
+                                    <span class="sentiment-score-value" t-esc="state.dashboardData.sentiment.score"/>
+                                    <span class="sentiment-score-label">/ 100</span>
+                                </div>
+                                <div class="sentiment-breakdown">
+                                    <div class="sentiment-row">
+                                        <span class="sentiment-emoji">😊</span>
+                                        <span class="sentiment-label">Positivo</span>
+                                        <div class="sentiment-bar-wrap">
+                                            <div class="sentiment-bar sentiment-pos" t-attf-style="width: {{ state.dashboardData.sentiment.posPercent }}%"/>
+                                        </div>
+                                        <span class="sentiment-pct" t-esc="state.dashboardData.sentiment.posPercent + '%'"/>
+                                    </div>
+                                    <div class="sentiment-row">
+                                        <span class="sentiment-emoji">😐</span>
+                                        <span class="sentiment-label">Neutro</span>
+                                        <div class="sentiment-bar-wrap">
+                                            <div class="sentiment-bar sentiment-neu" t-attf-style="width: {{ state.dashboardData.sentiment.neuPercent }}%"/>
+                                        </div>
+                                        <span class="sentiment-pct" t-esc="state.dashboardData.sentiment.neuPercent + '%'"/>
+                                    </div>
+                                    <div class="sentiment-row">
+                                        <span class="sentiment-emoji">😟</span>
+                                        <span class="sentiment-label">Negativo</span>
+                                        <div class="sentiment-bar-wrap">
+                                            <div class="sentiment-bar sentiment-neg" t-attf-style="width: {{ state.dashboardData.sentiment.negPercent }}%"/>
+                                        </div>
+                                        <span class="sentiment-pct" t-esc="state.dashboardData.sentiment.negPercent + '%'"/>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                     <div t-else="" class="empty-chat">
                         <div class="empty-icon"><i class="fa fa-bar-chart"/></div>
                         <h3>Dashboard</h3>
-                        <p>Nenhum dado disponível</p>
+                        <p>Ningún dato disponible</p>
                     </div>
                 </div>
 
@@ -480,7 +772,7 @@
                             </select>
                         </div>
                         <div t-if="!state.pipelines.length" class="alert alert-info py-2 small mb-0">
-                            <i class="fa fa-info-circle"/> Crie pipelines em ⚙️ Configuração → Gerir Pipelines
+                            <i class="fa fa-info-circle"/> Crea pipelines en ⚙️ Configuración → Gestionar Pipelines
                         </div>
                     </div>
 
@@ -519,6 +811,13 @@
                                                     <t t-esc="(card.last_message || '').substring(0, 60)"/>
                                                     <span t-if="(card.last_message || '').length > 60">...</span>
                                                 </div>
+                                                <div t-if="getCardTags(card).length" class="conv-tags" style="margin: 4px 0;">
+                                                    <t t-foreach="getCardTags(card)" t-as="tagId" t-key="tagId">
+                                                        <span class="tag-badge-inline" t-attf-style="background: {{ getTagColor(tagId) }}20; color: {{ getTagColor(tagId) }}; border: 1px solid {{ getTagColor(tagId) }}44">
+                                                            <t t-esc="getTagName(tagId)"/>
+                                                        </span>
+                                                    </t>
+                                                </div>
                                                 <div class="card-footer">
                                                     <span t-if="card.assigned_user_id" class="card-user small text-muted">
                                                         <i class="fa fa-user"/> <t t-esc="card.assigned_user_id[1]"/>
@@ -534,8 +833,8 @@
                                 <div class="empty-icon">
                                     <i class="fa fa-columns"/>
                                 </div>
-                                <h3>Sem Pipeline Selecionado</h3>
-                                <p>Selecione ou crie um pipeline em ⚙️ Configuração</p>
+                                <h3>Sin Pipeline Seleccionado</h3>
+                                <p>Selecciona o crea un pipeline en ⚙️ Configuración</p>
                             </div>
                     </div>
                 </div>
@@ -543,55 +842,158 @@
 
             <!-- RIGHT PANEL: Contact Details -->
             <div t-if="state.showContactPanel and state.selectedConversation" class="bader-inbox-right">
-                    <div class="contact-header">
-                        <div t-attf-class="contact-avatar-large {{ getAvatarColor(state.selectedConversation.id) }}">
-                            <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                    <!-- 360° Customer Profile Header -->
+                    <div class="customer-360-header">
+                        <div class="c360-profile">
+                            <div t-attf-class="c360-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
+                                <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                            </div>
+                            <div class="c360-info">
+                                <div class="c360-name-row">
+                                    <h3 t-esc="state.selectedConversation.computed_name || 'Desconocido'"/>
+                                    <span class="c360-status-badge"
+                                          t-attf-style="background: {{ getCustomerStatusColor(state.customerStats.customerStatus) }}15; color: {{ getCustomerStatusColor(state.customerStats.customerStatus) }}">
+                                        <t t-esc="getCustomerStatusLabel(state.customerStats.customerStatus)"/>
+                                    </span>
+                                </div>
+                                <span class="c360-phone"><i class="fa fa-phone"/> <t t-esc="state.selectedConversation.phone"/></span>
+                                <div class="c360-meta">
+                                    <span t-if="state.selectedConversation.channel_id"><i class="fa fa-whatsapp"/> <t t-esc="state.selectedConversation.channel_id[1]"/></span>
+                                    <span t-if="state.selectedConversation.assigned_user_id"><i class="fa fa-user"/> <t t-esc="state.selectedConversation.assigned_user_id[1]"/></span>
+                                </div>
+                            </div>
                         </div>
-                        <h3 t-esc="state.selectedConversation.computed_name || 'Desconhecido'"/>
-                        <p t-esc="state.selectedConversation.phone"/>
+
+                        <!-- Mini KPI Strip -->
+                        <div class="c360-kpi-strip">
+                            <div class="c360-kpi">
+                                <span class="c360-kpi-value"><t t-esc="state.customerStats.totalMessages"/></span>
+                                <span class="c360-kpi-label">Msgs</span>
+                            </div>
+                            <div class="c360-kpi-divider"/>
+                            <div class="c360-kpi">
+                                <span class="c360-kpi-value">€<t t-esc="formatCurrency(state.customerStats.pipelineValue)"/></span>
+                                <span class="c360-kpi-label">Pipeline</span>
+                            </div>
+                            <div class="c360-kpi-divider"/>
+                            <div class="c360-kpi">
+                                <span class="c360-kpi-value">€<t t-esc="formatCurrency(state.customerStats.lifetimeValue)"/></span>
+                                <span class="c360-kpi-label">Lifetime</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="contact-section">
-                        <h4>Informações</h4>
-                        <div class="info-row">
-                            <i class="fa fa-phone"/>
-                            <span class="info-value link" t-esc="state.selectedConversation.phone"/>
+                    <!-- AI Intelligence Section -->
+                    <div t-if="state.selectedConversation.ai_response_count" class="ai-intelligence-section">
+                        <h4>🤖 AI Intelligence</h4>
+                        <div class="ai-intel-grid">
+                            <!-- Lead Score -->
+                            <div class="ai-intel-card">
+                                <div class="ai-intel-header">
+                                    <span class="ai-intel-label">Lead Score</span>
+                                    <span t-att-class="'ai-temp-badge ai-temp-' + (state.selectedConversation.ai_lead_temperature or 'cold')">
+                                        <t t-if="state.selectedConversation.ai_lead_temperature === 'hot'">🔥 Hot</t>
+                                        <t t-elif="state.selectedConversation.ai_lead_temperature === 'warm'">🌤️ Warm</t>
+                                        <t t-else="">🧊 Cold</t>
+                                    </span>
+                                </div>
+                                <div class="ai-score-bar">
+                                    <div t-att-class="'ai-score-fill ai-score-' + (state.selectedConversation.ai_lead_temperature or 'cold')"
+                                         t-att-style="'width: ' + (state.selectedConversation.ai_lead_score or 0) + '%'"/>
+                                </div>
+                                <span class="ai-score-value"><t t-esc="state.selectedConversation.ai_lead_score or 0"/>/100</span>
+                            </div>
+
+                            <!-- Resolution Status -->
+                            <div class="ai-intel-card">
+                                <div class="ai-intel-header">
+                                    <span class="ai-intel-label">Status</span>
+                                    <span t-att-class="'ai-resolution-badge ai-res-' + (state.selectedConversation.ai_resolution or 'pending')">
+                                        <t t-if="state.selectedConversation.ai_resolution === 'resolved'">✅ Resuelto</t>
+                                        <t t-elif="state.selectedConversation.ai_resolution === 'escalated'">⚠️ Escalado</t>
+                                        <t t-else="">⏳ Pendiente</t>
+                                    </span>
+                                </div>
+                                <div class="ai-intel-meta">
+                                    <span><i class="fa fa-comments-o"/> <t t-esc="state.selectedConversation.ai_response_count or 0"/> respuestas AI</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="info-row">
-                            <i class="fa fa-whatsapp"/>
-                            <span class="info-label">Canal</span>
-                            <span class="info-value" t-esc="state.selectedConversation.channel_id?.[1] || 'WhatsApp'"/>
-                        </div>
-                        <div class="info-row">
-                            <i class="fa fa-user"/>
-                            <span class="info-label">Atribuído</span>
-                            <span class="info-value" t-esc="state.selectedConversation.assigned_user_id?.[1] || 'Não atribuído'"/>
+
+                        <!-- Escalation Reason -->
+                        <div t-if="state.selectedConversation.ai_escalation_reason" class="ai-escalation-alert">
+                            <i class="fa fa-exclamation-triangle"/> <t t-esc="state.selectedConversation.ai_escalation_reason"/>
                         </div>
                     </div>
 
                     <!-- Tags Section -->
                     <div class="contact-section">
                         <h4>🏷️ Tags</h4>
-                        <div class="tag-manager">
+                        
+                        <!-- Active tags on this conversation (colored pills with ×) -->
+                        <div t-if="(state.selectedConversation.tag_ids || []).length" class="tag-active-list">
+                            <t t-foreach="state.selectedConversation.tag_ids || []" t-as="tagId" t-key="tagId">
+                                <span class="tag-pill" t-attf-style="background: {{ getTagColor(tagId) }}20; color: {{ getTagColor(tagId) }}; border-color: {{ getTagColor(tagId) }}44">
+                                    <span class="tag-pill-dot" t-attf-style="background: {{ getTagColor(tagId) }}"/>
+                                    <t t-esc="getTagName(tagId)"/>
+                                    <button class="tag-pill-remove" t-on-click.stop="() => this.toggleTag(state.selectedConversation.id, tagId)" title="Quitar tag">×</button>
+                                </span>
+                            </t>
+                        </div>
+                        <p t-else="" class="text-muted small mb-2" style="font-style:italic; opacity:0.6">Sin tags asignados</p>
+
+                        <!-- Create new tag: color dot + input + button in one row -->
+                        <div class="tag-create-inline">
+                            <button class="tag-color-cycle" 
+                                    t-attf-style="background: {{ tagColors[state.newTagColor].hex }}"
+                                    t-on-click="() => { this.state.newTagColor = (this.state.newTagColor + 1) % 12 }"
+                                    title="Click para cambiar color"/>
+                            <input type="text" class="tag-create-input" 
+                                   placeholder="Crear nuevo tag..." 
+                                   t-model="state.newTagName"
+                                   t-on-keydown="(ev) => ev.key === 'Enter' and this.createTag()"/>
+                            <button class="tag-create-btn" t-on-click="() => this.createTag()" title="Crear tag">
+                                <i class="fa fa-plus"/>
+                            </button>
+                        </div>
+
+                        <!-- Available tags (not yet assigned) for quick add -->
+                        <div t-if="state.allTags.length" class="tag-available">
+                            <span class="tag-available-label">Disponibles:</span>
                             <t t-foreach="state.allTags" t-as="tag" t-key="tag.id">
-                                <button t-attf-class="tag-chip {{ (state.selectedConversation.tag_ids || []).includes(tag.id) ? 'active' : '' }}"
+                                <button t-if="!(state.selectedConversation.tag_ids || []).includes(tag.id)"
+                                        class="tag-outline-btn"
                                         t-on-click="() => this.toggleTag(state.selectedConversation.id, tag.id)"
-                                        t-attf-style="--tag-color: {{ getTagColor(tag.id) }}">
-                                    <span class="tag-dot" t-attf-style="background: {{ getTagColor(tag.id) }}"/>
-                                    <t t-esc="tag.name"/>
-                                    <i t-if="(state.selectedConversation.tag_ids || []).includes(tag.id)" class="fa fa-check ms-1"/>
+                                        t-attf-style="border-color: {{ getTagColor(tag.id) }}66; color: {{ getTagColor(tag.id) }}">
+                                    + <t t-esc="tag.name"/>
                                 </button>
                             </t>
-                            <p t-if="!state.allTags.length" class="text-muted small mb-0">Sem tags disponíveis</p>
+                            <!-- Delete tags option -->
+                            <button class="tag-manage-btn" t-on-click="() => { this.state.showTagManager = !this.state.showTagManager }" title="Gestionar tags">
+                                <i class="fa fa-cog"/>
+                            </button>
+                        </div>
+
+                        <!-- Tag management (delete) panel -->
+                        <div t-if="state.showTagManager" class="tag-manage-panel">
+                            <t t-foreach="state.allTags" t-as="tag" t-key="tag.id">
+                                <div class="tag-manage-item">
+                                    <span class="tag-manage-dot" t-attf-style="background: {{ getTagColor(tag.id) }}"/>
+                                    <span class="tag-manage-name" t-esc="tag.name"/>
+                                    <button class="tag-manage-delete" t-on-click="() => this.deleteTag(tag.id)" title="Eliminar tag permanentemente">
+                                        <i class="fa fa-trash"/>
+                                    </button>
+                                </div>
+                            </t>
                         </div>
                     </div>
 
-                    <!-- Tabs: Info / Notes / Scheduled -->
+                    <!-- Tabs: Fluxos / Notes / Scheduled / CRM -->
                     <div class="contact-section">
                         <div class="panel-tabs">
                             <button t-attf-class="panel-tab {{ state.notesTab === 'info' ? 'active' : '' }}"
                                     t-on-click="() => this.setNotesTab('info')">
-                                📊 Fluxos
+                                📊 Flujos
                             </button>
                             <button t-attf-class="panel-tab {{ state.notesTab === 'notes' ? 'active' : '' }}"
                                     t-on-click="() => this.setNotesTab('notes')">
@@ -599,17 +1001,30 @@
                             </button>
                             <button t-attf-class="panel-tab {{ state.notesTab === 'scheduled' ? 'active' : '' }}"
                                     t-on-click="() => this.setNotesTab('scheduled')">
-                                ⏰ Agendadas
+                                ⏰ Program.
+                            </button>
+                            <button t-attf-class="panel-tab {{ state.notesTab === 'crm' ? 'active' : '' }}"
+                                    t-on-click="() => this.setNotesTab('crm')">
+                                💼 CRM
+                            </button>
+                            <button t-attf-class="panel-tab {{ state.notesTab === 'sales' ? 'active' : '' }}"
+                                    t-on-click="() => this.setNotesTab('sales')">
+                                📦 Ventas
+                            </button>
+                            <button t-attf-class="panel-tab {{ state.notesTab === 'activities' ? 'active' : '' }}"
+                                    t-on-click="() => this.setNotesTab('activities')">
+                                📅 Activid.
+                                <span t-if="state.contactActivities.length" class="badge bg-danger ms-1" style="font-size: 8px; padding: 2px 4px;" t-esc="state.contactActivities.length"/>
                             </button>
                         </div>
 
                         <!-- Info Tab (Pipelines) -->
                         <div t-if="state.notesTab === 'info'">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="small text-muted">Fluxos</span>
+                                <span class="small text-muted">Flujos</span>
                                 <button class="btn btn-sm btn-outline-primary" t-on-click="openAddToPipelineModal" 
                                         t-att-disabled="!availablePipelinesForModal.length"
-                                        title="Adicionar a um fluxo">
+                                        title="Añadir a un flujo">
                                     <i class="fa fa-plus"/>
                                 </button>
                             </div>
@@ -624,14 +1039,14 @@
                                             <span class="badge bg-info ms-1" t-esc="cp.stage_id[1]"/>
                                         </div>
                                         <button class="btn btn-sm btn-link text-danger p-0" 
-                                                t-on-click="() => this.removeFromPipeline(cp.id)" title="Remover">
+                                                t-on-click="() => this.removeFromPipeline(cp.id)" title="Eliminar">
                                             <i class="fa fa-times"/>
                                         </button>
                                     </div>
                                 </t>
                             </div>
                             <div t-else="" class="no-pipelines">
-                                <p class="text-muted small mb-0">Nenhum fluxo atribuído</p>
+                                <p class="text-muted small mb-0">Ningún flujo asignado</p>
                             </div>
                         </div>
 
@@ -639,7 +1054,7 @@
                         <div t-if="state.notesTab === 'notes'" class="notes-section">
                             <div class="note-composer">
                                 <textarea rows="2" class="form-control form-control-sm" 
-                                          placeholder="Adicionar nota interna..."
+                                          placeholder="Añadir nota interna..."
                                           t-model="state.noteText"/>
                                 <button class="btn btn-sm btn-primary mt-1" t-on-click="addNote"
                                         t-att-disabled="!state.noteText.trim()">
@@ -655,7 +1070,7 @@
                                         <div class="note-header">
                                             <span class="note-author" t-esc="note.author_id?.[1] || 'Sistema'"/>
                                             <span class="note-date" t-esc="formatTime(note.create_date)"/>
-                                            <button class="btn-note-delete" t-on-click="() => this.deleteNote(note.id)" title="Apagar">
+                                            <button class="btn-note-delete" t-on-click="() => this.deleteNote(note.id)" title="Eliminar">
                                                 <i class="fa fa-trash"/>
                                             </button>
                                         </div>
@@ -664,7 +1079,7 @@
                                 </t>
                             </div>
                             <div t-else="" class="text-center py-3">
-                                <p class="text-muted small">Sem notas internas</p>
+                                <p class="text-muted small">Sin notas internas</p>
                             </div>
                         </div>
 
@@ -687,21 +1102,300 @@
                                 </t>
                             </div>
                             <div t-else="" class="text-center py-3">
-                                <p class="text-muted small">Sem mensagens agendadas</p>
+                                <p class="text-muted small">Sin mensajes programados</p>
+                            </div>
+                        </div>
+
+                        <!-- CRM Tab -->
+                        <div t-if="state.notesTab === 'crm'" class="crm-section">
+                            <!-- Contact Mini Card -->
+                            <div class="crm-contact-card" t-on-click="viewPartner">
+                                <div class="crm-contact-icon">
+                                    <i class="fa fa-user"/>
+                                </div>
+                                <div class="crm-contact-info">
+                                    <span class="crm-contact-name" t-esc="state.selectedConversation?.computed_name || 'Sin nombre'"/>
+                                    <span class="crm-contact-detail" t-esc="state.selectedConversation?.phone || ''"/>
+                                </div>
+                                <div class="crm-contact-action">
+                                    <span t-if="state.selectedConversation?.partner_id" class="crm-badge crm-badge-linked">
+                                        <i class="fa fa-link"/> Vinculado
+                                    </span>
+                                    <span t-else="" class="crm-badge crm-badge-new">
+                                        <i class="fa fa-plus"/> Crear
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Opportunities Header -->
+                            <div class="crm-opp-header">
+                                <span class="crm-opp-title">
+                                    <i class="fa fa-line-chart"/> Oportunidades
+                                    <span t-if="state.contactOpportunities.length" class="crm-opp-count" t-esc="state.contactOpportunities.length"/>
+                                </span>
+                                <button class="crm-opp-add-btn" t-on-click="createOpportunity" title="Crear Oportunidad">
+                                    <i class="fa fa-plus"/>
+                                </button>
+                            </div>
+
+                            <!-- Loading -->
+                            <div t-if="state.loadingOpportunities" class="text-center py-3">
+                                <i class="fa fa-spinner fa-spin" style="color: #8B5CF6;"/>
+                            </div>
+
+                            <!-- Opportunity Cards -->
+                            <div t-elif="state.contactOpportunities.length" class="crm-opp-list">
+                                <t t-foreach="state.contactOpportunities" t-as="opp" t-key="opp.id">
+                                    <div class="crm-opp-card" t-on-click="() => this.openOpportunity(opp.id)"
+                                         t-attf-style="--opp-color: {{ getOppStageColor(opp.stage_id?.[1] || '') }}">
+                                        <div class="crm-opp-card-top">
+                                            <span class="crm-opp-name" t-esc="opp.name"/>
+                                            <span class="crm-opp-stage" t-attf-style="background: {{ getOppStageColor(opp.stage_id?.[1] || '') }}15; color: {{ getOppStageColor(opp.stage_id?.[1] || '') }}">
+                                                <t t-esc="opp.stage_id?.[1] || '—'"/>
+                                            </span>
+                                        </div>
+                                        <div class="crm-opp-card-body">
+                                            <div class="crm-opp-metric">
+                                                <i class="fa fa-euro"/>
+                                                <span t-esc="formatCurrency(opp.expected_revenue)"/>
+                                            </div>
+                                            <div t-if="opp.probability" class="crm-opp-metric">
+                                                <i class="fa fa-percent"/>
+                                                <span><t t-esc="opp.probability"/>%</span>
+                                            </div>
+                                            <div t-if="opp.user_id" class="crm-opp-metric">
+                                                <i class="fa fa-user-o"/>
+                                                <span t-esc="opp.user_id[1]"/>
+                                            </div>
+                                        </div>
+                                        <div class="crm-opp-card-footer">
+                                            <span class="crm-opp-date">
+                                                <i class="fa fa-calendar-o"/> <t t-esc="formatTime(opp.create_date)"/>
+                                            </span>
+                                            <span class="crm-opp-type-badge" t-esc="opp.type === 'opportunity' ? 'Oportunidad' : 'Lead'"/>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div t-else="" class="crm-empty-state">
+                                <div class="crm-empty-icon">
+                                    <i class="fa fa-handshake-o"/>
+                                </div>
+                                <p>Sin oportunidades</p>
+                                <button class="crm-empty-btn" t-on-click="createOpportunity">
+                                    <i class="fa fa-plus"/> Crear primera oportunidad
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Sales Tab -->
+                        <div t-if="state.notesTab === 'sales'" class="sales-section">
+                            <!-- Summary Dashboard -->
+                            <div class="sales-summary">
+                                <div class="sales-summary-card sales-summary-quoted">
+                                    <div class="sales-summary-icon"><i class="fa fa-file-text-o"/></div>
+                                    <div class="sales-summary-data">
+                                        <span class="sales-summary-value">€ <t t-esc="formatCurrency(state.salesTotalQuoted)"/></span>
+                                        <span class="sales-summary-label">Presupuestos (<t t-esc="state.contactQuotations.length"/>)</span>
+                                    </div>
+                                </div>
+                                <div class="sales-summary-card sales-summary-ordered">
+                                    <div class="sales-summary-icon"><i class="fa fa-check-circle"/></div>
+                                    <div class="sales-summary-data">
+                                        <span class="sales-summary-value">€ <t t-esc="formatCurrency(state.salesTotalOrdered)"/></span>
+                                        <span class="sales-summary-label">Pedidos (<t t-esc="state.contactOrders.length"/>)</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Loading -->
+                            <div t-if="state.loadingSales" class="text-center py-3">
+                                <i class="fa fa-spinner fa-spin" style="color: #F59E0B;"/>
+                            </div>
+
+                            <div t-elif="state.contactQuotations.length || state.contactOrders.length" class="sales-lists">
+                                <!-- Quotations Section -->
+                                <div t-if="state.contactQuotations.length" class="sales-group">
+                                    <div class="sales-group-header">
+                                        <span><i class="fa fa-file-text-o"/> Presupuestos Abiertos</span>
+                                        <button class="crm-opp-add-btn" t-on-click="createQuotation" title="Nuevo Presupuesto">
+                                            <i class="fa fa-plus"/>
+                                        </button>
+                                    </div>
+                                    <t t-foreach="state.contactQuotations" t-as="q" t-key="q.id">
+                                        <div class="sales-card" t-on-click="() => this.openSaleOrder(q.id)"
+                                             t-attf-style="--sales-color: {{ getOrderStateColor(q.state) }}">
+                                            <div class="sales-card-top">
+                                                <span class="sales-card-name" t-esc="q.name"/>
+                                                <span class="sales-card-state" t-attf-style="background: {{ getOrderStateColor(q.state) }}15; color: {{ getOrderStateColor(q.state) }}">
+                                                    <t t-esc="getOrderStateLabel(q.state)"/>
+                                                </span>
+                                            </div>
+                                            <div class="sales-card-body">
+                                                <div class="sales-card-amount">
+                                                    <span class="sales-card-amount-value">€ <t t-esc="formatCurrency(q.amount_total)"/></span>
+                                                </div>
+                                                <div class="sales-card-meta">
+                                                    <span t-if="q.user_id"><i class="fa fa-user-o"/> <t t-esc="q.user_id[1]"/></span>
+                                                    <span><i class="fa fa-calendar-o"/> <t t-esc="formatTime(q.create_date)"/></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <!-- Orders Section -->
+                                <div t-if="state.contactOrders.length" class="sales-group">
+                                    <div class="sales-group-header">
+                                        <span><i class="fa fa-check-circle"/> Pedidos Confirmados</span>
+                                    </div>
+                                    <t t-foreach="state.contactOrders" t-as="o" t-key="o.id">
+                                        <div class="sales-card" t-on-click="() => this.openSaleOrder(o.id)"
+                                             t-attf-style="--sales-color: {{ getOrderStateColor(o.state) }}">
+                                            <div class="sales-card-top">
+                                                <span class="sales-card-name" t-esc="o.name"/>
+                                                <span class="sales-card-state" t-attf-style="background: {{ getOrderStateColor(o.state) }}15; color: {{ getOrderStateColor(o.state) }}">
+                                                    <t t-esc="getOrderStateLabel(o.state)"/>
+                                                </span>
+                                            </div>
+                                            <div class="sales-card-body">
+                                                <div class="sales-card-amount">
+                                                    <span class="sales-card-amount-value">€ <t t-esc="formatCurrency(o.amount_total)"/></span>
+                                                </div>
+                                                <div class="sales-card-meta">
+                                                    <span t-if="o.user_id"><i class="fa fa-user-o"/> <t t-esc="o.user_id[1]"/></span>
+                                                    <span t-if="o.date_order"><i class="fa fa-calendar-o"/> <t t-esc="formatTime(o.date_order)"/></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div t-else="" class="crm-empty-state">
+                                <div class="crm-empty-icon" style="background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(16,185,129,0.1));">
+                                    <i class="fa fa-shopping-cart" style="color: #F59E0B;"/>
+                                </div>
+                                <p>Sin presupuestos ni pedidos</p>
+                                <button class="crm-empty-btn" t-on-click="createQuotation">
+                                    <i class="fa fa-plus"/> Crear presupuesto
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <div class="contact-actions">
-                        <button class="action-btn primary" t-on-click="createOpportunity">
-                            <i class="fa fa-dollar"/>
-                            <span>Criar Oportunidade</span>
-                            <i class="fa fa-chevron-right chevron"/>
+                        <!-- Activities Tab -->
+                        <div t-if="state.notesTab === 'activities'" class="activities-section">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="small text-muted">Actividades CRM</span>
+                                <button class="btn btn-sm btn-outline-primary" t-on-click="createOdooTask"
+                                        title="Nueva Actividad">
+                                    <i class="fa fa-plus"/>
+                                </button>
+                            </div>
+
+                            <div t-if="state.loadingActivities" class="text-center py-3">
+                                <i class="fa fa-spinner fa-spin"/>
+                            </div>
+
+                            <div t-elif="state.contactActivities.length">
+                                <!-- Overdue Activities -->
+                                <t t-set="overdueActivities" t-value="state.contactActivities.filter(a => a._status === 'overdue')"/>
+                                <div t-if="overdueActivities.length" class="mb-2">
+                                    <span class="small fw-bold" style="color: #EF4444;">⚠️ Vencidas (<t t-esc="overdueActivities.length"/>)</span>
+                                </div>
+                                <t t-foreach="overdueActivities" t-as="act" t-key="act.id">
+                                    <div class="activity-item activity-overdue">
+                                        <div class="activity-icon">
+                                            <i class="fa fa-exclamation-circle"/>
+                                        </div>
+                                        <div class="activity-content" style="cursor: pointer;" t-on-click="() => this.openActivity(act.id)">
+                                            <span class="activity-title" t-esc="act.summary || act.activity_type_id?.[1] || 'Actividad'"/>
+                                            <span class="activity-type" t-esc="act.activity_type_id?.[1]"/>
+                                            <span class="activity-date date-overdue">
+                                                <i class="fa fa-clock-o"/> <t t-esc="act.date_deadline"/> - Vencida
+                                            </span>
+                                        </div>
+                                        <button class="activity-done-btn" t-on-click="() => this.markActivityDone(act.id)">
+                                            <i class="fa fa-check"/> Hecho
+                                        </button>
+                                    </div>
+                                </t>
+
+                                <!-- Today Activities -->
+                                <t t-set="todayActivities" t-value="state.contactActivities.filter(a => a._status === 'today')"/>
+                                <div t-if="todayActivities.length" class="mb-2 mt-2">
+                                    <span class="small fw-bold" style="color: #F59E0B;">📅 Hoy (<t t-esc="todayActivities.length"/>)</span>
+                                </div>
+                                <t t-foreach="todayActivities" t-as="act" t-key="act.id">
+                                    <div class="activity-item activity-today">
+                                        <div class="activity-icon">
+                                            <i class="fa fa-clock-o"/>
+                                        </div>
+                                        <div class="activity-content" style="cursor: pointer;" t-on-click="() => this.openActivity(act.id)">
+                                            <span class="activity-title" t-esc="act.summary || act.activity_type_id?.[1] || 'Actividad'"/>
+                                            <span class="activity-type" t-esc="act.activity_type_id?.[1]"/>
+                                            <span class="activity-date date-today">
+                                                <i class="fa fa-clock-o"/> Hoy
+                                            </span>
+                                        </div>
+                                        <button class="activity-done-btn" t-on-click="() => this.markActivityDone(act.id)">
+                                            <i class="fa fa-check"/> Hecho
+                                        </button>
+                                    </div>
+                                </t>
+
+                                <!-- Future Activities -->
+                                <t t-set="futureActivities" t-value="state.contactActivities.filter(a => a._status === 'planned')"/>
+                                <div t-if="futureActivities.length" class="mb-2 mt-2">
+                                    <span class="small fw-bold" style="color: #3B82F6;">📋 Próximas (<t t-esc="futureActivities.length"/>)</span>
+                                </div>
+                                <t t-foreach="futureActivities" t-as="act" t-key="act.id">
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fa fa-calendar"/>
+                                        </div>
+                                        <div class="activity-content" style="cursor: pointer;" t-on-click="() => this.openActivity(act.id)">
+                                            <span class="activity-title" t-esc="act.summary || act.activity_type_id?.[1] || 'Actividad'"/>
+                                            <span class="activity-type" t-esc="act.activity_type_id?.[1]"/>
+                                            <span class="activity-date date-future">
+                                                <i class="fa fa-calendar-o"/> <t t-esc="act.date_deadline"/>
+                                            </span>
+                                        </div>
+                                        <button class="activity-done-btn" t-on-click="() => this.markActivityDone(act.id)">
+                                            <i class="fa fa-check"/> Hecho
+                                        </button>
+                                    </div>
+                                </t>
+                            </div>
+
+                            <div t-else="" class="text-center py-3">
+                                <p class="text-muted small">Sin actividades pendientes</p>
+                                <button class="crm-empty-btn" t-on-click="createOdooTask">
+                                    <i class="fa fa-plus"/> Crear actividad
+                                </button>
+                            </div>
+                        </div>
+                    <!-- Quick Actions Bar -->
+                    <div class="quick-actions-bar">
+                        <button class="qa-btn qa-btn-quotation" t-on-click="createQuotation" title="Nuevo Presupuesto">
+                            <i class="fa fa-file-text-o"/>
+                            <span>Presupuesto</span>
                         </button>
-                        <button class="action-btn" t-on-click="viewPartner">
-                            <i class="fa fa-user"/>
-                            <span>Ver/Criar Contato</span>
-                            <i class="fa fa-chevron-right chevron"/>
+                        <button class="qa-btn qa-btn-opportunity" t-on-click="createOpportunity" title="Nueva Oportunidad">
+                            <i class="fa fa-handshake-o"/>
+                            <span>Oportunidad</span>
+                        </button>
+                        <button class="qa-btn qa-btn-task" t-on-click="createOdooTask" title="Crear Actividad">
+                            <i class="fa fa-calendar-check-o"/>
+                            <span>Actividad</span>
+                        </button>
+                        <button class="qa-btn qa-btn-contact" t-on-click="viewPartner" title="Ver Contacto">
+                            <i class="fa fa-address-card-o"/>
+                            <span>Contacto</span>
                         </button>
                     </div>
                 </div>
@@ -719,7 +1413,7 @@
                         <!-- Step 1: Enter Name -->
                         <div t-if="state.channelStep === 1" class="channel-step-1">
                             <div class="mb-3">
-                                <label class="form-label">Nome do Canal</label>
+                                <label class="form-label">Nombre del Canal</label>
                                 <input type="text" class="form-control form-control-lg" 
                                     placeholder="Ex: Bader WhatsApp" 
                                     t-model="state.newChannelName"/>
@@ -728,7 +1422,7 @@
                                 t-on-click="createChannel" 
                                 t-att-disabled="!state.newChannelName.trim() || state.creatingChannel">
                                 <span t-if="state.creatingChannel">
-                                    <i class="fa fa-spinner fa-spin"/> Criando...
+                                    <i class="fa fa-spinner fa-spin"/> Creando...
                                 </span>
                                 <span t-else="">
                                     <i class="fa fa-arrow-right"/> Continuar
@@ -739,22 +1433,22 @@
                         <!-- Step 2: Show QR Code -->
                         <div t-if="state.channelStep === 2" class="channel-step-2">
                             <div class="text-center">
-                                <p class="mb-3">Escaneie o QR Code com o WhatsApp</p>
+                                <p class="mb-3">Escanee el código QR con WhatsApp</p>
                                 <div t-if="state.qrCodeData" class="qr-data">
                                     <div class="qr-container">
                                         <img t-att-src="'data:image/png;base64,' + state.qrCodeData" 
                                             class="qr-code-img" alt="QR Code"/>
                                     </div>
                                     <p class="small text-muted mt-3">
-                                        <i class="fa fa-mobile"/> Abra o WhatsApp &gt; Dispositivos Vinculados &gt; Vincular Dispositivo
+                                        <i class="fa fa-mobile"/> Abra WhatsApp &gt; Dispositivos Vinculados &gt; Vincular Dispositivo
                                     </p>
                                 </div>
                                 <div t-else="" class="qr-loading">
                                     <i class="fa fa-spinner fa-spin fa-3x"/>
-                                    <p class="mt-2">A obter QR Code...</p>
+                                    <p class="mt-2">Obteniendo código QR...</p>
                                 </div>
                                 <button class="btn btn-outline-secondary mt-3" t-on-click="refreshQRCode">
-                                    <i class="fa fa-refresh"/> Atualizar QR Code
+                                    <i class="fa fa-refresh"/> Actualizar código QR
                                 </button>
                             </div>
                         </div>
@@ -765,10 +1459,10 @@
                                 <div class="success-icon">
                                     <i class="fa fa-check-circle text-success"/>
                                 </div>
-                                <h4 class="mt-3">Conectado!</h4>
+                                <h4 class="mt-3">¡Conectado!</h4>
                                 <p class="text-muted" t-esc="state.connectedPhone"/>
                                 <button class="btn btn-success btn-lg w-100 mt-3" t-on-click="closeChannelModal">
-                                    <i class="fa fa-check"/> Concluído
+                                    <i class="fa fa-check"/> Completado
                                 </button>
                             </div>
                         </div>
@@ -782,16 +1476,16 @@
             <div class="bader-modal-overlay" t-on-click="closePipelineModal">
                 <div class="bader-modal" t-on-click.stop="" style="max-width: 400px;">
                     <div class="bader-modal-header">
-                        <h4><i class="fa fa-columns"/> Adicionar a Pipeline</h4>
+                        <h4><i class="fa fa-columns"/> Añadir a Pipeline</h4>
                         <button class="btn-close" t-on-click="closePipelineModal"/>
                     </div>
                     <div class="bader-modal-body">
                         <div t-if="availablePipelinesForModal.length" class="pipeline-select-form">
                             <div class="mb-3">
-                                <label class="form-label">Selecione o pipeline:</label>
+                                <label class="form-label">Selecciona el pipeline:</label>
                                 <select class="form-select" 
                                         t-on-change="onPipelineModalChange">
-                                    <option value="">-- Escolher --</option>
+                                    <option value="">-- Elegir --</option>
                                     <t t-foreach="availablePipelinesForModal" t-as="p" t-key="p.id">
                                         <option t-att-value="p.id">
                                             <t t-esc="p.icon"/> <t t-esc="p.name"/>
@@ -801,11 +1495,11 @@
                             </div>
                             <button class="btn btn-primary w-100" t-on-click="addToPipeline"
                                     t-att-disabled="!state.pipelineModalPipelineId">
-                                <i class="fa fa-plus"/> Adicionar
+                                <i class="fa fa-plus"/> Añadir
                             </button>
                         </div>
                         <div t-else="" class="no-pipelines-msg">
-                            <p class="text-muted">Esta conversa já está em todos os pipelines disponíveis.</p>
+                            <p class="text-muted">Esta conversación ya está en todos los pipelines disponibles.</p>
                         </div>
                     </div>
                 </div>
@@ -817,7 +1511,7 @@
             <div class="bader-modal-overlay" t-on-click="closeNewConversationModal">
                 <div class="bader-modal new-conv-modal" t-on-click.stop="">
                     <div class="bader-modal-header">
-                        <h4><i class="fa fa-comment"/> Nova Conversa</h4>
+                        <h4><i class="fa fa-comment"/> Nueva Conversación</h4>
                         <button class="btn-close" t-on-click="closeNewConversationModal"/>
                     </div>
                     <div class="bader-modal-body">
@@ -838,7 +1532,7 @@
                         <div class="new-conv-search-wrapper">
                             <i class="fa fa-search new-conv-search-icon"/>
                             <input type="text" class="form-control new-conv-search-input"
-                                   placeholder="Pesquisar contacto por nome, telefone ou email..."
+                                   placeholder="Buscar contacto por nombre, teléfono o email..."
                                    t-att-value="state.contactSearchQuery"
                                    t-on-input="onContactSearchInput"
                                    autofocus="1"/>
@@ -851,17 +1545,17 @@
                         <div class="new-conv-results">
                             <div t-if="state.searchingContacts and !state.contactSearchResults.length" class="new-conv-empty">
                                 <i class="fa fa-spinner fa-spin fa-2x"/>
-                                <p>A pesquisar...</p>
+                                <p>Buscando...</p>
                             </div>
                             <div t-elif="!state.contactSearchQuery" class="new-conv-empty">
                                 <i class="fa fa-address-book fa-3x"/>
-                                <p>Pesquise um contacto do Odoo</p>
-                                <span class="text-muted small">Procure por nome, telefone ou email</span>
+                                <p>Busca un contacto de Odoo</p>
+                                <span class="text-muted small">Busca por nombre, teléfono o email</span>
                             </div>
                             <div t-elif="state.contactSearchQuery and !state.searchingContacts and !state.contactSearchResults.length" class="new-conv-empty">
                                 <i class="fa fa-user-times fa-2x"/>
-                                <p>Nenhum contacto encontrado</p>
-                                <span class="text-muted small">Tente outro nome ou número</span>
+                                <p>Ningún contacto encontrado</p>
+                                <span class="text-muted small">Intenta con otro nombre o número</span>
                             </div>
                             <div t-else="" class="contact-search-results">
                                 <t t-foreach="state.contactSearchResults" t-as="contact" t-key="contact.id">
