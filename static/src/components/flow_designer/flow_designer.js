@@ -185,11 +185,6 @@ export class FlowDesigner extends Component {
                 canvas_data: canvasData,
             });
 
-            // Also sync nodes/edges to Odoo models
-            await this.orm.call("bader.inbox.campaign.flow", "action_save_from_canvas", [[this.state.flowId]], {
-                canvas_json: canvasData,
-            });
-
             this.state.isDirty = false;
             this.notification.add("✅ Fluxo guardado!", { type: "success" });
         } catch (e) {
