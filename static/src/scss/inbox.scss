@@ -5517,6 +5517,331 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
 }
 
 // ========================================
+// CAMPAIGN ANALYTICS SECTION
+// ========================================
+.campaign-analytics-section {
+    margin-top: 20px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(#0ea5e9, 0.03) 0%, rgba(#8b5cf6, 0.03) 100%);
+    border: 1px solid rgba(#0ea5e9, 0.1);
+    overflow: hidden;
+
+    .campaign-header {
+        padding: 14px 18px;
+        background: linear-gradient(135deg, rgba(#0ea5e9, 0.08) 0%, rgba(#8b5cf6, 0.08) 100%);
+        border-bottom: 1px solid rgba(#0ea5e9, 0.1);
+
+        .campaign-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0ea5e9;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            i {
+                font-size: 16px;
+            }
+        }
+    }
+
+    .campaign-kpi-strip {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        padding: 14px 18px;
+        background: rgba(white, 0.5);
+        border-bottom: 1px solid rgba(#0ea5e9, 0.06);
+
+        .camp-kpi {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+
+            .camp-kpi-value {
+                font-size: 22px;
+                font-weight: 800;
+                color: $bader-dark;
+                line-height: 1;
+            }
+
+            .camp-kpi-label {
+                font-size: 9px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                color: $bader-text-muted;
+            }
+        }
+
+        .camp-kpi-divider {
+            width: 1px;
+            height: 30px;
+            background: rgba(#0ea5e9, 0.15);
+        }
+    }
+
+    .campaign-cards {
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .campaign-card {
+        border-radius: 12px;
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+
+        &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .camp-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+
+            .camp-name-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+
+                i {
+                    font-size: 16px;
+                }
+
+                .camp-name {
+                    font-size: 14px;
+                    font-weight: 700;
+                    color: white;
+                    text-transform: capitalize;
+                }
+            }
+
+            .camp-badges {
+                display: flex;
+                gap: 4px;
+
+                .camp-badge {
+                    font-size: 9px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.3px;
+                    padding: 3px 8px;
+                    border-radius: 10px;
+
+                    &.source {
+                        background: rgba(#3b82f6, 0.2);
+                        color: #93c5fd;
+                    }
+
+                    &.medium {
+                        background: rgba(#f472b6, 0.2);
+                        color: #f9a8d4;
+                    }
+                }
+            }
+        }
+
+        .camp-metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 8px;
+            padding: 12px;
+
+            .camp-metric {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px;
+                border-radius: 8px;
+                background: rgba($bader-surface, 0.6);
+
+                .camp-metric-icon {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+
+                    i {
+                        font-size: 13px;
+                        color: white;
+                    }
+
+                    &.contacts {
+                        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+                    }
+
+                    &.messages {
+                        background: linear-gradient(135deg, #10b981, #059669);
+                    }
+
+                    &.conversion {
+                        background: linear-gradient(135deg, #f59e0b, #d97706);
+                    }
+
+                    &.score {
+                        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+                    }
+                }
+
+                .camp-metric-data {
+                    display: flex;
+                    flex-direction: column;
+
+                    .camp-metric-value {
+                        font-size: 16px;
+                        font-weight: 800;
+                        color: $bader-dark;
+                        line-height: 1.1;
+                    }
+
+                    .camp-metric-label {
+                        font-size: 9px;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.3px;
+                        color: $bader-text-muted;
+                    }
+                }
+            }
+        }
+
+        .camp-temp-bar {
+            padding: 8px 14px 6px;
+
+            .camp-temp-label {
+                margin-bottom: 4px;
+
+                span {
+                    font-size: 10px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.4px;
+                    color: $bader-text-muted;
+                }
+            }
+
+            .camp-temp-track {
+                display: flex;
+                height: 24px;
+                border-radius: 6px;
+                overflow: hidden;
+                background: rgba($bader-border, 0.2);
+
+                .camp-temp-segment {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: white;
+                    transition: width 0.4s ease;
+
+                    &.hot {
+                        background: linear-gradient(90deg, #EF4444, #DC2626);
+                    }
+
+                    &.warm {
+                        background: linear-gradient(90deg, #F59E0B, #D97706);
+                    }
+
+                    &.cold {
+                        background: linear-gradient(90deg, #3b82f6, #2563eb);
+                    }
+                }
+            }
+
+            .camp-temp-legend {
+                display: flex;
+                justify-content: center;
+                gap: 14px;
+                margin-top: 5px;
+
+                .legend-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 10px;
+                    color: $bader-text-muted;
+                    font-weight: 600;
+
+                    .dot {
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 50%;
+
+                        &.hot {
+                            background: #EF4444;
+                        }
+
+                        &.warm {
+                            background: #F59E0B;
+                        }
+
+                        &.cold {
+                            background: #3b82f6;
+                        }
+                    }
+                }
+            }
+        }
+
+        .camp-conversion-bar {
+            padding: 6px 14px 12px;
+
+            .camp-conv-track {
+                height: 6px;
+                border-radius: 3px;
+                background: rgba($bader-border, 0.3);
+                overflow: hidden;
+
+                .camp-conv-fill {
+                    height: 100%;
+                    border-radius: 3px;
+                    transition: width 0.5s ease;
+                }
+            }
+
+            .camp-conv-label {
+                font-size: 10px;
+                color: $bader-text-muted;
+                font-weight: 600;
+                margin-top: 3px;
+                display: block;
+            }
+        }
+    }
+}
+
+.campaign-empty {
+    text-align: center;
+    padding: 30px 20px;
+    color: $bader-text-muted;
+
+    .campaign-empty-icon {
+        font-size: 36px;
+        margin-bottom: 10px;
+        opacity: 0.3;
+    }
+
+    p {
+        font-size: 12px;
+    }
+}
+
+// ========================================
 // F5: RESPONSIVE MOBILE LAYOUT
 // ========================================
 @media (max-width: 768px) {

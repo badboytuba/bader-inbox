@@ -757,6 +757,147 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- CAMPAIGN ANALYTICS -->
+                        <div t-if="state.dashboardData.campaigns and state.dashboardData.campaigns.length" class="campaign-analytics-section">
+                            <div class="campaign-header">
+                                <div class="campaign-title">
+                                    <i class="fa fa-crosshairs"/> Resultados por Campaña
+                                </div>
+                            </div>
+
+                            <!-- Campaign Summary KPIs -->
+                            <div class="campaign-kpi-strip">
+                                <div class="camp-kpi">
+                                    <span class="camp-kpi-value" t-esc="state.dashboardData.campaign_summary.totalTracked"/>
+                                    <span class="camp-kpi-label">Contactos Rastreados</span>
+                                </div>
+                                <div class="camp-kpi-divider"/>
+                                <div class="camp-kpi">
+                                    <span class="camp-kpi-value" t-esc="state.dashboardData.campaign_summary.totalCampaigns"/>
+                                    <span class="camp-kpi-label">Campañas Activas</span>
+                                </div>
+                                <div class="camp-kpi-divider"/>
+                                <div class="camp-kpi" t-if="state.dashboardData.campaign_summary.topCampaign">
+                                    <span class="camp-kpi-value">
+                                        <t t-esc="state.dashboardData.campaign_summary.topCampaign.conversionRate"/>%
+                                    </span>
+                                    <span class="camp-kpi-label">Mejor Conversión</span>
+                                </div>
+                            </div>
+
+                            <!-- Campaign Cards -->
+                            <div class="campaign-cards">
+                                <t t-foreach="state.dashboardData.campaigns" t-as="camp" t-key="camp.name">
+                                    <div class="campaign-card">
+                                        <div class="camp-card-header">
+                                            <div class="camp-name-row">
+                                                <i t-attf-class="fa {{ camp.source === 'meta' ? 'fa-facebook-square' : camp.source === 'google' ? 'fa-google' : 'fa-globe' }}" 
+                                                   t-attf-style="color: {{ camp.source === 'meta' ? '#1877F2' : camp.source === 'google' ? '#4285F4' : '#0ea5e9' }}"/>
+                                                <span class="camp-name" t-esc="camp.name"/>
+                                            </div>
+                                            <div class="camp-badges">
+                                                <span t-if="camp.source" class="camp-badge source" t-esc="camp.source"/>
+                                                <span t-if="camp.medium" class="camp-badge medium" t-esc="camp.medium"/>
+                                            </div>
+                                        </div>
+
+                                        <div class="camp-metrics-grid">
+                                            <!-- Contacts -->
+                                            <div class="camp-metric">
+                                                <div class="camp-metric-icon contacts">
+                                                    <i class="fa fa-users"/>
+                                                </div>
+                                                <div class="camp-metric-data">
+                                                    <span class="camp-metric-value" t-esc="camp.contacts"/>
+                                                    <span class="camp-metric-label">Contactos</span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Messages -->
+                                            <div class="camp-metric">
+                                                <div class="camp-metric-icon messages">
+                                                    <i class="fa fa-comments"/>
+                                                </div>
+                                                <div class="camp-metric-data">
+                                                    <span class="camp-metric-value" t-esc="camp.messages.total"/>
+                                                    <span class="camp-metric-label">Mensajes</span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Conversion -->
+                                            <div class="camp-metric">
+                                                <div class="camp-metric-icon conversion">
+                                                    <i class="fa fa-check-circle"/>
+                                                </div>
+                                                <div class="camp-metric-data">
+                                                    <span class="camp-metric-value"><t t-esc="camp.conversionRate"/>%</span>
+                                                    <span class="camp-metric-label">Conversión</span>
+                                                </div>
+                                            </div>
+
+                                            <!-- Lead Score -->
+                                            <div class="camp-metric">
+                                                <div class="camp-metric-icon score">
+                                                    <i class="fa fa-star"/>
+                                                </div>
+                                                <div class="camp-metric-data">
+                                                    <span class="camp-metric-value" t-esc="camp.avgScore"/>
+                                                    <span class="camp-metric-label">Score Medio</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Temperature Distribution Bar -->
+                                        <div class="camp-temp-bar">
+                                            <div class="camp-temp-label">
+                                                <span>Temperatura de los Leads</span>
+                                            </div>
+                                            <div class="camp-temp-track">
+                                                <div t-if="camp.hot > 0" class="camp-temp-segment hot" 
+                                                     t-attf-style="width: {{ (camp.hot / camp.contacts) * 100 }}%"
+                                                     t-attf-title="🔥 Hot: {{ camp.hot }}">
+                                                    <span t-if="(camp.hot / camp.contacts) > 0.15" t-esc="camp.hot"/>
+                                                </div>
+                                                <div t-if="camp.warm > 0" class="camp-temp-segment warm" 
+                                                     t-attf-style="width: {{ (camp.warm / camp.contacts) * 100 }}%"
+                                                     t-attf-title="🌤️ Warm: {{ camp.warm }}">
+                                                    <span t-if="(camp.warm / camp.contacts) > 0.15" t-esc="camp.warm"/>
+                                                </div>
+                                                <div t-if="camp.cold > 0" class="camp-temp-segment cold" 
+                                                     t-attf-style="width: {{ (camp.cold / camp.contacts) * 100 }}%"
+                                                     t-attf-title="🧊 Cold: {{ camp.cold }}">
+                                                    <span t-if="(camp.cold / camp.contacts) > 0.15" t-esc="camp.cold"/>
+                                                </div>
+                                            </div>
+                                            <div class="camp-temp-legend">
+                                                <span class="legend-item"><span class="dot hot"/>🔥 <t t-esc="camp.hot"/></span>
+                                                <span class="legend-item"><span class="dot warm"/>🌤️ <t t-esc="camp.warm"/></span>
+                                                <span class="legend-item"><span class="dot cold"/>🧊 <t t-esc="camp.cold"/></span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Conversion Progress Bar -->
+                                        <div class="camp-conversion-bar">
+                                            <div class="camp-conv-track">
+                                                <div class="camp-conv-fill" t-attf-style="width: {{ camp.conversionRate }}%; background: {{ camp.conversionRate >= 50 ? 'linear-gradient(90deg, #10B981, #059669)' : camp.conversionRate >= 25 ? 'linear-gradient(90deg, #F59E0B, #D97706)' : 'linear-gradient(90deg, #EF4444, #DC2626)' }}"/>
+                                            </div>
+                                            <span class="camp-conv-label">
+                                                <t t-esc="camp.resolved"/>/<t t-esc="camp.contacts"/> convertidos
+                                            </span>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+
+                        <!-- No campaigns message -->
+                        <div t-elif="!state.dashboardData.campaigns or !state.dashboardData.campaigns.length" class="campaign-empty">
+                            <div class="campaign-empty-icon">
+                                <i class="fa fa-crosshairs"/>
+                            </div>
+                            <p>Sin datos de campañas. Los contactos rastreados con UTM aparecerán aquí.</p>
+                        </div>
                     </div>
                     <div t-else="" class="empty-chat">
                         <div class="empty-icon"><i class="fa fa-bar-chart"/></div>

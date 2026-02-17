@@ -1213,6 +1213,90 @@ export class BaderInboxMain extends Component {
             });
             const avgResponseTime = responseCount > 0 ? Math.round(totalResponseMin / responseCount) : 0;
 
+            // ── CAMPAIGN ANALYTICS ──
+            let campaignData = [];
+            let campaignSummary = { totalTracked: 0, totalCampaigns: 0, topCampaign: null };
+            try {
+                const trackedConvs = await this.orm.searchRead(
+                    "bader.inbox.conversation",
+                    [["utm_source", "!=", false]],
+                    ["id", "utm_source", "utm_medium", "utm_campaign", "channel_origin",
+                        "state", "tracked_at", "last_message_date",
+                        "ai_lead_temperature", "ai_lead_score"],
+                    { order: "tracked_at desc", limit: 500 }
+                );
+                campaignSummary.totalTracked = trackedConvs.length;
+
+                // Group by campaign (or source if no campaign)
+                const campMap = {};
+                trackedConvs.forEach(c => {
+                    const key = c.utm_campaign || c.utm_source || "unknown";
+                    if (!campMap[key]) {
+                        campMap[key] = {
+                            name: key,
+                            source: c.utm_source || "",
+                            medium: c.utm_medium || "",
+                            contacts: 0,
+                            resolved: 0,
+                            hot: 0,
+                            warm: 0,
+                            cold: 0,
+                            totalScore: 0,
+                            convIds: [],
+                        };
+                    }
+                    const camp = campMap[key];
+                    camp.contacts++;
+                    camp.convIds.push(c.id);
+                    if (c.state === "resolved") camp.resolved++;
+                    if (c.ai_lead_temperature === "hot") camp.hot++;
+                    else if (c.ai_lead_temperature === "warm") camp.warm++;
+                    else camp.cold++;
+                    camp.totalScore += c.ai_lead_score || 0;
+                });
+
+                // Count messages per campaign
+                const trackedIds = trackedConvs.map(c => c.id);
+                let campMsgs = [];
+                if (trackedIds.length > 0) {
+                    campMsgs = await this.orm.searchRead(
+                        "bader.inbox.message",
+                        [["conversation_id", "in", trackedIds]],
+                        ["conversation_id", "direction"],
+                        { limit: 5000 }
+                    );
+                }
+                // Aggregate messages per campaign
+                const convToCamp = {};
+                trackedConvs.forEach(c => {
+                    convToCamp[c.id] = c.utm_campaign || c.utm_source || "unknown";
+                });
+                const campMsgCount = {};
+                campMsgs.forEach(m => {
+                    const cid = Array.isArray(m.conversation_id) ? m.conversation_id[0] : m.conversation_id;
+                    const campKey = convToCamp[cid];
+                    if (campKey) {
+                        if (!campMsgCount[campKey]) campMsgCount[campKey] = { total: 0, incoming: 0, outgoing: 0 };
+                        campMsgCount[campKey].total++;
+                        if (m.direction === "in") campMsgCount[campKey].incoming++;
+                        else campMsgCount[campKey].outgoing++;
+                    }
+                });
+
+                // Build final array sorted by contacts
+                campaignData = Object.values(campMap).map(c => ({
+                    ...c,
+                    avgScore: c.contacts > 0 ? Math.round(c.totalScore / c.contacts) : 0,
+                    conversionRate: c.contacts > 0 ? Math.round((c.resolved / c.contacts) * 100) : 0,
+                    messages: campMsgCount[c.name] || { total: 0, incoming: 0, outgoing: 0 },
+                })).sort((a, b) => b.contacts - a.contacts);
+
+                campaignSummary.totalCampaigns = campaignData.length;
+                campaignSummary.topCampaign = campaignData[0] || null;
+            } catch (campErr) {
+                console.warn("Campaign analytics load error:", campErr);
+            }
+
             this.state.dashboardData = {
                 open_count: openCount,
                 resolved_today: resolvedToday,
@@ -1228,6 +1312,8 @@ export class BaderInboxMain extends Component {
                 total_messages_7d: msgs.length,
                 total_conversations: convs.length,
                 sentiment: this._computeSentiment(msgs),
+                campaigns: campaignData,
+                campaign_summary: campaignSummary,
             };
         } catch (e) {
             console.error("Dashboard load error:", e);
