@@ -366,7 +366,7 @@
     <!-- Top-level menu under Bader Inbox -->
     <menuitem id="menu_campaign_root"
         name="📣 Campanhas"
-        parent="bader_inbox.menu_root"
+        parent="menu_bader_inbox_root"
         sequence="30"/>
 
     <!-- Dashboard Client Action -->
