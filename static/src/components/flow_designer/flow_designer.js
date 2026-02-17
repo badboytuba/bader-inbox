@@ -553,6 +553,6 @@ export class FlowDesigner extends Component {
     }
 }
 
-FlowDesigner.props = { action: { type: Object, optional: true } };
+FlowDesigner.props = { "*": true };
 
 registry.category("actions").add("bader_inbox_flow_designer", FlowDesigner);

@@ -137,6 +137,6 @@ export class CampaignDashboard extends Component {
     }
 }
 
-CampaignDashboard.props = { action: { type: Object, optional: true } };
+CampaignDashboard.props = { "*": true };
 
 registry.category("actions").add("bader_inbox_campaign_dashboard", CampaignDashboard);
