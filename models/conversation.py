@@ -87,6 +87,20 @@ class BaderInboxConversation(models.Model):
     profile_pic_url = fields.Char(string="Profile Picture URL")
     profile_pic_date = fields.Datetime(string="Profile Pic Fetched At")
 
+    # UTM / Contact Origin Tracking
+    utm_source = fields.Char(string="Source",
+        help="Traffic source: meta, google, website, organic")
+    utm_medium = fields.Char(string="Medium",
+        help="Traffic medium: instagram, facebook, cpc, widget")
+    utm_campaign = fields.Char(string="Campaign",
+        help="Campaign name: promo_verao_2026")
+    channel_origin = fields.Char(string="Origin Channel",
+        help="Origin channel: ads, widget, organic, web")
+    referrer_url = fields.Char(string="Referrer URL")
+    landing_page = fields.Char(string="Landing Page")
+    tracking_code = fields.Char(string="Tracking Code", index=True)
+    tracked_at = fields.Datetime(string="Tracked At")
+
     @api.depends("ai_lead_score")
     def _compute_lead_temperature(self):
         for rec in self:

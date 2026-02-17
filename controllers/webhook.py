@@ -386,7 +386,38 @@ class BaderInboxWebhook(http.Controller):
                 return _json_ok({"status": "duplicate"})
             
             _logger.info(f"Message created: id={new_message.id}, type={msg_type}, content='{(content or '')[:50]}'")
-            
+
+            # Extract UTM / tracking data from message
+            tracking = msg_obj.get("tracking")
+            if tracking and isinstance(tracking, dict) and not conversation.tracking_code:
+                tracking_vals = {}
+                field_map = {
+                    "source": "utm_source",
+                    "medium": "utm_medium",
+                    "campaign": "utm_campaign",
+                    "channel": "channel_origin",
+                    "referrer_url": "referrer_url",
+                    "landing_page": "landing_page",
+                    "tracking_code": "tracking_code",
+                }
+                for src_key, dst_field in field_map.items():
+                    val = tracking.get(src_key)
+                    if val:
+                        tracking_vals[dst_field] = str(val)[:256]
+                tracked_at = tracking.get("tracked_at")
+                if tracked_at:
+                    try:
+                        from datetime import datetime
+                        tracking_vals["tracked_at"] = datetime.fromisoformat(
+                            tracked_at.replace("Z", "+00:00")
+                        )
+                    except (ValueError, TypeError):
+                        tracking_vals["tracked_at"] = fields.Datetime.now()
+                else:
+                    tracking_vals["tracked_at"] = fields.Datetime.now()
+                if tracking_vals:
+                    conversation.sudo().write(tracking_vals)
+                    _logger.info(f"Tracking saved for conv {conversation.id}: source={tracking_vals.get('utm_source')}, campaign={tracking_vals.get('utm_campaign')}")            
             # Store raw key/content for ALL messages (useful for debugging and deferred media download)
             try:
                 update_vals = {}

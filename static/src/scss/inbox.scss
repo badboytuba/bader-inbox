@@ -1561,6 +1561,132 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
         }
     }
 
+    /* Origin / UTM Tracking Card */
+    .origin-tracking-card {
+        margin: 12px 16px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(#0ea5e9, 0.04) 0%, rgba(#06b6d4, 0.06) 100%);
+        border: 1px solid rgba(#0ea5e9, 0.12);
+        overflow: hidden;
+
+        .origin-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, rgba(#0ea5e9, 0.08) 0%, rgba(#06b6d4, 0.12) 100%);
+            border-bottom: 1px solid rgba(#0ea5e9, 0.1);
+
+            i {
+                font-size: 13px;
+                color: #0ea5e9;
+            }
+
+            span {
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: #0ea5e9;
+            }
+        }
+
+        .origin-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 12px;
+
+            .origin-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 10px;
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.6);
+                border: 1px solid rgba(0, 0, 0, 0.04);
+                transition: transform 0.15s ease;
+
+                &:hover {
+                    transform: translateY(-1px);
+                }
+
+                &.full-width {
+                    grid-column: 1 / -1;
+                }
+            }
+
+            .origin-icon {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+
+                i {
+                    font-size: 13px;
+                    color: white;
+                }
+
+                &.source {
+                    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+                }
+
+                &.medium {
+                    background: linear-gradient(135deg, #f472b6, #ec4899);
+                }
+
+                &.campaign {
+                    background: linear-gradient(135deg, #f59e0b, #d97706);
+                }
+
+                &.channel {
+                    background: linear-gradient(135deg, #10b981, #059669);
+                }
+            }
+
+            .origin-detail {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+
+                .origin-label {
+                    font-size: 9px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.4px;
+                    color: $bader-text-muted;
+                }
+
+                .origin-value {
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: $bader-text;
+                    text-transform: capitalize;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+            }
+        }
+
+        .origin-footer {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 14px 8px;
+            font-size: 9px;
+            color: $bader-text-muted;
+            border-top: 1px solid rgba(#0ea5e9, 0.06);
+
+            i {
+                font-size: 10px;
+            }
+        }
+    }
+
     .contact-section {
         padding: 16px 20px;
         border-bottom: 1px solid $bader-border;

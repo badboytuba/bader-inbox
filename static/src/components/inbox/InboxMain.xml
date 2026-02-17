@@ -1407,6 +1407,56 @@
                             <span>Contacto</span>
                         </button>
                     </div>
+
+                    <!-- Contact Origin / UTM Tracking -->
+                    <div t-if="state.selectedConversation.utm_source or state.selectedConversation.utm_campaign or state.selectedConversation.channel_origin" class="origin-tracking-card">
+                        <div class="origin-header">
+                            <i class="fa fa-crosshairs"/>
+                            <span>Origen del Contacto</span>
+                        </div>
+                        <div class="origin-grid">
+                            <div t-if="state.selectedConversation.utm_source" class="origin-item">
+                                <div class="origin-icon source">
+                                    <i t-attf-class="fa {{ state.selectedConversation.utm_source === 'meta' ? 'fa-facebook' : state.selectedConversation.utm_source === 'google' ? 'fa-google' : 'fa-globe' }}"/>
+                                </div>
+                                <div class="origin-detail">
+                                    <span class="origin-label">Source</span>
+                                    <span class="origin-value" t-esc="state.selectedConversation.utm_source"/>
+                                </div>
+                            </div>
+                            <div t-if="state.selectedConversation.utm_medium" class="origin-item">
+                                <div class="origin-icon medium">
+                                    <i t-attf-class="fa {{ state.selectedConversation.utm_medium === 'instagram' ? 'fa-instagram' : state.selectedConversation.utm_medium === 'facebook' ? 'fa-facebook' : state.selectedConversation.utm_medium === 'cpc' ? 'fa-money' : 'fa-share-alt' }}"/>
+                                </div>
+                                <div class="origin-detail">
+                                    <span class="origin-label">Medium</span>
+                                    <span class="origin-value" t-esc="state.selectedConversation.utm_medium"/>
+                                </div>
+                            </div>
+                            <div t-if="state.selectedConversation.utm_campaign" class="origin-item full-width">
+                                <div class="origin-icon campaign">
+                                    <i class="fa fa-bullhorn"/>
+                                </div>
+                                <div class="origin-detail">
+                                    <span class="origin-label">Campaña</span>
+                                    <span class="origin-value" t-esc="state.selectedConversation.utm_campaign"/>
+                                </div>
+                            </div>
+                            <div t-if="state.selectedConversation.channel_origin" class="origin-item">
+                                <div class="origin-icon channel">
+                                    <i class="fa fa-plug"/>
+                                </div>
+                                <div class="origin-detail">
+                                    <span class="origin-label">Canal</span>
+                                    <span class="origin-value" t-esc="state.selectedConversation.channel_origin"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div t-if="state.selectedConversation.tracked_at" class="origin-footer">
+                            <i class="fa fa-clock-o"/>
+                            <span t-esc="formatTime(state.selectedConversation.tracked_at)"/>
+                        </div>
+                    </div>
                 </div>
         </div>
 
