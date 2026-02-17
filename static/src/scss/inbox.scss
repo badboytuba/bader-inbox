@@ -674,6 +674,13 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                     background: $status-offline;
                 }
             }
+
+            .conv-avatar-img {
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                object-fit: cover;
+            }
         }
 
         .conv-content {
@@ -819,6 +826,13 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                 font-weight: 600;
                 color: white;
                 background: linear-gradient(135deg, $bader-dark, $bader-dark-hover);
+
+                .contact-avatar-img {
+                    width: 100%;
+                    height: 100%;
+                    border-radius: 50%;
+                    object-fit: cover;
+                }
             }
 
             .contact-info {
@@ -1321,6 +1335,13 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                 background: linear-gradient(135deg, $bader-dark, $bader-dark-hover);
                 box-shadow: $shadow-md;
                 flex-shrink: 0;
+
+                .c360-avatar-img {
+                    width: 100%;
+                    height: 100%;
+                    border-radius: 50%;
+                    object-fit: cover;
+                }
             }
 
             .c360-info {

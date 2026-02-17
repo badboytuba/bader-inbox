@@ -83,6 +83,10 @@ class BaderInboxConversation(models.Model):
     # AI Escalation
     ai_escalation_reason = fields.Text(string="Escalation Reason")
 
+    # WhatsApp Profile Picture
+    profile_pic_url = fields.Char(string="Profile Picture URL")
+    profile_pic_date = fields.Datetime(string="Profile Pic Fetched At")
+
     @api.depends("ai_lead_score")
     def _compute_lead_temperature(self):
         for rec in self:

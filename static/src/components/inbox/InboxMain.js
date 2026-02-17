@@ -271,7 +271,8 @@ export class BaderInboxMain extends Component {
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
                     "tag_ids", "ai_active",
                     "ai_lead_score", "ai_lead_temperature", "ai_resolution",
-                    "ai_response_count", "ai_tools_used", "ai_escalation_reason"
+                    "ai_response_count", "ai_tools_used", "ai_escalation_reason",
+                    "profile_pic_url"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -279,6 +280,8 @@ export class BaderInboxMain extends Component {
             console.error("Error loading conversations:", e);
         }
         this.state.loadingConversations = false;
+        // Fetch profile pictures in background
+        this._loadProfilePictures();
     }
 
     async _refreshConversations() {
@@ -302,7 +305,8 @@ export class BaderInboxMain extends Component {
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
                     "tag_ids", "ai_active",
                     "ai_lead_score", "ai_lead_temperature", "ai_resolution",
-                    "ai_response_count", "ai_tools_used", "ai_escalation_reason"
+                    "ai_response_count", "ai_tools_used", "ai_escalation_reason",
+                    "profile_pic_url"
                 ],
                 { order: "last_message_date desc", limit: 100 }
             );
@@ -328,6 +332,29 @@ export class BaderInboxMain extends Component {
             }
         } catch (e) {
             // Silent fail for polling
+        }
+    }
+
+    async _loadProfilePictures() {
+        // Batch fetch profile pictures for conversations that don't have one cached
+        const ids = this.state.conversations
+            .filter(c => !c.profile_pic_url)
+            .map(c => c.id)
+            .slice(0, 20);
+        if (!ids.length) return;
+
+        try {
+            const result = await this.rpc("/bader-inbox/profile-pictures", {
+                conversation_ids: ids,
+            });
+            // Update conversations state with fetched URLs
+            for (const conv of this.state.conversations) {
+                if (result[conv.id]) {
+                    conv.profile_pic_url = result[conv.id];
+                }
+            }
+        } catch (e) {
+            console.debug("Profile pictures fetch failed:", e);
         }
     }
 

@@ -107,8 +107,9 @@
                         <t t-foreach="filteredConversations" t-as="conv" t-key="conv.id">
                             <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }} {{ conv.unread_count > 0 ? 'unread' : '' }}" 
                                  t-on-click="() => this.selectConversation(conv)">
-                                <div t-attf-class="conv-avatar {{ getAvatarColor(conv.id) }}">
-                                    <t t-esc="getInitials(conv.computed_name || conv.phone)"/>
+                                <div t-attf-class="conv-avatar {{ conv.profile_pic_url ? '' : getAvatarColor(conv.id) }}">
+                                    <img t-if="conv.profile_pic_url" t-att-src="conv.profile_pic_url" class="conv-avatar-img" alt="" loading="lazy"/>
+                                    <t t-else="" t-esc="getInitials(conv.computed_name || conv.phone)"/>
                                     <div class="status-dot online"/>
                                 </div>
                                 <div class="conv-content">
@@ -171,8 +172,9 @@
                                 <i class="fa fa-arrow-left"/>
                             </button>
                             <div class="chat-contact">
-                                <div t-attf-class="contact-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
-                                    <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                                <div t-attf-class="contact-avatar {{ state.selectedConversation.profile_pic_url ? '' : getAvatarColor(state.selectedConversation.id) }}">
+                                    <img t-if="state.selectedConversation.profile_pic_url" t-att-src="state.selectedConversation.profile_pic_url" class="contact-avatar-img" alt=""/>
+                                    <t t-else="" t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
                                 </div>
                                 <div class="contact-info">
                                     <h4 t-esc="state.selectedConversation.computed_name || state.selectedConversation.phone"/>
@@ -845,8 +847,9 @@
                     <!-- 360° Customer Profile Header -->
                     <div class="customer-360-header">
                         <div class="c360-profile">
-                            <div t-attf-class="c360-avatar {{ getAvatarColor(state.selectedConversation.id) }}">
-                                <t t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
+                            <div t-attf-class="c360-avatar {{ state.selectedConversation.profile_pic_url ? '' : getAvatarColor(state.selectedConversation.id) }}">
+                                <img t-if="state.selectedConversation.profile_pic_url" t-att-src="state.selectedConversation.profile_pic_url" class="c360-avatar-img" alt=""/>
+                                <t t-else="" t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
                             </div>
                             <div class="c360-info">
                                 <div class="c360-name-row">

@@ -3,3 +3,4 @@
 
 from . import webhook
 from . import campaign_dashboard
+from . import profile_picture

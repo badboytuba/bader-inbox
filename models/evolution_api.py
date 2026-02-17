@@ -312,3 +312,27 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         """List all instances"""
         result = self._request("GET", "/instance/list")
         return result.get("instances", []) if isinstance(result, dict) else result
+
+    def get_profile_picture(self, instance_name, phone):
+        """Get WhatsApp profile picture URL for a phone number.
+
+        GET /api/instance/profilePicture/{instanceName}?number={phone}
+        Returns: {"exists": true, "profilePictureUrl": "https://..."} or {"exists": false}
+        """
+        clean_phone = re.sub(r'[^\d]', '', str(phone))
+        try:
+            config = self._get_config()
+            base_url = config['url'].rstrip('/')
+            url = f"{base_url}/api/instance/profilePicture/{instance_name}?number={clean_phone}"
+            headers = {"apikey": config["key"]}
+
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("exists") and data.get("profilePictureUrl"):
+                return data["profilePictureUrl"]
+            return None
+        except Exception as e:
+            _logger.debug(f"Profile picture fetch failed for {phone}: {e}")
+            return None
