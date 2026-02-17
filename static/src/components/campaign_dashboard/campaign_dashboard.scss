@@ -1,0 +1,616 @@
+/* ═════════════════════════════════════════════════════════════
+   BADER FLOW — Campaign Dashboard
+   ═════════════════════════════════════════════════════════════ */
+
+.cd-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+    color: #E2E8F0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 24px 32px;
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+
+.cd-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.cd-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.cd-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+    background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.cd-subtitle {
+    font-size: 14px;
+    color: #64748B;
+    font-weight: 400;
+}
+
+.cd-header-right {
+    display: flex;
+    gap: 8px;
+}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+
+.cd-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.cd-btn-ghost {
+    background: rgba(255, 255, 255, 0.05);
+    color: #94A3B8;
+    border: 1px solid #334155;
+}
+
+.cd-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #F1F5F9;
+    border-color: #475569;
+}
+
+.cd-btn-primary {
+    background: linear-gradient(135deg, #3B82F6, #2563EB);
+    color: white;
+}
+
+.cd-btn-primary:hover {
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+    transform: translateY(-1px);
+}
+
+.cd-btn-success {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10B981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.cd-btn-success:hover {
+    background: rgba(16, 185, 129, 0.25);
+}
+
+.cd-btn-warn {
+    background: rgba(245, 158, 11, 0.15);
+    color: #F59E0B;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.cd-btn-warn:hover {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.cd-btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ── Loading ───────────────────────────────────────────────── */
+
+.cd-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    height: 300px;
+    color: #64748B;
+}
+
+.cd-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #334155;
+    border-top-color: #3B82F6;
+    border-radius: 50%;
+    animation: cd-spin 0.8s linear infinite;
+}
+
+@keyframes cd-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── KPI Row ───────────────────────────────────────────────── */
+
+.cd-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.cd-kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+}
+
+.cd-kpi-card:hover {
+    border-color: #475569;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.cd-kpi-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.cd-kpi-data {
+    display: flex;
+    flex-direction: column;
+}
+
+.cd-kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #F1F5F9;
+}
+
+.cd-kpi-label {
+    font-size: 11px;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+/* ── Tabs ──────────────────────────────────────────────────── */
+
+.cd-tabs {
+    display: flex;
+    gap: 2px;
+    background: rgba(30, 41, 59, 0.4);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 20px;
+    width: fit-content;
+}
+
+.cd-tab {
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: #94A3B8;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.cd-tab:hover {
+    color: #E2E8F0;
+}
+
+.cd-tab-active {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3B82F6;
+}
+
+.cd-tab-content {
+    animation: cd-fade-in 0.2s ease;
+}
+
+@keyframes cd-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Cards ─────────────────────────────────────────────────── */
+
+.cd-card {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.cd-card-header {
+    margin-bottom: 16px;
+}
+
+.cd-card-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+    color: #F1F5F9;
+}
+
+.cd-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+/* ── Bar Chart ─────────────────────────────────────────────── */
+
+.cd-chart-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    height: 180px;
+    padding-top: 20px;
+}
+
+.cd-bar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.cd-bar-stack {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+}
+
+.cd-bar {
+    width: 28px;
+    border-radius: 4px 4px 0 0;
+    transition: height 0.5s ease;
+}
+
+.cd-bar-sent {
+    background: linear-gradient(180deg, #3B82F6, #2563EB);
+}
+
+.cd-bar-fail {
+    background: #EF4444;
+    border-radius: 0;
+    margin-top: 1px;
+}
+
+.cd-bar-value {
+    font-size: 11px;
+    color: #94A3B8;
+    font-weight: 600;
+}
+
+.cd-bar-label {
+    font-size: 10px;
+    color: #64748B;
+}
+
+/* ── Stats List ────────────────────────────────────────────── */
+
+.cd-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cd-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 6px;
+    transition: background 0.1s;
+}
+
+.cd-stat-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.cd-stat-label {
+    font-size: 13px;
+    color: #94A3B8;
+}
+
+.cd-stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #F1F5F9;
+}
+
+.cd-stat-active {
+    color: #10B981;
+}
+
+.cd-stat-warn {
+    color: #F59E0B;
+}
+
+.cd-stat-good {
+    color: #3B82F6;
+}
+
+/* ── Filter Row ────────────────────────────────────────────── */
+
+.cd-filter-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.cd-filter-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #334155;
+    background: transparent;
+    color: #94A3B8;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.cd-filter-btn:hover {
+    border-color: #475569;
+    color: #E2E8F0;
+}
+
+.cd-filter-active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #3B82F6;
+}
+
+/* ── Campaign Cards ────────────────────────────────────────── */
+
+.cd-campaign-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+}
+
+.cd-campaign-card {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+}
+
+.cd-campaign-card:hover {
+    border-color: #475569;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.cd-cc-header {
+    margin-bottom: 14px;
+}
+
+.cd-cc-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.cd-cc-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #F1F5F9;
+}
+
+.cd-cc-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.cd-cc-sub {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: #64748B;
+}
+
+/* ── Progress Bars ─────────────────────────────────────────── */
+
+.cd-cc-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.cd-cc-metric-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #94A3B8;
+    margin-bottom: 3px;
+}
+
+.cd-progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cd-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+
+.cd-progress-blue {
+    background: linear-gradient(90deg, #3B82F6, #60A5FA);
+}
+
+.cd-progress-purple {
+    background: linear-gradient(90deg, #8B5CF6, #A78BFA);
+}
+
+.cd-progress-green {
+    background: linear-gradient(90deg, #10B981, #34D399);
+}
+
+/* ── Numbers ───────────────────────────────────────────────── */
+
+.cd-cc-numbers {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #94A3B8;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.cd-cc-num-bad {
+    color: #EF4444;
+}
+
+/* ── Campaign Actions ──────────────────────────────────────── */
+
+.cd-cc-actions {
+    display: flex;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px solid #334155;
+}
+
+/* ── Health Cards ──────────────────────────────────────────── */
+
+.cd-health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.cd-health-card {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px;
+    backdrop-filter: blur(10px);
+}
+
+.cd-health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.cd-health-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.cd-health-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.cd-health-score {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.cd-health-good {
+    background: #10B981;
+    color: #10B981;
+}
+
+.cd-health-warn {
+    background: #F59E0B;
+    color: #F59E0B;
+}
+
+.cd-health-bad {
+    background: #EF4444;
+    color: #EF4444;
+}
+
+.cd-health-details {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #94A3B8;
+    margin-bottom: 10px;
+}
+
+.cd-health-fail {
+    color: #EF4444;
+}
+
+.cd-health-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cd-health-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+
+/* ── Empty State ───────────────────────────────────────────── */
+
+.cd-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 60px;
+    color: #64748B;
+    font-size: 14px;
+    grid-column: 1 / -1;
+}

@@ -1,0 +1,426 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                     CAMPAIGN VIEWS                                 -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Campaign: Tree ──────────────────────────────────────────────── -->
+    <record id="view_campaign_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.tree</field>
+        <field name="model">bader.inbox.campaign</field>
+        <field name="arch" type="xml">
+            <tree string="Campanhas" decoration-success="status == 'active'" decoration-muted="status in ('cancelled', 'completed')">
+                <field name="name"/>
+                <field name="campaign_type"/>
+                <field name="status" widget="badge" decoration-info="status == 'draft'" decoration-success="status == 'active'" decoration-warning="status == 'paused'" decoration-muted="status in ('completed', 'cancelled')"/>
+                <field name="total_audience"/>
+                <field name="stat_sent"/>
+                <field name="stat_delivered"/>
+                <field name="stat_read"/>
+                <field name="stat_replied"/>
+                <field name="stat_failed"/>
+                <field name="start_date"/>
+                <field name="user_id" widget="many2one_avatar_user"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ── Campaign: Form ──────────────────────────────────────────────── -->
+    <record id="view_campaign_form" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.form</field>
+        <field name="model">bader.inbox.campaign</field>
+        <field name="arch" type="xml">
+            <form string="Campanha">
+                <header>
+                    <button name="action_activate" type="object" string="▶ Ativar" class="btn-primary" attrs="{'invisible': [('status', 'not in', ['draft', 'paused'])]}"/>
+                    <button name="action_pause" type="object" string="⏸ Pausar" attrs="{'invisible': [('status', '!=', 'active')]}"/>
+                    <button name="action_complete" type="object" string="✅ Concluir" attrs="{'invisible': [('status', '!=', 'active')]}"/>
+                    <button name="action_cancel" type="object" string="❌ Cancelar" attrs="{'invisible': [('status', 'in', ['completed', 'cancelled'])]}"/>
+                    <button name="action_open_flow_designer" type="object" string="⚡ Abrir Flow Designer" class="btn-success"/>
+                    <field name="status" widget="statusbar" statusbar_visible="draft,active,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button class="oe_stat_button" type="object" name="action_open_flow_designer" icon="fa-sitemap">
+                            <field name="execution_count" widget="statinfo" string="Execuções"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Nome da Campanha"/></h1>
+                    </div>
+                    <group>
+                        <group string="Configuração">
+                            <field name="campaign_type"/>
+                            <field name="throttle_id"/>
+                            <field name="channel_ids" widget="many2many_tags"/>
+                            <field name="user_id"/>
+                        </group>
+                        <group string="Agendamento">
+                            <field name="start_date"/>
+                            <field name="end_date"/>
+                            <field name="flow_id"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="📊 Audiência">
+                            <field name="audience_ids">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="contact_count"/>
+                                    <field name="tag_ids" widget="many2many_tags"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="🔀 A/B Testing" attrs="{'invisible': [('ab_enabled', '=', False)]}">
+                            <group>
+                                <field name="ab_enabled"/>
+                                <field name="ab_auto_winner"/>
+                                <field name="ab_auto_winner_count"/>
+                            </group>
+                            <field name="ab_variant_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                    <field name="percentage"/>
+                                    <field name="message_content"/>
+                                    <field name="stat_sent"/>
+                                    <field name="stat_read"/>
+                                    <field name="stat_replied"/>
+                                    <field name="reply_rate"/>
+                                    <field name="is_winner" widget="boolean_toggle"/>
+                                    <field name="is_active" widget="boolean_toggle"/>
+                                </tree>
+                            </field>
+                        </page>
+
+                        <page string="📈 Estatísticas">
+                            <group>
+                                <group>
+                                    <field name="stat_sent"/>
+                                    <field name="stat_delivered"/>
+                                    <field name="stat_read"/>
+                                </group>
+                                <group>
+                                    <field name="stat_replied"/>
+                                    <field name="stat_failed"/>
+                                    <field name="stat_opted_out"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="📝 Descrição">
+                            <field name="description"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── Campaign: Action ────────────────────────────────────────────── -->
+    <record id="action_campaign" model="ir.actions.act_window">
+        <field name="name">Campanhas</field>
+        <field name="res_model">bader.inbox.campaign</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                     AUDIENCE VIEWS                                 -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <record id="view_audience_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.audience.tree</field>
+        <field name="model">bader.inbox.campaign.audience</field>
+        <field name="arch" type="xml">
+            <tree string="Audiências">
+                <field name="name"/>
+                <field name="tag_ids" widget="many2many_tags"/>
+                <field name="contact_count"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_audience_form" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.audience.form</field>
+        <field name="model">bader.inbox.campaign.audience</field>
+        <field name="arch" type="xml">
+            <form string="Audiência">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Nome da Audiência"/></h1>
+                    </div>
+                    <group>
+                        <group string="Filtro por Tags">
+                            <field name="tag_ids" widget="many2many_tags"/>
+                            <field name="tag_mode"/>
+                        </group>
+                        <group string="Filtros Gerais">
+                            <field name="has_phone"/>
+                            <field name="has_email"/>
+                            <field name="country_ids" widget="many2many_tags"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Filtro por Compras">
+                            <field name="has_order_last_days"/>
+                            <field name="no_order_last_days"/>
+                        </group>
+                        <group string="Opções">
+                            <field name="exclude_opted_out"/>
+                            <field name="custom_domain"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="contact_count"/>
+                        <button name="action_preview_contacts" type="object" string="👁 Ver Contactos" class="btn-primary"/>
+                    </group>
+                    <field name="description"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_audience" model="ir.actions.act_window">
+        <field name="name">Audiências</field>
+        <field name="res_model">bader.inbox.campaign.audience</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                     THROTTLE VIEWS                                 -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <record id="view_throttle_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.throttle.tree</field>
+        <field name="model">bader.inbox.campaign.throttle</field>
+        <field name="arch" type="xml">
+            <tree string="Perfis Anti-Ban">
+                <field name="name"/>
+                <field name="batch_size"/>
+                <field name="daily_limit"/>
+                <field name="schedule_start"/>
+                <field name="schedule_end"/>
+                <field name="rotation_enabled" widget="boolean_toggle"/>
+                <field name="circuit_breaker_enabled" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_throttle_form" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.throttle.form</field>
+        <field name="model">bader.inbox.campaign.throttle</field>
+        <field name="arch" type="xml">
+            <form string="Perfil Anti-Ban">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Nome do Perfil"/></h1>
+                    </div>
+                    <field name="description"/>
+
+                    <notebook>
+                        <page string="⚡ Velocidade">
+                            <group>
+                                <group string="Lotes">
+                                    <field name="batch_size"/>
+                                    <field name="batch_pause_min"/>
+                                    <field name="batch_pause_max"/>
+                                </group>
+                                <group string="Delay entre Msgs">
+                                    <field name="msg_delay_min_sec"/>
+                                    <field name="msg_delay_max_sec"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Limites">
+                                    <field name="daily_limit"/>
+                                    <field name="hourly_limit"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="🕐 Horários">
+                            <group>
+                                <group>
+                                    <field name="schedule_start" widget="float_time"/>
+                                    <field name="schedule_end" widget="float_time"/>
+                                    <field name="schedule_days"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="🛡️ Proteção">
+                            <group>
+                                <group string="Rotação">
+                                    <field name="rotation_enabled"/>
+                                </group>
+                                <group string="Warm-up">
+                                    <field name="warmup_enabled"/>
+                                    <field name="warmup_daily_start" attrs="{'invisible': [('warmup_enabled', '=', False)]}"/>
+                                    <field name="warmup_daily_increment" attrs="{'invisible': [('warmup_enabled', '=', False)]}"/>
+                                    <field name="warmup_days" attrs="{'invisible': [('warmup_enabled', '=', False)]}"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Circuit Breaker">
+                                    <field name="circuit_breaker_enabled"/>
+                                    <field name="circuit_breaker_threshold" attrs="{'invisible': [('circuit_breaker_enabled', '=', False)]}"/>
+                                    <field name="circuit_breaker_window" attrs="{'invisible': [('circuit_breaker_enabled', '=', False)]}"/>
+                                </group>
+                                <group string="Fadiga do Contacto">
+                                    <field name="fatigue_max_msgs_week"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="🤖 Humanização">
+                            <group>
+                                <group string="Variação de Texto">
+                                    <field name="variation_enabled"/>
+                                </group>
+                                <group string="Simulação de Digitação">
+                                    <field name="typing_simulation"/>
+                                    <field name="typing_delay_per_char_ms" attrs="{'invisible': [('typing_simulation', '=', False)]}"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="Pausas Comportamentais">
+                                    <field name="behavioral_pauses"/>
+                                    <field name="behavioral_pause_probability" attrs="{'invisible': [('behavioral_pauses', '=', False)]}"/>
+                                </group>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_throttle" model="ir.actions.act_window">
+        <field name="name">Perfis Anti-Ban</field>
+        <field name="res_model">bader.inbox.campaign.throttle</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                     OPT-OUT VIEWS                                  -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <record id="view_optout_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.optout.tree</field>
+        <field name="model">bader.inbox.campaign.optout</field>
+        <field name="arch" type="xml">
+            <tree string="Opt-out List" create="0">
+                <field name="phone"/>
+                <field name="partner_id"/>
+                <field name="reason"/>
+                <field name="keyword_used"/>
+                <field name="campaign_id"/>
+                <field name="opted_out_at"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_optout" model="ir.actions.act_window">
+        <field name="name">Opt-out List</field>
+        <field name="res_model">bader.inbox.campaign.optout</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                     EXECUTION VIEWS                                -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <record id="view_execution_tree" model="ir.ui.view">
+        <field name="name">bader.inbox.campaign.execution.tree</field>
+        <field name="model">bader.inbox.campaign.execution</field>
+        <field name="arch" type="xml">
+            <tree string="Execuções" decoration-success="status == 'completed'" decoration-danger="status == 'failed'" decoration-muted="status == 'opted_out'">
+                <field name="campaign_id"/>
+                <field name="partner_id"/>
+                <field name="phone"/>
+                <field name="status" widget="badge"/>
+                <field name="current_node_id"/>
+                <field name="channel_id"/>
+                <field name="ab_variant"/>
+                <field name="started_at"/>
+                <field name="next_action_at"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_execution" model="ir.actions.act_window">
+        <field name="name">Execuções</field>
+        <field name="res_model">bader.inbox.campaign.execution</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!--                     MENUS                                          -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- Top-level menu under Bader Inbox -->
+    <menuitem id="menu_campaign_root"
+        name="📣 Campanhas"
+        parent="bader_inbox.menu_root"
+        sequence="30"/>
+
+    <!-- Dashboard Client Action -->
+    <record id="action_campaign_dashboard" model="ir.actions.client">
+        <field name="name">📊 Dashboard</field>
+        <field name="tag">bader_inbox_campaign_dashboard</field>
+    </record>
+
+    <!-- Flow Designer Client Action -->
+    <record id="action_flow_designer" model="ir.actions.client">
+        <field name="name">⚡ Flow Designer</field>
+        <field name="tag">bader_inbox_flow_designer</field>
+    </record>
+
+    <menuitem id="menu_campaign_dashboard"
+        name="📊 Dashboard"
+        parent="menu_campaign_root"
+        action="action_campaign_dashboard"
+        sequence="5"/>
+
+    <menuitem id="menu_campaign_list"
+        name="Todas as Campanhas"
+        parent="menu_campaign_root"
+        action="action_campaign"
+        sequence="10"/>
+
+    <menuitem id="menu_audience_list"
+        name="Audiências"
+        parent="menu_campaign_root"
+        action="action_audience"
+        sequence="20"/>
+
+    <menuitem id="menu_campaign_config"
+        name="⚙️ Configuração"
+        parent="menu_campaign_root"
+        sequence="50"/>
+
+    <menuitem id="menu_throttle_list"
+        name="Perfis Anti-Ban"
+        parent="menu_campaign_config"
+        action="action_throttle"
+        sequence="10"/>
+
+    <menuitem id="menu_optout_list"
+        name="Opt-out List"
+        parent="menu_campaign_config"
+        action="action_optout"
+        sequence="20"/>
+
+    <menuitem id="menu_execution_list"
+        name="Execuções"
+        parent="menu_campaign_config"
+        action="action_execution"
+        sequence="30"/>
+
+</odoo>
+

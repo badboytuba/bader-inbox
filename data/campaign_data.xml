@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Default throttle profiles -->
+        <record id="throttle_conservative" model="bader.inbox.campaign.throttle">
+            <field name="name">🐢 Conservador (Seguro)</field>
+            <field name="description">Perfil mais seguro. Ideal para números novos ou quando há risco de ban.</field>
+            <field name="batch_size">10</field>
+            <field name="batch_pause_min">300</field>
+            <field name="batch_pause_max">600</field>
+            <field name="msg_delay_min_sec">5</field>
+            <field name="msg_delay_max_sec">12</field>
+            <field name="daily_limit">100</field>
+            <field name="hourly_limit">15</field>
+            <field name="schedule_start">9.5</field>
+            <field name="schedule_end">19.0</field>
+            <field name="schedule_days">1,2,3,4,5</field>
+            <field name="rotation_enabled">True</field>
+            <field name="warmup_enabled">True</field>
+            <field name="variation_enabled">True</field>
+            <field name="typing_simulation">True</field>
+            <field name="circuit_breaker_enabled">True</field>
+            <field name="circuit_breaker_threshold">5.0</field>
+            <field name="fatigue_max_msgs_week">2</field>
+            <field name="behavioral_pauses">True</field>
+            <field name="behavioral_pause_probability">25.0</field>
+        </record>
+
+        <record id="throttle_balanced" model="bader.inbox.campaign.throttle">
+            <field name="name">⚖️ Equilibrado (Recomendado)</field>
+            <field name="description">Bom equilíbrio entre velocidade e segurança. Ideal para uso diário.</field>
+            <field name="batch_size">20</field>
+            <field name="batch_pause_min">120</field>
+            <field name="batch_pause_max">300</field>
+            <field name="msg_delay_min_sec">3</field>
+            <field name="msg_delay_max_sec">8</field>
+            <field name="daily_limit">200</field>
+            <field name="hourly_limit">30</field>
+            <field name="schedule_start">9.0</field>
+            <field name="schedule_end">20.0</field>
+            <field name="schedule_days">1,2,3,4,5,6</field>
+            <field name="rotation_enabled">True</field>
+            <field name="warmup_enabled">False</field>
+            <field name="variation_enabled">True</field>
+            <field name="typing_simulation">True</field>
+            <field name="circuit_breaker_enabled">True</field>
+            <field name="circuit_breaker_threshold">10.0</field>
+            <field name="fatigue_max_msgs_week">3</field>
+            <field name="behavioral_pauses">True</field>
+            <field name="behavioral_pause_probability">15.0</field>
+        </record>
+
+        <record id="throttle_aggressive" model="bader.inbox.campaign.throttle">
+            <field name="name">🚀 Agressivo (Rápido)</field>
+            <field name="description">Envios mais rápidos. Só usar com números bem estabelecidos.</field>
+            <field name="batch_size">40</field>
+            <field name="batch_pause_min">60</field>
+            <field name="batch_pause_max">120</field>
+            <field name="msg_delay_min_sec">2</field>
+            <field name="msg_delay_max_sec">5</field>
+            <field name="daily_limit">500</field>
+            <field name="hourly_limit">60</field>
+            <field name="schedule_start">8.0</field>
+            <field name="schedule_end">21.0</field>
+            <field name="schedule_days">1,2,3,4,5,6,7</field>
+            <field name="rotation_enabled">True</field>
+            <field name="warmup_enabled">False</field>
+            <field name="variation_enabled">True</field>
+            <field name="typing_simulation">False</field>
+            <field name="circuit_breaker_enabled">True</field>
+            <field name="circuit_breaker_threshold">15.0</field>
+            <field name="fatigue_max_msgs_week">5</field>
+            <field name="behavioral_pauses">False</field>
+        </record>
+    </data>
+</odoo>

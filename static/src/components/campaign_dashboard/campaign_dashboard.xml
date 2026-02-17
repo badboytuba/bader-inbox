@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+<t t-name="bader_inbox.CampaignDashboard" owl="1">
+    <div class="cd-container">
+
+        <!-- ── Header ──────────────────────────────────────── -->
+        <div class="cd-header">
+            <div class="cd-header-left">
+                <h1 class="cd-title">📣 Bader Flow</h1>
+                <span class="cd-subtitle">Campaign Dashboard</span>
+            </div>
+            <div class="cd-header-right">
+                <button class="cd-btn cd-btn-ghost" t-on-click="loadData">🔄 Atualizar</button>
+                <button class="cd-btn cd-btn-primary" t-on-click="createCampaign">+ Nova Campanha</button>
+            </div>
+        </div>
+
+        <!-- ── Loading ─────────────────────────────────────── -->
+        <div class="cd-loading" t-if="state.loading">
+            <div class="cd-spinner"/>
+            <span>A carregar dados...</span>
+        </div>
+
+        <t t-if="!state.loading">
+
+            <!-- ── KPI Row ────────────────────────────────── -->
+            <div class="cd-kpi-row">
+                <div class="cd-kpi-card">
+                    <div class="cd-kpi-icon" style="background: rgba(16,185,129,0.15); color: #10B981;">📨</div>
+                    <div class="cd-kpi-data">
+                        <span class="cd-kpi-value" t-esc="formatNumber(state.kpis.total_sent)"/>
+                        <span class="cd-kpi-label">Enviadas</span>
+                    </div>
+                </div>
+                <div class="cd-kpi-card">
+                    <div class="cd-kpi-icon" style="background: rgba(59,130,246,0.15); color: #3B82F6;">✓</div>
+                    <div class="cd-kpi-data">
+                        <span class="cd-kpi-value"><t t-esc="state.kpis.delivery_rate"/>%</span>
+                        <span class="cd-kpi-label">Entrega</span>
+                    </div>
+                </div>
+                <div class="cd-kpi-card">
+                    <div class="cd-kpi-icon" style="background: rgba(139,92,246,0.15); color: #8B5CF6;">👁</div>
+                    <div class="cd-kpi-data">
+                        <span class="cd-kpi-value"><t t-esc="state.kpis.read_rate"/>%</span>
+                        <span class="cd-kpi-label">Leitura</span>
+                    </div>
+                </div>
+                <div class="cd-kpi-card">
+                    <div class="cd-kpi-icon" style="background: rgba(245,158,11,0.15); color: #F59E0B;">↩</div>
+                    <div class="cd-kpi-data">
+                        <span class="cd-kpi-value"><t t-esc="state.kpis.reply_rate"/>%</span>
+                        <span class="cd-kpi-label">Resposta</span>
+                    </div>
+                </div>
+                <div class="cd-kpi-card">
+                    <div class="cd-kpi-icon" style="background: rgba(239,68,68,0.15); color: #EF4444;">⚠</div>
+                    <div class="cd-kpi-data">
+                        <span class="cd-kpi-value"><t t-esc="state.kpis.fail_rate"/>%</span>
+                        <span class="cd-kpi-label">Falha</span>
+                    </div>
+                </div>
+                <div class="cd-kpi-card">
+                    <div class="cd-kpi-icon" style="background: rgba(16,185,129,0.15); color: #10B981;">⚡</div>
+                    <div class="cd-kpi-data">
+                        <span class="cd-kpi-value" t-esc="state.kpis.active_campaigns"/>
+                        <span class="cd-kpi-label">Ativas</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Tabs ───────────────────────────────────── -->
+            <div class="cd-tabs">
+                <button t-att-class="{'cd-tab': true, 'cd-tab-active': state.activeTab === 'overview'}"
+                        t-on-click="() => this.setTab('overview')">📊 Visão Geral</button>
+                <button t-att-class="{'cd-tab': true, 'cd-tab-active': state.activeTab === 'campaigns'}"
+                        t-on-click="() => this.setTab('campaigns')">📋 Campanhas</button>
+                <button t-att-class="{'cd-tab': true, 'cd-tab-active': state.activeTab === 'health'}"
+                        t-on-click="() => this.setTab('health')">🛡️ Saúde dos Números</button>
+            </div>
+
+            <!-- ═══ TAB: Overview ═══════════════════════════ -->
+            <div t-if="state.activeTab === 'overview'" class="cd-tab-content">
+                <div class="cd-grid-2">
+
+                    <!-- Send Volume Chart -->
+                    <div class="cd-card">
+                        <div class="cd-card-header">
+                            <h3>📈 Volume de Envio (7 dias)</h3>
+                        </div>
+                        <div class="cd-chart-bar">
+                            <t t-foreach="state.dailyVolume" t-as="day" t-key="day.date">
+                                <div class="cd-bar-col">
+                                    <div class="cd-bar-stack">
+                                        <div class="cd-bar cd-bar-sent"
+                                             t-att-style="'height: ' + getBarHeight(day.sent) + 'px'"/>
+                                        <div class="cd-bar cd-bar-fail"
+                                             t-att-style="'height: ' + getFailBarHeight(day) + 'px'"
+                                             t-if="day.failed > 0"/>
+                                    </div>
+                                    <span class="cd-bar-value" t-esc="day.sent"/>
+                                    <span class="cd-bar-label" t-esc="day.date"/>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
+
+                    <!-- Quick Stats -->
+                    <div class="cd-card">
+                        <div class="cd-card-header">
+                            <h3>📊 Resumo</h3>
+                        </div>
+                        <div class="cd-stats-list">
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Total de Campanhas</span>
+                                <span class="cd-stat-value" t-esc="state.kpis.total_campaigns"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Execuções Ativas</span>
+                                <span class="cd-stat-value cd-stat-active" t-esc="state.executions.active"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Execuções Concluídas</span>
+                                <span class="cd-stat-value" t-esc="state.executions.completed"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Opt-outs Total</span>
+                                <span class="cd-stat-value cd-stat-warn" t-esc="state.optout.total"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Opt-outs (últimas 7 dias)</span>
+                                <span class="cd-stat-value cd-stat-warn" t-esc="state.optout.recent_week"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Mensagens Enviadas</span>
+                                <span class="cd-stat-value" t-esc="formatNumber(state.kpis.total_sent)"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Msgs Lidas</span>
+                                <span class="cd-stat-value" t-esc="formatNumber(state.kpis.total_read)"/>
+                            </div>
+                            <div class="cd-stat-row">
+                                <span class="cd-stat-label">Respostas</span>
+                                <span class="cd-stat-value cd-stat-good" t-esc="formatNumber(state.kpis.total_replied)"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: Campaigns ══════════════════════════ -->
+            <div t-if="state.activeTab === 'campaigns'" class="cd-tab-content">
+
+                <!-- Filter buttons -->
+                <div class="cd-filter-row">
+                    <button t-att-class="{'cd-filter-btn': true, 'cd-filter-active': state.filterStatus === 'all'}"
+                            t-on-click="() => this.setFilter('all')">Todas</button>
+                    <button t-att-class="{'cd-filter-btn': true, 'cd-filter-active': state.filterStatus === 'active'}"
+                            t-on-click="() => this.setFilter('active')">▶ Ativas</button>
+                    <button t-att-class="{'cd-filter-btn': true, 'cd-filter-active': state.filterStatus === 'draft'}"
+                            t-on-click="() => this.setFilter('draft')">📝 Rascunho</button>
+                    <button t-att-class="{'cd-filter-btn': true, 'cd-filter-active': state.filterStatus === 'paused'}"
+                            t-on-click="() => this.setFilter('paused')">⏸ Pausadas</button>
+                    <button t-att-class="{'cd-filter-btn': true, 'cd-filter-active': state.filterStatus === 'completed'}"
+                            t-on-click="() => this.setFilter('completed')">✅ Concluídas</button>
+                </div>
+
+                <!-- Campaign cards -->
+                <div class="cd-campaign-grid">
+                    <t t-foreach="filteredCampaigns" t-as="c" t-key="c.id">
+                        <div class="cd-campaign-card">
+                            <div class="cd-cc-header">
+                                <div class="cd-cc-title-row">
+                                    <span class="cd-cc-name" t-esc="c.name"/>
+                                    <span class="cd-cc-badge"
+                                          t-att-style="'background: ' + getStatusColor(c.status) + '20; color: ' + getStatusColor(c.status)">
+                                        <t t-esc="getStatusIcon(c.status)"/>
+                                        <t t-esc="' ' + getStatusLabel(c.status)"/>
+                                    </span>
+                                </div>
+                                <div class="cd-cc-sub">
+                                    <span t-if="c.user" t-esc="'👤 ' + c.user"/>
+                                    <span t-esc="'📋 ' + c.audience_count + ' contactos'"/>
+                                    <span t-if="c.ab_enabled">🔀 A/B</span>
+                                </div>
+                            </div>
+
+                            <!-- Progress bars -->
+                            <div class="cd-cc-metrics">
+                                <div class="cd-cc-metric">
+                                    <div class="cd-cc-metric-header">
+                                        <span>Entrega</span>
+                                        <span t-esc="c.delivery_rate + '%'"/>
+                                    </div>
+                                    <div class="cd-progress-bar">
+                                        <div class="cd-progress-fill cd-progress-blue"
+                                             t-att-style="'width: ' + c.delivery_rate + '%'"/>
+                                    </div>
+                                </div>
+                                <div class="cd-cc-metric">
+                                    <div class="cd-cc-metric-header">
+                                        <span>Leitura</span>
+                                        <span t-esc="c.read_rate + '%'"/>
+                                    </div>
+                                    <div class="cd-progress-bar">
+                                        <div class="cd-progress-fill cd-progress-purple"
+                                             t-att-style="'width: ' + c.read_rate + '%'"/>
+                                    </div>
+                                </div>
+                                <div class="cd-cc-metric">
+                                    <div class="cd-cc-metric-header">
+                                        <span>Resposta</span>
+                                        <span t-esc="c.reply_rate + '%'"/>
+                                    </div>
+                                    <div class="cd-progress-bar">
+                                        <div class="cd-progress-fill cd-progress-green"
+                                             t-att-style="'width: ' + c.reply_rate + '%'"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Numbers -->
+                            <div class="cd-cc-numbers">
+                                <span class="cd-cc-num">📨 <t t-esc="c.sent"/></span>
+                                <span class="cd-cc-num">✓ <t t-esc="c.delivered"/></span>
+                                <span class="cd-cc-num">👁 <t t-esc="c.read"/></span>
+                                <span class="cd-cc-num">↩ <t t-esc="c.replied"/></span>
+                                <span class="cd-cc-num cd-cc-num-bad" t-if="c.failed > 0">⚠ <t t-esc="c.failed"/></span>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="cd-cc-actions">
+                                <button class="cd-btn cd-btn-sm cd-btn-ghost"
+                                        t-on-click="() => this.openCampaign(c.id)">Editar</button>
+                                <button class="cd-btn cd-btn-sm cd-btn-ghost"
+                                        t-on-click="() => this.openFlowDesigner(c.id)">⚡ Flow</button>
+                                <button class="cd-btn cd-btn-sm cd-btn-success"
+                                        t-if="c.status === 'draft' || c.status === 'paused'"
+                                        t-on-click="() => this.campaignAction(c.id, 'activate')">▶</button>
+                                <button class="cd-btn cd-btn-sm cd-btn-warn"
+                                        t-if="c.status === 'active'"
+                                        t-on-click="() => this.campaignAction(c.id, 'pause')">⏸</button>
+                                <button class="cd-btn cd-btn-sm cd-btn-ghost"
+                                        t-on-click="() => this.campaignAction(c.id, 'duplicate')">📋</button>
+                            </div>
+                        </div>
+                    </t>
+
+                    <div class="cd-empty" t-if="!filteredCampaigns.length">
+                        <span>Nenhuma campanha encontrada</span>
+                        <button class="cd-btn cd-btn-primary" t-on-click="createCampaign">+ Criar Campanha</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: Health ═════════════════════════════ -->
+            <div t-if="state.activeTab === 'health'" class="cd-tab-content">
+                <div class="cd-health-grid">
+                    <t t-foreach="state.channelHealth" t-as="ch" t-key="ch.id">
+                        <div class="cd-health-card">
+                            <div class="cd-health-header">
+                                <div class="cd-health-name">
+                                    <span class="cd-health-dot"
+                                          t-att-class="getHealthClass(ch.health_score)"/>
+                                    <span t-esc="ch.name"/>
+                                </div>
+                                <span class="cd-health-score"
+                                      t-att-class="getHealthClass(ch.health_score)"
+                                      t-esc="ch.health_score + '%'"/>
+                            </div>
+                            <div class="cd-health-details">
+                                <span>📨 <t t-esc="ch.sent_today"/> enviadas hoje</span>
+                                <span t-if="ch.failed_today > 0" class="cd-health-fail">
+                                    ⚠ <t t-esc="ch.failed_today"/> falhadas
+                                </span>
+                            </div>
+                            <div class="cd-health-bar">
+                                <div class="cd-health-bar-fill"
+                                     t-att-class="getHealthClass(ch.health_score)"
+                                     t-att-style="'width: ' + ch.health_score + '%'"/>
+                            </div>
+                        </div>
+                    </t>
+                    <div class="cd-empty" t-if="!state.channelHealth.length">
+                        <span>Nenhum canal configurado</span>
+                    </div>
+                </div>
+            </div>
+
+        </t>
+    </div>
+</t>
+
+</templates>

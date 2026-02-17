@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!--                     FLOW DESIGNER                          -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<t t-name="bader_inbox.FlowDesigner" owl="1">
+    <div class="fd-container">
+
+        <!-- ── Toolbar ─────────────────────────────────────── -->
+        <div class="fd-toolbar">
+            <div class="fd-toolbar-left">
+                <button class="fd-btn fd-btn-ghost" t-on-click="goBack" title="Voltar">
+                    <span>← Voltar</span>
+                </button>
+                <div class="fd-toolbar-divider"/>
+                <span class="fd-toolbar-title" t-esc="state.campaignName || 'Novo Fluxo'"/>
+                <span class="fd-dirty-badge" t-if="state.isDirty">● Não guardado</span>
+            </div>
+            <div class="fd-toolbar-center">
+                <button class="fd-btn fd-btn-ghost" t-on-click="togglePalette" title="Paleta">
+                    <span>📦</span>
+                </button>
+                <div class="fd-toolbar-divider"/>
+                <button class="fd-btn fd-btn-ghost" t-on-click="zoomOut" title="Zoom -">
+                    <span>➖</span>
+                </button>
+                <span class="fd-zoom-label"><t t-esc="Math.round(state.zoom * 100)"/>%</span>
+                <button class="fd-btn fd-btn-ghost" t-on-click="zoomIn" title="Zoom +">
+                    <span>➕</span>
+                </button>
+                <button class="fd-btn fd-btn-ghost" t-on-click="zoomReset" title="Reset">
+                    <span>🎯</span>
+                </button>
+            </div>
+            <div class="fd-toolbar-right">
+                <button class="fd-btn fd-btn-ghost" t-on-click="deleteSelected"
+                        t-att-disabled="!state.selectedNode" title="Apagar">
+                    <span>🗑</span>
+                </button>
+                <div class="fd-toolbar-divider"/>
+                <button class="fd-btn fd-btn-primary" t-on-click="saveFlow"
+                        t-att-class="{'fd-btn-loading': state.isSaving}">
+                    <span t-if="!state.isSaving">💾 Guardar</span>
+                    <span t-else="">⏳ A guardar...</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="fd-workspace">
+
+            <!-- ── Node Palette ────────────────────────────── -->
+            <div class="fd-palette" t-att-class="{'fd-palette-hidden': !state.showPalette}">
+                <div class="fd-palette-header">
+                    <span class="fd-palette-title">Nós</span>
+                    <input type="text" class="fd-palette-search"
+                           placeholder="Pesquisar..."
+                           t-model="state.paletteSearch"/>
+                </div>
+                <div class="fd-palette-body">
+                    <t t-foreach="Object.entries(filteredNodeTypes)" t-as="catEntry" t-key="catEntry[0]">
+                        <div class="fd-palette-category">
+                            <div class="fd-palette-cat-header"
+                                 t-att-style="'border-left-color: ' + catEntry[1].color">
+                                <span t-esc="catEntry[1].label"/>
+                            </div>
+                            <t t-foreach="catEntry[1].items" t-as="item" t-key="item[0]">
+                                <div class="fd-palette-item"
+                                     draggable="true"
+                                     t-on-dragstart="(ev) => this.onPaletteDragStart(ev, item[0])"
+                                     t-att-style="'border-left-color: ' + item[1].color">
+                                    <span class="fd-palette-icon" t-esc="item[1].icon"/>
+                                    <span class="fd-palette-label" t-esc="item[1].label"/>
+                                </div>
+                            </t>
+                        </div>
+                    </t>
+                </div>
+            </div>
+
+            <!-- ── Canvas ──────────────────────────────────── -->
+            <div class="fd-canvas"
+                 t-ref="canvas"
+                 t-on-mousedown="onCanvasMouseDown"
+                 t-on-mousemove="onCanvasMouseMove"
+                 t-on-mouseup="onCanvasMouseUp"
+                 t-on-wheel="onCanvasWheel"
+                 t-on-drop="onCanvasDrop"
+                 t-on-dragover="onCanvasDragOver">
+
+                <!-- Background grid -->
+                <svg class="fd-canvas-svg" width="100%" height="100%">
+                    <defs>
+                        <pattern id="fd-grid-small" width="20" height="20" patternUnits="userSpaceOnUse"
+                                 t-att-patternTransform="'translate(' + state.pan.x + ',' + state.pan.y + ') scale(' + state.zoom + ')'">
+                            <circle cx="10" cy="10" r="0.8" fill="rgba(255,255,255,0.08)"/>
+                        </pattern>
+                        <pattern id="fd-grid-large" width="100" height="100" patternUnits="userSpaceOnUse"
+                                 t-att-patternTransform="'translate(' + state.pan.x + ',' + state.pan.y + ') scale(' + state.zoom + ')'">
+                            <circle cx="50" cy="50" r="1.5" fill="rgba(255,255,255,0.15)"/>
+                        </pattern>
+                        <!-- Arrow marker -->
+                        <marker id="fd-arrowhead" markerWidth="8" markerHeight="6"
+                                refX="8" refY="3" orient="auto" fill="#6B7280">
+                            <polygon points="0 0, 8 3, 0 6"/>
+                        </marker>
+                    </defs>
+
+                    <rect class="fd-canvas-bg" width="100%" height="100%"
+                          fill="url(#fd-grid-small)"/>
+                    <rect width="100%" height="100%" fill="url(#fd-grid-large)"/>
+
+                    <!-- Transform group -->
+                    <g t-att-transform="'translate(' + state.pan.x + ',' + state.pan.y + ') scale(' + state.zoom + ')'">
+
+                        <!-- Edges -->
+                        <t t-foreach="state.edges" t-as="edge" t-key="edge.id">
+                            <path t-att-d="getEdgePath(edge)"
+                                  t-att-stroke="getEdgeColor(edge)"
+                                  stroke-width="2.5"
+                                  fill="none"
+                                  stroke-linecap="round"
+                                  marker-end="url(#fd-arrowhead)"
+                                  class="fd-edge"
+                                  t-on-dblclick="() => this.deleteEdge(edge.id)"/>
+                        </t>
+
+                        <!-- Connecting line (while dragging) -->
+                        <path t-if="connectingLine"
+                              t-att-d="connectingLine"
+                              stroke="#3B82F6"
+                              stroke-width="2"
+                              stroke-dasharray="8 4"
+                              fill="none"/>
+
+                        <!-- Nodes -->
+                        <t t-foreach="state.nodes" t-as="node" t-key="node.id">
+                            <g t-att-transform="'translate(' + node.x + ',' + node.y + ')'"
+                               class="fd-node"
+                               t-att-class="{'fd-node-selected': state.selectedNode === node.id}"
+                               t-on-mousedown="(ev) => this.onNodeMouseDown(ev, node.id)"
+                               t-on-click="(ev) => this.onNodeClick(ev, node.id)"
+                               t-on-dblclick="(ev) => this.onNodeDblClick(ev, node.id)">
+
+                                <!-- Node body -->
+                                <rect x="0" y="0" t-att-width="node.width" t-att-height="node.height"
+                                      rx="10" ry="10"
+                                      t-att-fill="node.color + '20'"
+                                      t-att-stroke="state.selectedNode === node.id ? '#fff' : node.color"
+                                      stroke-width="2"/>
+
+                                <!-- Color strip -->
+                                <rect x="0" y="0" width="6" t-att-height="node.height"
+                                      rx="3" ry="3" t-att-fill="node.color"/>
+
+                                <!-- Icon -->
+                                <text t-att-x="20" t-att-y="node.height / 2 + 5"
+                                      font-size="18" fill="white">
+                                    <t t-esc="node.icon"/>
+                                </text>
+
+                                <!-- Label -->
+                                <text t-att-x="44" t-att-y="node.height / 2 + 4"
+                                      font-size="13" fill="white" font-weight="500">
+                                    <t t-esc="node.label"/>
+                                </text>
+
+                                <!-- Input port (top center) -->
+                                <t t-if="node.category !== 'trigger'">
+                                    <circle t-att-cx="node.width / 2" cy="-1" r="6"
+                                            fill="#1E293B" stroke="#6B7280" stroke-width="2"
+                                            class="fd-port fd-port-input"
+                                            t-on-click.stop="(ev) => this.onInputClick(ev, node.id)"/>
+                                </t>
+
+                                <!-- Output ports (bottom) -->
+                                <t t-foreach="node.outputs || ['default']" t-as="output" t-key="output">
+                                    <t t-set="outCount" t-value="(node.outputs || ['default']).length"/>
+                                    <t t-set="spacing" t-value="node.width / (outCount + 1)"/>
+                                    <t t-set="portX" t-value="spacing * (output_index + 1)"/>
+
+                                    <circle t-att-cx="portX" t-att-cy="node.height + 1" r="6"
+                                            t-att-fill="output === 'true' ? '#10B981' : output === 'false' ? '#EF4444' : '#1E293B'"
+                                            stroke="#6B7280" stroke-width="2"
+                                            class="fd-port fd-port-output"
+                                            t-on-click.stop="(ev) => this.onOutputClick(ev, node.id, output)"/>
+
+                                    <!-- Output label for conditions -->
+                                    <t t-if="outCount > 1">
+                                        <text t-att-x="portX" t-att-y="node.height + 18"
+                                              font-size="9" fill="#9CA3AF" text-anchor="middle">
+                                            <t t-esc="output === 'true' ? 'Sim' : output === 'false' ? 'Não' : output"/>
+                                        </text>
+                                    </t>
+                                </t>
+                            </g>
+                        </t>
+                    </g>
+                </svg>
+            </div>
+
+            <!-- ── Config Panel ────────────────────────────── -->
+            <div class="fd-config-panel" t-if="state.configPanel">
+                <div class="fd-config-header">
+                    <span class="fd-config-title">
+                        <t t-set="cfgNode" t-value="getSelectedNode()"/>
+                        <span t-if="cfgNode" t-esc="cfgNode.icon + ' ' + cfgNode.label"/>
+                    </span>
+                    <button class="fd-btn fd-btn-ghost fd-btn-sm" t-on-click="closeConfig">✕</button>
+                </div>
+                <div class="fd-config-body">
+                    <t t-foreach="getConfigFields()" t-as="field" t-key="field.key">
+                        <div class="fd-config-field">
+                            <label t-esc="field.label"/>
+                            <t t-if="field.type === 'text'">
+                                <input type="text" class="fd-input"
+                                       t-att-value="getSelectedNode()?.config[field.key] || ''"
+                                       t-on-change="(ev) => this.onConfigChange(ev, field.key)"/>
+                            </t>
+                            <t t-if="field.type === 'textarea'">
+                                <textarea class="fd-textarea" rows="4"
+                                          t-on-change="(ev) => this.onConfigChange(ev, field.key)"><t t-esc="getSelectedNode()?.config[field.key] || ''"/></textarea>
+                            </t>
+                            <t t-if="field.type === 'number'">
+                                <input type="number" class="fd-input"
+                                       t-att-value="getSelectedNode()?.config[field.key] || ''"
+                                       t-on-change="(ev) => this.onConfigChange(ev, field.key)"/>
+                            </t>
+                            <t t-if="field.type === 'select'">
+                                <select class="fd-input"
+                                        t-on-change="(ev) => this.onConfigChange(ev, field.key)">
+                                    <t t-foreach="field.options" t-as="opt" t-key="opt.value">
+                                        <option t-att-value="opt.value"
+                                                t-att-selected="getSelectedNode()?.config[field.key] === opt.value"
+                                                t-esc="opt.label"/>
+                                    </t>
+                                </select>
+                            </t>
+                        </div>
+                    </t>
+                    <div class="fd-config-info" t-if="!getConfigFields().length">
+                        <p>Este nó não tem configurações editáveis.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connecting mode indicator -->
+        <div class="fd-connecting-indicator" t-if="state.connectingFrom">
+            <span>🔗 Clica num nó para conectar — ESC para cancelar</span>
+        </div>
+
+        <!-- Keyboard shortcuts help -->
+        <div class="fd-shortcuts">
+            <span>Del: Apagar</span>
+            <span>Ctrl+S: Guardar</span>
+            <span>Ctrl+D: Duplicar</span>
+            <span>Scroll: Zoom</span>
+            <span>Drag canvas: Pan</span>
+        </div>
+    </div>
+</t>
+
+</templates>

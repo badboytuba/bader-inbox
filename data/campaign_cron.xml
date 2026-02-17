@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Campaign execution cron — runs every minute -->
+    <record id="cron_campaign_execution" model="ir.cron">
+        <field name="name">Bader Flow: Process Campaign Executions</field>
+        <field name="model_id" ref="model_bader_inbox_campaign_execution"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_process_executions()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="priority">5</field>
+    </record>
+
+    <!-- Circuit breaker check — runs every 5 minutes -->
+    <record id="cron_campaign_circuit_breaker" model="ir.cron">
+        <field name="name">Bader Flow: Circuit Breaker Check</field>
+        <field name="model_id" ref="model_bader_inbox_campaign"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_circuit_breaker_check()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+
+    <!-- Abandoned cart trigger — every 30 minutes -->
+    <record id="cron_trigger_abandoned_carts" model="ir.cron">
+        <field name="name">Bader Flow: Abandoned Cart Trigger</field>
+        <field name="model_id" ref="model_bader_inbox_campaign"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_trigger_abandoned_carts()</field>
+        <field name="interval_number">30</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+
+    <!-- Overdue invoice trigger — daily -->
+    <record id="cron_trigger_overdue_invoices" model="ir.cron">
+        <field name="name">Bader Flow: Overdue Invoice Trigger</field>
+        <field name="model_id" ref="model_bader_inbox_campaign"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_trigger_overdue_invoices()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+
+    <!-- Date event trigger — daily -->
+    <record id="cron_trigger_date_events" model="ir.cron">
+        <field name="name">Bader Flow: Date Event Trigger</field>
+        <field name="model_id" ref="model_bader_inbox_campaign"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_trigger_date_events()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+
+    <!-- Manual segments — every 5 minutes -->
+    <record id="cron_trigger_manual_segments" model="ir.cron">
+        <field name="name">Bader Flow: Manual Segment Trigger</field>
+        <field name="model_id" ref="model_bader_inbox_campaign"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_trigger_manual_segments()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+</odoo>
