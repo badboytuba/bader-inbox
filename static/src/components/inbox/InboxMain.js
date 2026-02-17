@@ -13,6 +13,7 @@ export class BaderInboxMain extends Component {
 
     setup() {
         this.orm = useService("orm");
+        this.rpc = useService("rpc");
         this.notification = useService("notification");
         this.action = useService("action");
         this.user = useService("user");
@@ -347,11 +348,27 @@ export class BaderInboxMain extends Component {
             const result = await this.rpc("/bader-inbox/profile-pictures", {
                 conversation_ids: ids,
             });
-            // Update conversations state with fetched URLs
-            for (const conv of this.state.conversations) {
+            if (!result || typeof result !== "object") return;
+
+            // Check if any URLs were returned
+            const hasUpdates = Object.values(result).some(url => !!url);
+            if (!hasUpdates) return;
+
+            // Update and force reactive re-render by reassigning the array
+            const updated = this.state.conversations.map(conv => {
                 if (result[conv.id]) {
-                    conv.profile_pic_url = result[conv.id];
+                    return { ...conv, profile_pic_url: result[conv.id] };
                 }
+                return conv;
+            });
+            this.state.conversations = updated;
+
+            // Also update selectedConversation if it got a picture
+            if (this.state.selectedConversation && result[this.state.selectedConversation.id]) {
+                this.state.selectedConversation = {
+                    ...this.state.selectedConversation,
+                    profile_pic_url: result[this.state.selectedConversation.id],
+                };
             }
         } catch (e) {
             console.debug("Profile pictures fetch failed:", e);
