@@ -77,6 +77,17 @@ class BaderInboxMessage(models.Model):
     detected_language = fields.Char(string="Detected Language", size=10)
     translated_content = fields.Text(string="Translated Content")
 
+    # Quoted / Reply
+    quoted_message_id = fields.Char(string="Quoted WA Message ID",
+        help="WhatsApp ID of the message being replied to")
+    quoted_text = fields.Text(string="Quoted Text",
+        help="Text content of the quoted message")
+    quoted_participant = fields.Char(string="Quoted Participant",
+        help="Phone/JID of who sent the quoted message")
+
+    # Edit tracking
+    is_edited = fields.Boolean(string="Edited", default=False)
+
     @api.model_create_multi
     def create(self, vals_list):
         messages = super().create(vals_list)

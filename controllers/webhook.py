@@ -265,7 +265,7 @@ class BaderInboxWebhook(http.Controller):
         except Exception as me:
             _logger.error(f"Media download error: {me}")
 
-    def _create_message(self, conversation, direction, msg_type, content, msg_id, media_info):
+    def _create_message(self, conversation, direction, msg_type, content, msg_id, media_info, quote_info=None):
         """Create a new message record"""
         Message = request.env["bader.inbox.message"].sudo()
         
@@ -286,6 +286,8 @@ class BaderInboxWebhook(http.Controller):
         }
         if media_info:
             message_vals.update(media_info)
+        if quote_info:
+            message_vals.update(quote_info)
         
         return Message.create(message_vals)
 
@@ -368,9 +370,18 @@ class BaderInboxWebhook(http.Controller):
             from_me = key.get("fromMe", False)
             direction = "out" if from_me else "in"
             msg_id = key.get("id", "")
+
+            # Handle EDITED messages
+            is_edited = msg_obj.get("isEdited", False)
+            edited_msg_id = msg_obj.get("editedMessageId", "")
+            if is_edited and edited_msg_id:
+                return self._handle_edited_message(conversation, edited_msg_id, content, msg_type)
+
+            # Extract quote info from contextInfo
+            quote_info = self._extract_quote_info(message_content)
             
             # Create message
-            new_message = self._create_message(conversation, direction, msg_type, content, msg_id, media_info)
+            new_message = self._create_message(conversation, direction, msg_type, content, msg_id, media_info, quote_info)
             if not new_message:
                 return _json_ok({"status": "duplicate"})
             
@@ -556,6 +567,110 @@ class BaderInboxWebhook(http.Controller):
         except Exception as e:
             _logger.error(f"AI Agent exception: {e}", exc_info=True)
 
+    def _extract_quote_info(self, content):
+        """Extract quoted/reply message info from contextInfo.
+        
+        WhatsApp reply messages include contextInfo with:
+        - stanzaId: WA message ID of the quoted message
+        - participant: who sent the quoted message
+        - quotedMessage: {conversation: "text"} or {extendedTextMessage: ...} etc.
+        
+        This info can appear inside extendedTextMessage, imageMessage, etc.
+        """
+        if not content or not isinstance(content, dict):
+            return None
+        
+        # contextInfo can be in any message type dict
+        context_info = None
+        for msg_key in ("extendedTextMessage", "imageMessage", "videoMessage",
+                        "audioMessage", "documentMessage", "stickerMessage",
+                        "locationMessage"):
+            inner = content.get(msg_key)
+            if isinstance(inner, dict) and "contextInfo" in inner:
+                context_info = inner["contextInfo"]
+                break
+        
+        if not context_info or not isinstance(context_info, dict):
+            return None
+        
+        stanza_id = context_info.get("stanzaId", "")
+        if not stanza_id:
+            return None
+        
+        participant = context_info.get("participant", "")
+        
+        # Extract text from quoted message
+        quoted_text = ""
+        quoted_msg = context_info.get("quotedMessage", {})
+        if isinstance(quoted_msg, dict):
+            if "conversation" in quoted_msg:
+                quoted_text = quoted_msg["conversation"]
+            elif "extendedTextMessage" in quoted_msg:
+                etm = quoted_msg["extendedTextMessage"]
+                quoted_text = etm.get("text", "") if isinstance(etm, dict) else str(etm)
+            elif "imageMessage" in quoted_msg:
+                quoted_text = quoted_msg["imageMessage"].get("caption", "📷 Image")
+            elif "videoMessage" in quoted_msg:
+                quoted_text = quoted_msg["videoMessage"].get("caption", "🎥 Video")
+            elif "audioMessage" in quoted_msg:
+                quoted_text = "🎵 Audio"
+            elif "documentMessage" in quoted_msg:
+                doc = quoted_msg["documentMessage"]
+                quoted_text = doc.get("fileName", "📄 Document")
+            elif "stickerMessage" in quoted_msg:
+                quoted_text = "🏷️ Sticker"
+            else:
+                quoted_text = "💬 Message"
+        elif isinstance(quoted_msg, str):
+            quoted_text = quoted_msg
+        
+        _logger.info(f"Quote extracted: stanza={stanza_id}, participant={participant}, text='{quoted_text[:60]}'")
+        
+        return {
+            "quoted_message_id": stanza_id,
+            "quoted_text": quoted_text[:500] if quoted_text else "",
+            "quoted_participant": participant.split("@")[0] if "@" in participant else participant,
+        }
+
+    def _handle_edited_message(self, conversation, edited_msg_id, new_content, msg_type):
+        """Handle an edited message by updating the original message content.
+        
+        When a user edits a message, Evolution API sends a messages.upsert
+        with isEdited=true and editedMessageId pointing to the original.
+        """
+        Message = request.env["bader.inbox.message"].sudo()
+        original = Message.search([
+            ("whatsapp_message_id", "=", edited_msg_id),
+            ("conversation_id", "=", conversation.id),
+        ], limit=1)
+        
+        if not original:
+            _logger.warning(f"Edited message: original {edited_msg_id} not found in conv {conversation.id}")
+            return _json_ok({"status": "original_not_found"})
+        
+        update_vals = {"is_edited": True}
+        if new_content:
+            update_vals["content"] = new_content
+        
+        original.write(update_vals)
+        _logger.info(f"Message {original.id} edited: WA ID={edited_msg_id}, new text='{(new_content or '')[:50]}'")
+        
+        # Notify frontend via bus
+        try:
+            request.env["bus.bus"]._sendone(
+                "bader_inbox", "bader_inbox_message_edited",
+                {
+                    "message_id": original.id,
+                    "conversation_id": conversation.id,
+                    "content": new_content,
+                    "is_edited": True,
+                }
+            )
+        except Exception:
+            pass
+        
+        return _json_ok({"status": "edited"})
+
     def _parse_message_content(self, content):
         """Parse message content from API format
         
@@ -584,6 +699,17 @@ class BaderInboxWebhook(http.Controller):
         
         # Log content keys for debugging
         _logger.info(f"_parse_message_content keys: {list(content.keys())}")
+        
+        # Handle editedMessage wrapper (protocolMessage with editedMessage inside)
+        if "protocolMessage" in content:
+            proto = content["protocolMessage"]
+            if isinstance(proto, dict):
+                edited_msg = proto.get("editedMessage", {})
+                if edited_msg and isinstance(edited_msg, dict):
+                    # Recurse into the edited message content
+                    return self._parse_message_content(edited_msg)
+            _logger.info("Skipping protocolMessage (not an edit)")
+            return msg_type, "", media_info
         
         if "conversation" in content:
             text = content["conversation"]
@@ -638,10 +764,6 @@ class BaderInboxWebhook(http.Controller):
             msg_type = "reaction"
             reaction = content["reactionMessage"]
             text = reaction.get("text", "") if isinstance(reaction, dict) else str(reaction)
-        elif "protocolMessage" in content:
-            # Protocol messages (delete, edit, etc.) - skip
-            _logger.info("Skipping protocolMessage")
-            return msg_type, "", media_info
         elif "ephemeralMessage" in content:
             # Ephemeral (disappearing) messages - extract inner message
             ephemeral = content["ephemeralMessage"]

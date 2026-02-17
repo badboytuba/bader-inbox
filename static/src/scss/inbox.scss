@@ -937,12 +937,52 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                 max-width: 65%;
                 padding: 8px 12px;
 
+                .quoted-message {
+                    background: rgba(0, 0, 0, 0.06);
+                    border-left: 3px solid #25d366;
+                    border-radius: 4px;
+                    padding: 6px 10px;
+                    margin-bottom: 6px;
+                    cursor: pointer;
+                    max-height: 80px;
+                    overflow: hidden;
+
+                    .quoted-sender {
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: #25d366;
+                        margin-bottom: 2px;
+                    }
+
+                    .quoted-text {
+                        font-size: 12.5px;
+                        color: rgba(0, 0, 0, 0.55);
+                        line-height: 1.3;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                    }
+                }
+
                 .message-text {
                     font-size: 14px;
                     color: $bader-text;
                     line-height: 1.45;
                     word-wrap: break-word;
                     white-space: pre-wrap;
+                }
+
+                .message-edited {
+                    font-size: 11px;
+                    color: rgba(0, 0, 0, 0.4);
+                    margin-left: 4px;
+                    font-style: italic;
+
+                    .fa-pencil {
+                        font-size: 10px;
+                        margin-right: 2px;
+                    }
                 }
 
                 .message-media {

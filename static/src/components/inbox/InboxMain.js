@@ -382,7 +382,7 @@ export class BaderInboxMain extends Component {
             this.state.messages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "quoted_message_id", "quoted_text", "quoted_participant", "is_edited"],
                 { order: "create_date asc" }
             );
 

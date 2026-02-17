@@ -242,6 +242,11 @@
                                 <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
                                     <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}" t-att-data-msg-id="msg.id">
                                         <div class="message-bubble">
+                                            <!-- Quoted/Reply context -->
+                                            <div t-if="msg.quoted_text" class="quoted-message">
+                                                <div t-if="msg.quoted_participant" class="quoted-sender" t-esc="msg.quoted_participant"/>
+                                                <div class="quoted-text" t-esc="msg.quoted_text"/>
+                                            </div>
                                             <!-- Media content based on message type -->
                                             <div class="message-content-wrapper">
                                                 <div t-if="msg.message_type === 'image'" class="message-media">
@@ -294,6 +299,7 @@
                                                     <i t-attf-class="fa {{ state.translations['translating_' + msg.id] ? 'fa-spinner fa-spin' : 'fa-language' }}"/>
                                                 </button>
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
+                                                <span t-if="msg.is_edited" class="message-edited"><i class="fa fa-pencil"/> editado</span>
                                                 <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
                                                     <span t-if="msg.status === 'failed'"><i class="fa fa-times"/></span>
                                                     <span t-elif="msg.status === 'delivered' or msg.status === 'read'"><i class="fa fa-check"/><i class="fa fa-check"/></span>
