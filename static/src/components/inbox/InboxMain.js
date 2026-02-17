@@ -1604,7 +1604,7 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "conversation_id", "stage_id", "contact_name",
                     "phone", "last_message", "unread_count", "priority",
-                    "assigned_user_id", "kanban_state", "notes", "tag_ids"
+                    "assigned_user_id", "kanban_state", "notes"
                 ],
                 { order: "priority desc, id" }
             );
