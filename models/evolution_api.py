@@ -38,7 +38,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "key": params.get_param("bader_inbox.evolution_key", ""),
         }
 
-    def _request(self, method, endpoint, data=None):
+    def _request(self, method, endpoint, data=None, params=None):
         """Make API request"""
         config = self._get_config()
         # Normalize URL and ensure /api prefix
@@ -56,7 +56,8 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         
         try:
             response = requests.request(
-                method, url, json=data, headers=headers, timeout=30
+                method, url, json=data, headers=headers, timeout=30,
+                params=params,
             )
             response.raise_for_status()
             return response.json()
@@ -227,9 +228,12 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         Body: {"key": {...}, "content": {...}}
         Returns base64 encoded media data.
         """
+        # Unwrap Evolution API wrapper types to get the inner message content
+        content = self._unwrap_message_content(message_content) if isinstance(message_content, dict) else message_content
+        
         data = {
             "messageKey": message_key,
-            "messageContent": message_content,
+            "messageContent": content,
         }
         try:
             result = self._request("POST", f"/message/downloadMedia/{instance_name}", data)
@@ -246,6 +250,39 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         except Exception as e:
             _logger.error(f"Error downloading media: {e}")
             return None
+
+    @staticmethod
+    def _unwrap_message_content(content):
+        """Unwrap Evolution API wrapper types to get the inner message.
+        
+        Handles: lottieStickerMessage, stickerSentByMeMessage,
+        documentWithCaptionMessage, ephemeralMessage, messageContextInfo.
+        """
+        if not isinstance(content, dict):
+            return content
+        
+        # Remove messageContextInfo wrapper (metadata, not needed for download)
+        # The actual message type key is the OTHER key besides messageContextInfo
+        keys = [k for k in content.keys() if k != "messageContextInfo"]
+        
+        # If we have a known wrapper type, unwrap it
+        wrapper_types = {
+            "lottieStickerMessage", "stickerSentByMeMessage",
+            "documentWithCaptionMessage", "ephemeralMessage",
+        }
+        for key in keys:
+            if key in wrapper_types:
+                inner = content[key]
+                if isinstance(inner, dict) and "message" in inner:
+                    return inner["message"]
+                return inner
+        
+        # If only messageContextInfo remains alongside a normal message type, return without it
+        if "messageContextInfo" in content and keys:
+            # Return content without messageContextInfo
+            return {k: v for k, v in content.items() if k != "messageContextInfo"}
+        
+        return content
 
     def instance_exists(self, instance_name):
         """Check if an instance exists on Evolution API.
@@ -336,3 +373,131 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         except Exception as e:
             _logger.debug(f"Profile picture fetch failed for {phone}: {e}")
             return None
+
+    def fetch_contact_name(self, instance_name, phone):
+        """Fetch WhatsApp profile name for a phone number.
+
+        Uses POST /chat/findContacts/{instance} with the contact's JID.
+        Returns the pushName if available, None otherwise.
+        """
+        clean_phone = re.sub(r'[^\d]', '', str(phone))
+        if not clean_phone:
+            return None
+        try:
+            jid = f"{clean_phone}@s.whatsapp.net"
+            result = self._request(
+                "POST",
+                f"/chat/findContacts/{instance_name}",
+                {"where": {"id": jid}}
+            )
+            # Response can be a list or dict with contact info
+            contacts = result if isinstance(result, list) else [result] if isinstance(result, dict) else []
+            for contact in contacts:
+                if not isinstance(contact, dict):
+                    continue
+                name = contact.get("pushName") or contact.get("name") or contact.get("notify") or ""
+                if name and name.strip():
+                    return name.strip()
+            return None
+        except Exception as e:
+            _logger.debug(f"Contact name fetch failed for {phone}: {e}")
+            return None
+
+    def fetch_pending_messages(self, instance_name):
+        """Fetch messages that were queued while Bader Inbox was offline.
+        
+        GET /api/messages/pending/:instanceName
+        Returns list of pending message objects.
+        """
+        try:
+            result = self._request("GET", f"/messages/pending/{instance_name}")
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict) and result.get("messages"):
+                return result["messages"]
+            if isinstance(result, dict) and result.get("error"):
+                _logger.warning(f"Pending messages error: {result['error']}")
+                return []
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            _logger.error(f"Failed to fetch pending messages: {e}")
+            return []
+
+    def acknowledge_messages(self, message_ids):
+        """Acknowledge receipt of pending messages so they're marked as delivered.
+        
+        POST /api/messages/ack
+        Body: {"ids": [1, 2, 3]}
+        """
+        if not message_ids:
+            return True
+        try:
+            result = self._request("POST", "/messages/ack", {"ids": message_ids})
+            _logger.info(f"Acknowledged {len(message_ids)} pending messages")
+            return True
+        except Exception as e:
+            _logger.error(f"Failed to acknowledge messages: {e}")
+            return False
+
+    # ── Group API Methods ──────────────────────────────────────────────
+
+    def fetch_group_info(self, instance_name, group_jid):
+        """Fetch information about a specific group (subject, description, picture).
+        
+        Uses GET /group/fetchAllGroups/{instance}?getParticipants=false
+        and filters by JID. Returns dict with group info or None.
+        """
+        try:
+            result = self._request(
+                "GET",
+                f"/group/fetchAllGroups/{instance_name}",
+                params={"getParticipants": "false"}
+            )
+            groups = result if isinstance(result, list) else []
+            for g in groups:
+                if not isinstance(g, dict):
+                    continue
+                gid = g.get("id") or g.get("jid") or ""
+                if gid == group_jid or str(gid).startswith(group_jid.split("@")[0]):
+                    return g
+            return None
+        except Exception as e:
+            _logger.debug(f"Group info fetch failed for {group_jid}: {e}")
+            return None
+
+    def fetch_group_participants(self, instance_name, group_jid):
+        """Fetch the member list of a specific group.
+        
+        Uses GET /group/participants/{instance}?groupJid={jid}
+        Returns a list of participant dicts or empty list.
+        """
+        try:
+            result = self._request(
+                "GET",
+                f"/group/participants/{instance_name}",
+                params={"groupJid": group_jid}
+            )
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                return result.get("participants") or result.get("members") or []
+            return []
+        except Exception as e:
+            _logger.debug(f"Group participants fetch failed for {group_jid}: {e}")
+            return []
+
+    def fetch_all_groups(self, instance_name):
+        """Fetch all groups with participants for batch sync.
+        
+        GET /group/fetchAllGroups/{instance}?getParticipants=true
+        """
+        try:
+            result = self._request(
+                "GET",
+                f"/group/fetchAllGroups/{instance_name}",
+                params={"getParticipants": "true"}
+            )
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            _logger.debug(f"Fetch all groups failed for {instance_name}: {e}")
+            return []

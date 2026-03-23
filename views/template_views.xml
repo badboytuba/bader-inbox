@@ -36,9 +36,26 @@
                             <field name="use_count" readonly="1"/>
                         </group>
                     </group>
-                    <group string="Conteúdo">
-                        <field name="content" nolabel="1" placeholder="Olá! Como posso ajudar?"/>
-                    </group>
+                    <separator string="Conteúdo"/>
+                    <field name="content" nolabel="1" widget="text" placeholder="Hola {nombre}, soy {agente} de Bader. ¿Cómo puedo ayudarte?"/>
+                    <separator string="📌 Variables Disponibles"/>
+                    <div class="alert alert-info" role="alert" style="font-size: 13px; margin-top: 8px;">
+                        <p class="mb-1"><strong>Puedes usar estas variables en el contenido. Se reemplazan automáticamente al enviar:</strong></p>
+                        <table class="table table-sm table-borderless mb-2" style="font-size: 12px; background: transparent;">
+                            <tbody>
+                                <tr><td style="width:140px;"><code>{nombre}</code></td><td>→ Nombre del contacto (Odoo o WhatsApp)</td></tr>
+                                <tr><td><code>{telefono}</code></td><td>→ Número de teléfono del cliente</td></tr>
+                                <tr><td><code>{agente}</code></td><td>→ Nombre del agente logado (tú)</td></tr>
+                                <tr><td><code>{empresa}</code></td><td>→ Nombre de la empresa (Bader)</td></tr>
+                                <tr><td><code>{crm}</code></td><td>→ Nº de la oportunidad CRM más reciente del cliente</td></tr>
+                                <tr><td><code>{presupuesto}</code></td><td>→ Nº del presupuesto (sale.order) más reciente del cliente</td></tr>
+                            </tbody>
+                        </table>
+                        <p class="mb-0 text-muted" style="font-size: 11px;">
+                            <i class="fa fa-lightbulb-o"/> <strong>Ejemplo:</strong>
+                            <em>"Hola {nombre}, soy {agente}. Tu presupuesto #{presupuesto} está listo."</em>
+                        </p>
+                    </div>
                 </sheet>
             </form>
         </field>

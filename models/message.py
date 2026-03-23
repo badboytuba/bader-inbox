@@ -38,6 +38,12 @@ class BaderInboxMessage(models.Model):
     ], default="text", string="Type")
     
     content = fields.Text(string="Content")
+
+    # Group message sender identification
+    sender_name = fields.Char(string="Sender Name",
+        help="Name of the participant who sent this message in a group")
+    sender_phone = fields.Char(string="Sender Phone",
+        help="Phone number of the participant who sent this message in a group")
     
     # Media
     media_data = fields.Binary(string="Media Data", attachment=True)
@@ -93,20 +99,33 @@ class BaderInboxMessage(models.Model):
         messages = super().create(vals_list)
         
         for message in messages:
-            # Update conversation
+            # Update conversation metadata atomically (prevents serialization failures
+            # when multiple webhook messages arrive simultaneously for the same conversation)
             conv = message.conversation_id
-            conv.write({
-                "last_message": message.content[:100] if message.content else message.message_type,
-                "last_message_date": fields.Datetime.now(),
-            })
+            last_msg = (message.content[:100] if message.content else message.message_type) or ''
             
-            # Increment unread for incoming (atomic to avoid race conditions)
             if message.direction == "in":
-                self.env.cr.execute(
-                    "UPDATE bader_inbox_conversation SET unread_count = unread_count + 1 WHERE id = %s",
-                    [conv.id]
-                )
-                conv.invalidate_recordset(['unread_count'])
+                # Incoming: update last_message + last_message_date + increment unread_count
+                self.env.cr.execute("""
+                    UPDATE bader_inbox_conversation
+                    SET last_message = %s,
+                        last_message_date = NOW() AT TIME ZONE 'UTC',
+                        unread_count = unread_count + 1,
+                        write_date = NOW() AT TIME ZONE 'UTC'
+                    WHERE id = %s
+                """, [last_msg, conv.id])
+            else:
+                # Outgoing: update last_message + last_message_date only
+                self.env.cr.execute("""
+                    UPDATE bader_inbox_conversation
+                    SET last_message = %s,
+                        last_message_date = NOW() AT TIME ZONE 'UTC',
+                        write_date = NOW() AT TIME ZONE 'UTC'
+                    WHERE id = %s
+                """, [last_msg, conv.id])
+            
+            # Invalidate ORM cache so subsequent reads get fresh data
+            conv.invalidate_recordset(['last_message', 'last_message_date', 'unread_count'])
         
         return messages
 

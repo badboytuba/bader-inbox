@@ -12,4 +12,133 @@
         <field name="category_id" ref="base.module_category_productivity_discuss"/>
         <field name="implied_ids" eval="[(4, ref('group_bader_inbox_user'))]"/>
     </record>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- Record Rules: Channel visibility                    -->
+    <!-- ═══════════════════════════════════════════════════ -->
+
+    <!-- Managers see ALL channels -->
+    <record id="rule_channel_manager_all" model="ir.rule">
+        <field name="name">Channel: Managers see all</field>
+        <field name="model_id" ref="model_bader_inbox_channel"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+    </record>
+
+    <!-- Users see only channels they are assigned to -->
+    <record id="rule_channel_user_allowed" model="ir.rule">
+        <field name="name">Channel: Users see assigned channels</field>
+        <field name="model_id" ref="model_bader_inbox_channel"/>
+        <field name="domain_force">[('allowed_user_ids', 'in', [user.id])]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- Record Rules: Conversation visibility               -->
+    <!-- ═══════════════════════════════════════════════════ -->
+
+    <!-- Managers see ALL conversations -->
+    <record id="rule_conversation_manager_all" model="ir.rule">
+        <field name="name">Conversation: Managers see all</field>
+        <field name="model_id" ref="model_bader_inbox_conversation"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+    </record>
+
+    <!-- Users see conversations ONLY from their assigned channels + @mentions -->
+    <record id="rule_conversation_user_channel" model="ir.rule">
+        <field name="name">Conversation: Users see own channels + shared</field>
+        <field name="model_id" ref="model_bader_inbox_conversation"/>
+        <field name="domain_force">[
+            '|',
+            ('channel_id.allowed_user_ids', 'in', [user.id]),
+            ('note_ids.mentioned_user_ids', 'in', [user.id])
+        ]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- Record Rules: Pipeline (Kanban) visibility          -->
+    <!-- ═══════════════════════════════════════════════════ -->
+
+    <!-- Managers see ALL pipelines -->
+    <record id="rule_pipeline_manager_all" model="ir.rule">
+        <field name="name">Pipeline: Managers see all</field>
+        <field name="model_id" ref="model_bader_inbox_pipeline"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+    </record>
+
+    <!-- Users see only their own pipelines -->
+    <record id="rule_pipeline_user_own" model="ir.rule">
+        <field name="name">Pipeline: Users see own</field>
+        <field name="model_id" ref="model_bader_inbox_pipeline"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
+    <!-- Managers see ALL pipeline assignments -->
+    <record id="rule_conv_pipeline_manager_all" model="ir.rule">
+        <field name="name">Pipeline Assignment: Managers see all</field>
+        <field name="model_id" ref="model_bader_inbox_conversation_pipeline"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+    </record>
+
+    <!-- Users see only assignments in their own pipelines -->
+    <record id="rule_conv_pipeline_user_own" model="ir.rule">
+        <field name="name">Pipeline Assignment: Users see own</field>
+        <field name="model_id" ref="model_bader_inbox_conversation_pipeline"/>
+        <field name="domain_force">[('pipeline_id.user_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- Record Rules: Message visibility                    -->
+    <!-- ═══════════════════════════════════════════════════ -->
+
+    <!-- Managers see ALL messages -->
+    <record id="rule_message_manager_all" model="ir.rule">
+        <field name="name">Message: Managers see all</field>
+        <field name="model_id" ref="model_bader_inbox_message"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+    </record>
+
+    <!-- Users see messages only from conversations in their channels -->
+    <record id="rule_message_user_channel" model="ir.rule">
+        <field name="name">Message: Users see own channels</field>
+        <field name="model_id" ref="model_bader_inbox_message"/>
+        <field name="domain_force">[('conversation_id.channel_id.allowed_user_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- Record Rules: Note visibility                       -->
+    <!-- ═══════════════════════════════════════════════════ -->
+
+    <!-- Managers see ALL notes -->
+    <record id="rule_note_manager_all" model="ir.rule">
+        <field name="name">Note: Managers see all</field>
+        <field name="model_id" ref="model_bader_inbox_note"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+    </record>
+
+    <!-- Users see notes only from conversations in their channels or where mentioned -->
+    <record id="rule_note_user_channel" model="ir.rule">
+        <field name="name">Note: Users see own channels + mentions</field>
+        <field name="model_id" ref="model_bader_inbox_note"/>
+        <field name="domain_force">[
+            '|',
+            ('conversation_id.channel_id.allowed_user_ids', 'in', [user.id]),
+            ('mentioned_user_ids', 'in', [user.id])
+        ]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
 </odoo>

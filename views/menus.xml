@@ -1,36 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Root menu - opens OWL Inbox directly -->
+    <!-- Root menu - opens OWL Inbox directly
+         Only visible to users with bader_inbox User or Manager group -->
     <menuitem id="menu_bader_inbox_root" name="Bader Inbox" sequence="35" 
         web_icon="bader_inbox,static/description/icon.png"
         action="action_bader_inbox_main"
-        groups="base.group_user"/>
+        groups="bader_inbox.group_bader_inbox_user"/>
 
-
-
-    <!-- ⚙️ Configuração submenu -->
+    <!-- ⚙️ Configuração submenu (User + Manager) -->
     <menuitem id="menu_bader_inbox_config" name="⚙️ Configuração" 
         parent="menu_bader_inbox_root" 
         sequence="100" 
-        groups="base.group_user"/>
+        groups="bader_inbox.group_bader_inbox_user"/>
     
     <menuitem id="menu_bader_inbox_channels" name="📱 Canais WhatsApp" 
         parent="menu_bader_inbox_config" 
         action="action_bader_inbox_channel" 
-        sequence="10"/>
+        sequence="10"
+        groups="bader_inbox.group_bader_inbox_user"/>
     
     <menuitem id="menu_bader_inbox_settings" name="🔑 API Evolution" 
         parent="menu_bader_inbox_config" 
         action="action_bader_inbox_api_settings" 
-        sequence="20"/>
+        sequence="20"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_bader_inbox_manage_pipelines" name="📊 Gerir Pipelines" 
         parent="menu_bader_inbox_config" 
         action="action_bader_inbox_pipeline" 
-        sequence="30"/>
+        sequence="30"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_bader_inbox_ai_assistant" name="🤖 AI Assistente" 
         parent="menu_bader_inbox_config" 
         action="action_bader_inbox_ai_assistant" 
-        sequence="40"/>
+        sequence="40"
+        groups="bader_inbox.group_bader_inbox_manager"/>
+
+    <menuitem id="menu_bader_inbox_translation" name="🌐 Traducción" 
+        parent="menu_bader_inbox_config" 
+        action="action_bader_inbox_translation_settings" 
+        sequence="50"
+        groups="bader_inbox.group_bader_inbox_manager"/>
+
+    <menuitem id="menu_bader_inbox_templates" name="⚡ Respuestas Rápidas" 
+        parent="menu_bader_inbox_config" 
+        action="action_bader_inbox_template" 
+        sequence="60"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 </odoo>

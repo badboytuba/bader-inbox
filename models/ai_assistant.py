@@ -1971,8 +1971,17 @@ class BaderInboxAIAssistant(models.Model):
 
     @api.model
     def detect_language(self, text):
-        config = self._get_config()
-        if not config or not text:
+        # Use translation config first, fallback to AI agent config
+        ICP = self.env["ir.config_parameter"].sudo()
+        api_key = ICP.get_param("bader_inbox.translation_api_key", "")
+        model = ICP.get_param("bader_inbox.translation_model", "gpt-4o-mini")
+        if not api_key:
+            config = self._get_config()
+            if not config or not text:
+                return ""
+            api_key = config.api_key
+            model = config.model_name or "gpt-4o-mini"
+        if not text:
             return ""
         try:
             prompt = (
@@ -1982,11 +1991,11 @@ class BaderInboxAIAssistant(models.Model):
             resp = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {config.api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": config.model_name or "gpt-4o-mini",
+                    "model": model,
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 5,
                     "temperature": 0,
@@ -2001,9 +2010,18 @@ class BaderInboxAIAssistant(models.Model):
 
     @api.model
     def translate_message(self, message_id, target_lang="es"):
-        config = self._get_config()
-        if not config:
-            return {"error": "AI not configured"}
+        # Use translation config first, fallback to AI agent config
+        ICP = self.env["ir.config_parameter"].sudo()
+        api_key = ICP.get_param("bader_inbox.translation_api_key", "")
+        model = ICP.get_param("bader_inbox.translation_model", "gpt-4o-mini")
+        if not target_lang or target_lang == "es":
+            target_lang = ICP.get_param("bader_inbox.translation_target_lang", "es")
+        if not api_key:
+            config = self._get_config()
+            if not config:
+                return {"error": "Translation not configured. Go to Configuration > 🌐 Traducción"}
+            api_key = config.api_key
+            model = config.model_name or "gpt-4o-mini"
 
         message = self.env["bader.inbox.message"].browse(message_id)
         if not message.exists() or not message.content:
@@ -2012,19 +2030,26 @@ class BaderInboxAIAssistant(models.Model):
         if message.translated_content:
             return {"translated": message.translated_content, "language": message.detected_language}
 
+        lang_names = {
+            "es": "Spanish", "pt": "Portuguese", "en": "English",
+            "de": "German", "fr": "French", "it": "Italian",
+            "ar": "Arabic", "zh": "Chinese",
+        }
+        lang_name = lang_names.get(target_lang, target_lang)
+
         try:
             prompt = (
-                f'Translate the following text to {target_lang}. '
+                f'Translate the following text to {lang_name}. '
                 f'Return ONLY the translation.\n\nText: {message.content}'
             )
             resp = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {config.api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": config.model_name or "gpt-4o-mini",
+                    "model": model,
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 500,
                     "temperature": 0.3,
@@ -2043,3 +2068,4 @@ class BaderInboxAIAssistant(models.Model):
         except Exception as e:
             _logger.error(f"Translation error: {e}")
             return {"error": str(e)}
+

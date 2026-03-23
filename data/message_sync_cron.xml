@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Sync pending messages from Evolution API queue — every 2 minutes -->
+    <record id="ir_cron_sync_pending_messages" model="ir.cron">
+        <field name="name">Bader Inbox: Sync Pending Messages</field>
+        <field name="model_id" ref="model_bader_inbox_channel"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_sync_pending_messages()</field>
+        <field name="interval_number">2</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="priority">10</field>
+    </record>
+</odoo>

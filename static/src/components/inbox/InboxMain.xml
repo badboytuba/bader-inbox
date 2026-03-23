@@ -9,10 +9,55 @@
                     <div class="panel-top-bar">
                         <h3 class="panel-title">Conversaciones</h3>
                         <div class="panel-actions">
-                            <button class="dark-mode-toggle" t-on-click="toggleDarkMode" t-att-title="state.darkMode ? 'Modo Claro' : 'Modo Oscuro'">
-                                <t t-if="state.darkMode">☀️</t>
-                                <t t-else="">🌙</t>
-                            </button>
+                            <!-- Channel Filter -->
+                            <div class="toolbar-dropdown" t-if="state.channels.length">
+                                <button t-attf-class="toolbar-btn {{ state.channelFilter ? 'active' : '' }}" 
+                                        t-on-click="toggleChannelPopover" title="Filtrar por canal">
+                                    <i class="fa fa-plug"/>
+                                    <span t-if="state.channelFilter" class="toolbar-indicator" t-attf-style="background: {{ getChannelColor(state.channelFilter) }}"/>
+                                </button>
+                                <div t-if="state.showChannelPopover" class="toolbar-popover">
+                                    <div class="popover-item" t-on-click="() => this.selectChannelFromPopover(null)">
+                                        <i class="fa fa-globe popover-icon"/>
+                                        <span>Todos los canales</span>
+                                        <i t-if="!state.channelFilter" class="fa fa-check popover-check"/>
+                                    </div>
+                                    <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
+                                        <div class="popover-item" t-on-click="() => this.selectChannelFromPopover(ch.id)">
+                                            <span class="popover-dot" t-attf-style="background: {{ getChannelColor(ch.id) }}"/>
+                                            <span t-esc="ch.name"/>
+                                            <span t-if="ch.state === 'connected'" class="popover-status connected">●</span>
+                                            <span t-else="" class="popover-status disconnected">●</span>
+                                            <i t-if="state.channelFilter === ch.id" class="fa fa-check popover-check"/>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+
+                            <!-- Tag Filter -->
+                            <div class="toolbar-dropdown" t-if="state.allTags.length">
+                                <button t-attf-class="toolbar-btn {{ state.activeTagFilter ? 'active' : '' }}"
+                                        t-on-click="toggleTagPopover" title="Filtrar por etiqueta">
+                                    <i class="fa fa-tag"/>
+                                    <span t-if="state.activeTagFilter" class="toolbar-indicator" t-attf-style="background: {{ getTagColor(state.activeTagFilter) }}"/>
+                                </button>
+                                <div t-if="state.showTagPopover" class="toolbar-popover">
+                                    <div class="popover-item" t-on-click="() => this.selectTagFromPopover(null)">
+                                        <i class="fa fa-tags popover-icon"/>
+                                        <span>Todas las etiquetas</span>
+                                        <i t-if="!state.activeTagFilter" class="fa fa-check popover-check"/>
+                                    </div>
+                                    <t t-foreach="state.allTags" t-as="tag" t-key="tag.id">
+                                        <div class="popover-item" t-on-click="() => this.selectTagFromPopover(tag.id)">
+                                            <span class="popover-dot" t-attf-style="background: {{ getTagColor(tag.id) }}"/>
+                                            <span t-esc="tag.name"/>
+                                            <i t-if="state.activeTagFilter === tag.id" class="fa fa-check popover-check"/>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
                             <button class="panel-action-btn" t-on-click="openAddChannelModal" title="Añadir Canal WhatsApp">
                                 <i class="fa fa-plus"/>
                             </button>
@@ -22,43 +67,41 @@
                         </div>
                     </div>
 
+                    <!-- Contacts / Groups Tab Bar -->
+                    <div class="inbox-tab-bar">
+                        <button t-attf-class="inbox-tab {{ state.activeTab === 'contacts' ? 'active' : '' }}"
+                                t-on-click="() => this.switchTab('contacts')">
+                            <i class="fa fa-user"/> Contactos
+                        </button>
+                        <button t-attf-class="inbox-tab {{ state.activeTab === 'groups' ? 'active' : '' }}"
+                                t-on-click="() => this.switchTab('groups')">
+                            <i class="fa fa-users"/> Grupos
+                            <span t-if="groupUnreadCount" class="tab-badge" t-esc="groupUnreadCount"/>
+                        </button>
+                    </div>
+
                     <!-- Search Bar -->
                     <div class="panel-search">
                         <i class="fa fa-search panel-search-icon"/>
                         <input type="text" class="panel-search-input" placeholder="Buscar conversación..."
                                t-model="state.searchQuery" t-on-input="onSearchInput"/>
-                        <button t-if="state.searchQuery" class="panel-search-clear" t-on-click="() => { this.state.searchQuery = ''; }">
+                        <button t-if="state.searchQuery" class="panel-search-clear" t-on-click="() => { this.state.searchQuery = ''; this.state.remoteSearchResults = []; }">
                             <i class="fa fa-times"/>
                         </button>
                     </div>
 
-                    <!-- Channel Dropdown -->
-                    <div t-if="state.channels.length" class="channel-dropdown-wrapper">
-                        <select class="channel-dropdown" t-on-change="onChannelDropdownChange" t-att-value="state.channelFilter || ''">
-                            <option value="">📱 Todos los canales</option>
-                            <t t-foreach="state.channels" t-as="ch" t-key="ch.id">
-                                <option t-att-value="ch.id" t-att-selected="state.channelFilter === ch.id">
-                                    <t t-if="ch.state === 'connected'">🟢</t>
-                                    <t t-else="">🟡</t>
-                                    <t t-esc="ch.name"/>
-                                </option>
-                            </t>
-                        </select>
-                    </div>
-                    <div t-else="" class="channel-empty-notice">
-                        <i class="fa fa-info-circle"/> Ningún canal. <span class="channel-add-link" t-on-click="openAddChannelModal">+ Añadir</span>
-                    </div>
-
-                    <!-- Tag Filters (horizontal, scrollable) -->
-                    <div t-if="state.allTags.length" class="tag-filters">
-                        <t t-foreach="state.allTags" t-as="tag" t-key="tag.id">
-                            <button t-attf-class="tag-filter-btn {{ state.activeTagFilter === tag.id ? 'active' : '' }}"
-                                    t-on-click="() => this.filterByTag(tag.id)"
-                                    t-attf-style="--tag-color: {{ getTagColor(tag.id) }}">
-                                <span class="tag-dot" t-attf-style="background: {{ getTagColor(tag.id) }}"/>
-                                <t t-esc="tag.name"/>
-                            </button>
-                        </t>
+                    <!-- Active filter pills (only when filters active) -->
+                    <div t-if="state.channelFilter || state.activeTagFilter" class="toolbar-active-filters">
+                        <span t-if="state.channelFilter" class="active-filter-pill" t-on-click="() => this.selectChannelFromPopover(null)">
+                            <span class="pill-dot" t-attf-style="background: {{ getChannelColor(state.channelFilter) }}"/>
+                            <t t-esc="getChannelDisplayName(state.channelFilter)"/>
+                            <i class="fa fa-times pill-close"/>
+                        </span>
+                        <span t-if="state.activeTagFilter" class="active-filter-pill" t-on-click="() => this.selectTagFromPopover(null)">
+                            <span class="pill-dot" t-attf-style="background: {{ getTagColor(state.activeTagFilter) }}"/>
+                            <t t-esc="getTagName(state.activeTagFilter)"/>
+                            <i class="fa fa-times pill-close"/>
+                        </span>
                     </div>
                 </div>
 
@@ -69,23 +112,27 @@
                         <button t-attf-class="filter-sidebar-btn {{ state.filter === 'all' ? 'active' : '' }}" 
                                 t-on-click="() => this.setFilter('all')" title="Todas">
                             <i class="fa fa-comments"/>
-                            <span>Todas</span>
+                            <span class="filter-count" t-if="allCount" t-esc="allCount"/>
                         </button>
                         <button t-attf-class="filter-sidebar-btn {{ state.filter === 'unread' ? 'active' : '' }}" 
                                 t-on-click="() => this.setFilter('unread')" title="No leídas">
                             <i class="fa fa-envelope"/>
-                            <span>NL</span>
                             <span t-if="totalUnread" class="filter-badge" t-esc="totalUnread"/>
                         </button>
                         <button t-attf-class="filter-sidebar-btn {{ state.filter === 'mine' ? 'active' : '' }}" 
                                 t-on-click="() => this.setFilter('mine')" title="Mías">
                             <i class="fa fa-user"/>
-                            <span>Mías</span>
+                            <span class="filter-count" t-if="mineCount" t-esc="mineCount"/>
                         </button>
+                        <button t-attf-class="filter-sidebar-btn {{ state.filter === 'shared' ? 'active' : '' }}" 
+                                t-on-click="() => this.setFilter('shared')" title="Compartidas">
+                            <i class="fa fa-share-alt"/>
+                            <span t-if="sharedCount" class="filter-badge shared" t-esc="sharedCount"/>
+                        </button>
+                        <div class="filter-sidebar-spacer"/>
                         <button t-attf-class="filter-sidebar-btn closed {{ state.filter === 'closed' ? 'active' : '' }}" 
                                 t-on-click="() => this.setFilter('closed')" title="Cerradas">
                             <i class="fa fa-archive"/>
-                            <span>Cerr.</span>
                         </button>
                     </div>
 
@@ -105,27 +152,44 @@
                         </div>
                     <div t-else="" class="conversations-items">
                         <t t-foreach="filteredConversations" t-as="conv" t-key="conv.id">
-                            <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }} {{ conv.unread_count > 0 ? 'unread' : '' }}" 
+                            <div t-attf-class="conversation-item {{ state.selectedConversation?.id === conv.id ? 'active' : '' }} {{ conv.unread_count > 0 ? 'unread' : '' }} {{ conv.is_pinned ? 'pinned' : '' }}" 
                                  t-on-click="() => this.selectConversation(conv)">
+                                <!-- Channel color indicator -->
+                                <div class="channel-indicator" t-attf-style="background: {{ getChannelColor(conv.channel_id) }}"
+                                     t-att-title="getChannelDisplayName(conv.channel_id)"/>
                                 <div t-attf-class="conv-avatar {{ conv.profile_pic_url ? '' : getAvatarColor(conv.id) }}">
-                                    <img t-if="conv.profile_pic_url" t-att-src="conv.profile_pic_url" class="conv-avatar-img" alt="" loading="lazy"/>
+                                    <img t-if="conv.profile_pic_url" t-att-src="conv.profile_pic_url" class="conv-avatar-img" alt="" loading="lazy"
+                                         t-on-error="(ev) => { ev.target.style.display='none'; ev.target.parentNode.classList.add(this.getAvatarColor(conv.id)); ev.target.parentNode.insertAdjacentText('afterbegin', this.getInitials(conv.computed_name || conv.phone)); }"/>
                                     <t t-else="" t-esc="getInitials(conv.computed_name || conv.phone)"/>
                                     <div class="status-dot online"/>
                                 </div>
                                 <div class="conv-content">
                                     <div class="conv-header">
-                                        <span t-attf-class="conv-name {{ conv.unread_count > 0 ? 'fw-bold' : '' }}" t-esc="conv.computed_name || conv.phone"/>
-                                        <span class="conv-time" t-esc="formatTime(conv.last_message_date)"/>
+                                        <div class="conv-name-row">
+                                            <i t-if="conv.is_pinned" class="fa fa-thumb-tack conv-pin-icon" title="Fijada"/>
+                                            <i t-if="conv.is_group" class="fa fa-users conv-group-icon" title="Grupo"/>
+                                            <span t-attf-class="conv-name {{ conv.unread_count > 0 ? 'fw-bold' : '' }}" t-esc="conv.computed_name || conv.phone"/>
+                                            <span t-if="conv.partner_id" class="odoo-contact-badge" title="Contacto Odoo">✓</span>
+                                            <i t-if="conv.is_muted" class="fa fa-bell-slash conv-muted-icon" title="Silenciado"/>
+                                            <span t-if="conv.is_group and conv.member_count" class="conv-member-count" t-att-title="conv.member_count + ' miembros'"><t t-esc="conv.member_count"/> <i class="fa fa-user" style="font-size: 9px;"/></span>
+                                        </div>
+                                        <span t-attf-class="conv-time {{ conv.unread_count > 0 ? 'unread-time' : '' }}" t-esc="formatTime(conv.last_message_date)"/>
                                     </div>
                                     <div class="conv-preview">
-                                        <span class="conv-message" t-esc="conv.last_message || 'Nueva conversación'"/>
-                                        <span t-if="conv.unread_count > 0" class="conv-badge" t-esc="conv.unread_count"/>
+                                        <span t-attf-class="conv-message {{ conv.unread_count > 0 ? 'unread-msg' : '' }}" t-esc="formatLastMessage(conv.last_message)"/>
+                                        <div class="conv-preview-right">
+                                            <!-- Assignee avatar -->
+                                            <span t-if="conv.assigned_user_id" class="conv-assignee" 
+                                                  t-att-title="conv.assigned_user_id[1]" 
+                                                  t-esc="getInitials(conv.assigned_user_id[1])"/>
+                                            <span t-if="conv.unread_count > 0" class="conv-badge" t-esc="conv.unread_count"/>
+                                        </div>
                                     </div>
-                                    <div t-if="conv.tag_ids and conv.tag_ids.length" class="conv-tags">
+                                    <!-- Compact tags: dots only -->
+                                    <div t-if="conv.tag_ids and conv.tag_ids.length" class="conv-tags-compact">
                                         <t t-foreach="conv.tag_ids" t-as="tagId" t-key="tagId">
-                                            <span class="tag-badge-inline" t-attf-style="background: {{ getTagColor(tagId) }}22; color: {{ getTagColor(tagId) }}; border: 1px solid {{ getTagColor(tagId) }}44">
-                                                <t t-esc="getTagName(tagId)"/>
-                                            </span>
+                                            <span class="tag-dot" t-attf-style="background: {{ getTagColor(tagId) }}" 
+                                                  t-att-title="getTagName(tagId)"/>
                                         </t>
                                     </div>
                                 </div>
@@ -173,12 +237,19 @@
                             </button>
                             <div class="chat-contact">
                                 <div t-attf-class="contact-avatar {{ state.selectedConversation.profile_pic_url ? '' : getAvatarColor(state.selectedConversation.id) }}">
-                                    <img t-if="state.selectedConversation.profile_pic_url" t-att-src="state.selectedConversation.profile_pic_url" class="contact-avatar-img" alt=""/>
+                                    <img t-if="state.selectedConversation.profile_pic_url" t-att-src="state.selectedConversation.profile_pic_url" class="contact-avatar-img" alt=""
+                                         t-on-error="(ev) => { ev.target.style.display='none'; ev.target.parentNode.classList.add(this.getAvatarColor(state.selectedConversation.id)); ev.target.parentNode.insertAdjacentText('afterbegin', this.getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)); }"/>
                                     <t t-else="" t-esc="getInitials(state.selectedConversation.computed_name || state.selectedConversation.phone)"/>
                                 </div>
                                 <div class="contact-info">
                                     <h4 t-esc="state.selectedConversation.computed_name || state.selectedConversation.phone"/>
-                                    <p t-esc="state.selectedConversation.phone"/>
+                                    <p t-if="state.selectedConversation.is_group and state.selectedConversation.member_count">
+                                        <i class="fa fa-users" style="margin-right: 4px;"/><t t-esc="state.selectedConversation.member_count"/> miembros
+                                    </p>
+                                    <p t-elif="state.selectedConversation.is_group and state.selectedConversation.group_description">
+                                        <t t-esc="(state.selectedConversation.group_description || '').substring(0, 60)"/>
+                                    </p>
+                                    <p t-else="" t-esc="state.selectedConversation.phone"/>
                                 </div>
                             </div>
                             <div class="chat-actions">
@@ -201,6 +272,19 @@
                                         t-att-title="state.selectedConversation.ai_active ? 'AI Activo - Clic para desactivar' : 'AI Inactivo - Clic para activar'"
                                         t-on-click="toggleAI">
                                     <span style="font-size: 16px;">🤖</span>
+                                </button>
+                                <!-- Group-specific buttons -->
+                                <button t-if="state.selectedConversation.is_group" class="btn-chat-action" 
+                                        t-att-title="state.selectedConversation.is_muted ? 'Activar notificaciones' : 'Silenciar grupo'"
+                                        t-on-click="toggleMute">
+                                    <i t-attf-class="fa {{ state.selectedConversation.is_muted ? 'fa-bell-slash' : 'fa-bell' }}"/>
+                                </button>
+                                <button t-if="state.selectedConversation.is_group" class="btn-chat-action" title="Sincronizar grupo" t-on-click="syncGroupInfo">
+                                    <i class="fa fa-refresh"/>
+                                </button>
+                                <button t-if="state.selectedConversation.is_group" class="btn-chat-action" title="Miembros" t-on-click="toggleGroupPanel"
+                                        t-attf-class="btn-chat-action {{ state.showGroupPanel ? 'active' : '' }}">
+                                    <i class="fa fa-users"/>
                                 </button>
                                 <button class="btn-chat-action" t-on-click="toggleContactPanel" t-att-title="state.showContactPanel ? 'Ocultar detalles' : 'Ver detalles'">
                                     <i class="fa fa-user"/>
@@ -232,6 +316,72 @@
                             </div>
                         </div>
 
+                        <!-- ═══ GROUP MEMBERS PANEL ═══ -->
+                        <div t-if="state.showGroupPanel and state.selectedConversation and state.selectedConversation.is_group" class="group-members-panel">
+                            <div class="gmp-header">
+                                <h5><i class="fa fa-users"/> Miembros <span class="gmp-count" t-if="state.groupMembers.length" t-esc="state.groupMembers.length"/></h5>
+                                <button class="gmp-close" t-on-click="toggleGroupPanel"><i class="fa fa-times"/></button>
+                            </div>
+                            <!-- Group Description -->
+                            <div t-if="state.selectedConversation.group_description" class="gmp-description">
+                                <p t-esc="state.selectedConversation.group_description"/>
+                            </div>
+                            <!-- Member Search -->
+                            <div class="gmp-search">
+                                <i class="fa fa-search"/>
+                                <input type="text" placeholder="Buscar miembro..." t-model="state.groupMemberFilter"/>
+                            </div>
+                            <!-- Group message search -->
+                            <div class="gmp-msg-search">
+                                <div class="gmp-search">
+                                    <i class="fa fa-comment"/>
+                                    <input type="text" placeholder="Buscar en mensajes..." t-model="state.groupSearchQuery"
+                                           t-on-keydown="(ev) => { ev.key === 'Enter' &amp;&amp; this.searchGroupMessages(); }"/>
+                                </div>
+                                <select class="gmp-participant-filter" t-model="state.participantFilter" t-on-change="searchGroupMessages">
+                                    <option value="">Todos los participantes</option>
+                                    <t t-foreach="state.groupMembers" t-as="m" t-key="m.id">
+                                        <option t-att-value="m.phone" t-esc="m.display_name || m.phone"/>
+                                    </t>
+                                </select>
+                                <!-- Search Results -->
+                                <div t-if="state.groupSearchResults.length" class="gmp-search-results">
+                                    <t t-foreach="state.groupSearchResults" t-as="r" t-key="r.id">
+                                        <div class="gmp-search-result">
+                                            <span class="gmp-sr-sender" t-esc="r.sender_name || 'Tú'"/>
+                                            <span class="gmp-sr-content" t-esc="(r.content || '').substring(0, 80)"/>
+                                            <span class="gmp-sr-time" t-esc="formatTime(r.create_date)"/>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                            <!-- Member List -->
+                            <div class="gmp-list">
+                                <t t-foreach="filteredGroupMembers" t-as="member" t-key="member.id">
+                                    <div class="gmp-member" t-on-click="() => this.openMemberConversation(member)">
+                                        <div t-attf-class="gmp-avatar {{ getAvatarColor(member.id) }}">
+                                            <t t-esc="getInitials(member.display_name || member.phone)"/>
+                                        </div>
+                                        <div class="gmp-info">
+                                            <span class="gmp-name" t-esc="member.display_name || member.phone"/>
+                                            <span t-if="member.phone and member.name" class="gmp-phone" t-esc="member.phone"/>
+                                        </div>
+                                        <div class="gmp-badges">
+                                            <span t-if="member.is_superadmin" class="gmp-badge superadmin" title="Super Admin">👑</span>
+                                            <span t-elif="member.is_admin" class="gmp-badge admin" title="Admin">⭐</span>
+                                        </div>
+                                    </div>
+                                </t>
+                                <div t-if="!state.groupMembers.length" class="gmp-empty">
+                                    <i class="fa fa-users"/>
+                                    <p>Sin miembros sincronizados</p>
+                                    <button class="btn btn-sm btn-primary" t-on-click="syncGroupInfo">
+                                        <i class="fa fa-refresh"/> Sincronizar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="chat-messages" t-ref="messagesContainer">
                             <div t-if="state.loadingMessages" class="skeleton-messages">
                                 <div class="skeleton-msg skeleton-incoming"><div class="skeleton-msg-line" style="width:70%"/><div class="skeleton-msg-line" style="width:50%"/></div>
@@ -240,8 +390,42 @@
                             </div>
                             <div t-else="" class="messages-list">
                                 <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
-                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}" t-att-data-msg-id="msg.id">
+                                    <!-- Date separator (Hoy, Ayer, date) -->
+                                    <div t-if="shouldShowDateSeparator(msg_index)" class="date-separator">
+                                        <span t-esc="getDateLabel(msg.create_date)"/>
+                                    </div>
+                                    <!-- Internal Note (from @mention) -->
+                                    <t t-if="msg._type === 'note'">
+                                        <div class="internal-note">
+                                            <div class="note-bubble">
+                                                <div class="note-header">
+                                                    <i class="fa fa-sticky-note-o"/> Nota interna
+                                                    <span class="note-author" t-if="msg.author_id">— <t t-esc="msg.author_id[1]"/></span>
+                                                </div>
+                                                <div class="note-content" t-esc="msg.content"/>
+                                                <div class="note-footer">
+                                                    <span class="note-time" t-esc="msg.create_date"/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                    <!-- Regular message -->
+                                    <t t-else="">
+                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}{{ state.currentConversation and state.currentConversation.is_group and msg.direction === 'in' ? ' group-msg-row' : '' }}" t-att-data-msg-id="msg.id">
+                                        <!-- Group sender avatar -->
+                                        <div t-if="state.currentConversation and state.currentConversation.is_group and msg.direction === 'in' and msg.sender_name"
+                                             class="group-sender-avatar"
+                                             t-att-style="'background-color:' + getParticipantColor(msg.sender_name)"
+                                             t-att-title="(msg.sender_name || '') + (msg.sender_phone ? ' (' + msg.sender_phone + ')' : '')">
+                                            <t t-esc="(msg.sender_name || '?')[0].toUpperCase()"/>
+                                        </div>
                                         <div class="message-bubble">
+                                            <!-- Group sender name -->
+                                            <div t-if="state.currentConversation and state.currentConversation.is_group and msg.direction === 'in' and msg.sender_name"
+                                                 class="group-sender-name"
+                                                 t-att-style="'color:' + getParticipantColor(msg.sender_name)">
+                                                <t t-esc="msg.sender_name"/>
+                                            </div>
                                             <!-- Quoted/Reply context -->
                                             <div t-if="msg.quoted_text" class="quoted-message">
                                                 <div t-if="msg.quoted_participant" class="quoted-sender" t-esc="msg.quoted_participant"/>
@@ -252,7 +436,8 @@
                                                 <div t-if="msg.message_type === 'image'" class="message-media">
                                                     <img t-att-src="getMediaUrl(msg)" class="message-image" 
                                                          t-on-click="() => window.open(getMediaUrl(msg), '_blank')"
-                                                         alt="Image" loading="lazy"/>
+                                                         alt="Image" loading="lazy"
+                                                         t-on-error="(ev) => this.onImageError(ev, msg)"/>
                                                 </div>
                                                 <div t-if="msg.message_type === 'audio'" class="message-media">
                                                     <audio controls="" preload="none">
@@ -270,11 +455,47 @@
                                                         <span t-esc="msg.media_filename || 'Document'"/>
                                                     </a>
                                                 </div>
+                                                <div t-if="msg.message_type === 'sticker'" class="message-sticker"
+                                                     t-att-data-sticker-url="getMediaUrl(msg)"
+                                                     t-att-data-msg-id="msg.id">
+                                                    <img t-att-src="getMediaUrl(msg)" class="sticker-image"
+                                                         t-on-click="() => window.open(getMediaUrl(msg), '_blank')"
+                                                         alt="Sticker" loading="lazy"
+                                                         t-on-error="(ev) => this.loadLottieSticker(ev, msg)"/>
+                                                </div>
                                                 <div t-if="msg.message_type === 'location'" class="message-location">
                                                     <i class="fa fa-map-marker"/>
                                                     <span t-esc="msg.content || 'Location'"/>
                                                 </div>
-                                                <div t-if="msg.content and msg.message_type !== 'location'" class="message-text" t-esc="msg.content"/>
+                                                <!-- Contact Card -->
+                                                <div t-if="msg.message_type === 'contact'" class="message-contact-card">
+                                                    <t t-set="contactData" t-value="parseContactCard(msg)"/>
+                                                    <t t-if="contactData and contactData.contacts">
+                                                        <!-- Multiple contacts -->
+                                                        <div t-foreach="contactData.contacts" t-as="c" t-key="c_index" class="contact-card-item">
+                                                            <div class="contact-card-avatar">👤</div>
+                                                            <div class="contact-card-info">
+                                                                <div class="contact-card-name" t-esc="c.displayName"/>
+                                                                <div t-if="c.phone" class="contact-card-phone">
+                                                                    <i class="fa fa-phone"/> <span t-esc="c.phone"/>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </t>
+                                                    <t t-elif="contactData">
+                                                        <!-- Single contact -->
+                                                        <div class="contact-card-item">
+                                                            <div class="contact-card-avatar">👤</div>
+                                                            <div class="contact-card-info">
+                                                                <div class="contact-card-name" t-esc="contactData.displayName"/>
+                                                                <div t-if="contactData.phone" class="contact-card-phone">
+                                                                    <i class="fa fa-phone"/> <span t-esc="contactData.phone"/>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </t>
+                                                </div>
+                                                <div t-if="msg.content and msg.message_type !== 'location' and msg.message_type !== 'contact'" class="message-text" t-out="formatWhatsAppText(msg)"/>
                                                 <!-- Link Preview Card -->
                                                 <t t-set="preview" t-value="parseLinkPreview(msg)"/>
                                                 <a t-if="preview" t-att-href="preview.url" target="_blank" class="link-preview-card">
@@ -294,10 +515,12 @@
                                                 <!-- Language badge -->
                                                 <span t-if="msg.detected_language and msg.direction === 'in'" class="lang-badge" t-esc="msg.detected_language.toUpperCase()"/>
                                                 <!-- Translate button -->
-                                                <button t-if="msg.direction === 'in' and msg.content and state.aiEnabled" class="translate-btn" t-on-click="() => this.translateMessage(msg.id)"
+                                                <button t-if="msg.direction === 'in' and msg.content and (state.aiEnabled or state.translationEnabled)" class="translate-btn" t-on-click="() => this.translateMessage(msg.id)"
                                                         t-att-title="state.translations['show_' + msg.id] ? 'Ocultar traducción' : 'Traducir'">
                                                     <i t-attf-class="fa {{ state.translations['translating_' + msg.id] ? 'fa-spinner fa-spin' : 'fa-language' }}"/>
                                                 </button>
+                                                <span t-if="msg.direction === 'out' and msg.author_id" class="agent-inline" t-esc="getAgentShortName(msg)"/>
+                                                <span t-if="msg.direction === 'out' and !msg.author_id" class="agent-inline mobile">📱</span>
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
                                                 <span t-if="msg.is_edited" class="message-edited"><i class="fa fa-pencil"/> editado</span>
                                                 <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
@@ -315,6 +538,13 @@
                                                 <button class="msg-action-btn" title="Reaccionar" t-on-click="() => this.toggleReactionPicker(msg.id)">
                                                     <span>😊</span>
                                                 </button>
+                                                <button t-if="msg.direction === 'in' and msg.content and (state.aiEnabled or state.translationEnabled)" 
+                                                        class="msg-action-btn msg-action-translate" 
+                                                        t-on-click="() => this.translateMessage(msg.id)"
+                                                        t-att-title="state.translations['show_' + msg.id] ? 'Ocultar traducción' : 'Traducir a Español 🇪🇸'"
+                                                        t-att-disabled="state.translations['translating_' + msg.id]">
+                                                    <i t-attf-class="fa {{ state.translations['translating_' + msg.id] ? 'fa-spinner fa-spin' : 'fa-language' }}"/>
+                                                </button>
                                                 <button class="msg-action-btn" title="Reenviar" t-on-click="() => this.forwardMessage(msg)">
                                                     <i class="fa fa-share"/>
                                                 </button>
@@ -327,6 +557,7 @@
                                             </div>
                                         </div>
                                     </div>
+                                    </t>
                                 </t>
                             </div>
                         </div>
@@ -388,6 +619,31 @@
                                         No se encontraron respuestas rápidas
                                     </div>
                                 </div>
+                                <div class="qr-vars-hint">
+                                    <i class="fa fa-code"/> Variables: <code>{nombre}</code> <code>{telefono}</code> <code>{agente}</code> <code>{crm}</code> <code>{presupuesto}</code>
+                                </div>
+                            </div>
+
+                            <!-- Variable Autocomplete Picker -->
+                            <div t-if="state.showVarPicker" class="var-picker">
+                                <div class="var-picker-header">
+                                    <i class="fa fa-code"/>
+                                    <span>Insertar Variable</span>
+                                </div>
+                                <div class="var-picker-list">
+                                    <t t-foreach="_filteredVarOptions()" t-as="v" t-key="v.key">
+                                        <div t-attf-class="var-item {{ v_index === state.varIndex ? 'active' : '' }}"
+                                             t-on-click="() => this._insertVar(v)">
+                                            <i t-attf-class="fa {{ v.icon }} var-icon"/>
+                                            <span class="var-label" t-esc="v.label"/>
+                                            <span class="var-desc" t-esc="v.desc"/>
+                                        </div>
+                                    </t>
+                                    <div t-if="!_filteredVarOptions().length" class="var-empty">
+                                        <i class="fa fa-info-circle"/>
+                                        No se encontró la variable
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Emoji Picker -->
@@ -427,13 +683,49 @@
                                 <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
                             </div>
                             <div class="composer-input">
+                                <!-- @Mention Dropdown -->
+                                <div t-if="state.showMentionDropdown" class="mention-dropdown">
+                                    <div class="mention-dropdown-header">
+                                        <i class="fa fa-at"/> Mencionar usuario
+                                    </div>
+                                    <t t-foreach="state.mentionUsers" t-as="user" t-key="user.id">
+                                        <div t-attf-class="mention-item {{ state.mentionCursor === user_index ? 'active' : '' }}"
+                                             t-on-click="() => this.selectMentionUser(user)">
+                                            <div class="mention-avatar">
+                                                <img t-if="user.has_avatar" t-attf-src="/web/image/res.users/{{ user.id }}/image_128" alt=""/>
+                                                <span t-else="" class="mention-initial" t-esc="(user.name || '?')[0].toUpperCase()"/>
+                                            </div>
+                                            <div class="mention-info">
+                                                <span class="mention-name" t-esc="user.name"/>
+                                                <span class="mention-login" t-esc="user.login"/>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                                <!-- Mentioned Users Pills -->
+                                <div t-if="state.mentionedUsers.length > 0" class="mention-pills">
+                                    <span class="mention-pills-label">
+                                        <i class="fa fa-sticky-note-o"/> Nota interna para:
+                                    </span>
+                                    <t t-foreach="state.mentionedUsers" t-as="mu" t-key="mu.id">
+                                        <span class="mention-pill">
+                                            @<t t-esc="mu.name"/>
+                                            <i class="fa fa-times mention-pill-remove" t-on-click="() => this.removeMentionUser(mu.id)"/>
+                                        </span>
+                                    </t>
+                                </div>
                                 <!-- F9: Voice Recording Indicator -->
                                 <div t-if="state.isRecording" class="voice-recording-indicator">
-                                    <span class="recording-dot"/>
-                                    <span class="recording-timer" t-esc="Math.floor(state.recordingTime / 60) + ':' + String(state.recordingTime % 60).padStart(2, '0')"/>
                                     <button class="recording-cancel-btn" t-on-click="cancelVoiceRecording" title="Cancelar">
-                                        <i class="fa fa-times"/>
+                                        <i class="fa fa-trash"/>
                                     </button>
+                                    <div class="waveform-container">
+                                        <t t-foreach="state.waveformBars || []" t-as="barH" t-key="barH_index">
+                                            <div class="waveform-bar" t-attf-style="height: {{ barH }}px"/>
+                                        </t>
+                                    </div>
+                                    <span class="recording-timer" t-esc="Math.floor(state.recordingTime / 60) + ':' + ('' + (state.recordingTime % 60)).padStart(2, '0')"/>
+                                    <span class="recording-dot"/>
                                 </div>
                                 <textarea t-else="" rows="1" placeholder="Escribe un mensaje... (/ para respuestas rápidas)" 
                                     t-ref="composerTextarea"
@@ -460,6 +752,27 @@
                                             t-att-disabled="!state.composerText.trim()">
                                         <i class="fa fa-clock-o"/>
                                     </button>
+                                    <div t-if="state.translationEnabled or state.aiEnabled" class="lang-picker-wrapper">
+                                        <button class="btn-translate-composer" 
+                                                t-on-click="toggleLangPicker" 
+                                                title="Traducir a otro idioma"
+                                                t-att-disabled="!state.composerText.trim() || state.translatingComposer">
+                                            <i t-attf-class="fa {{ state.translatingComposer ? 'fa-spinner fa-spin' : 'fa-language' }}"/>
+                                            <span t-if="state.composerTargetLang" class="lang-badge-mini" t-esc="state.composerTargetLang.toUpperCase()"/>
+                                        </button>
+                                        <div t-if="state.showLangPicker" class="lang-picker-dropdown">
+                                            <div class="lang-picker-header">🌐 Traducir a...</div>
+                                            <t t-foreach="translationLanguages" t-as="lang" t-key="lang.code">
+                                                <button class="lang-picker-item" 
+                                                        t-on-click="() => this.selectComposerLang(lang.code)"
+                                                        t-attf-class="lang-picker-item {{ lang.detected ? 'detected' : '' }}">
+                                                    <span class="lang-flag" t-esc="lang.flag"/>
+                                                    <span class="lang-name" t-esc="lang.name"/>
+                                                    <span t-if="lang.detected" class="lang-detected-badge">✨ detectado</span>
+                                                </button>
+                                            </t>
+                                        </div>
+                                    </div>
                                 </t>
                             </div>
 
@@ -699,7 +1012,7 @@
                         <div t-if="state.dashboardData.sla_breaches and state.dashboardData.sla_breaches.length" class="sla-section">
                             <h4>⚠️ Alertas SLA (> <t t-esc="state.dashboardData.sla_target"/> min)</h4>
                             <div class="sla-alerts">
-                                <t t-foreach="state.dashboardData.sla_breaches" t-as="breach" t-key="breach.date">
+                                <t t-foreach="state.dashboardData.sla_breaches" t-as="breach" t-key="breach_index">
                                     <div class="sla-alert-item">
                                         <div class="sla-alert-icon">
                                             <i t-attf-class="fa {{ breach.waitMinutes > 60 ? 'fa-exclamation-circle text-danger' : 'fa-warning text-warning' }}"/>
@@ -909,8 +1222,21 @@
                 <!-- ═══ KANBAN VIEW ═══ -->
                 <div t-if="state.viewMode === 'kanban'" class="kanban-view-container">
                     <div class="kanban-header">
+                        <!-- Manager: User filter -->
+                        <div t-if="state.isManager and state.kanbanUsers.length" class="pipeline-selector" style="margin-right: 12px;">
+                            <label><i class="fa fa-user"/> Usuário:</label>
+                            <select class="form-select form-select-sm" 
+                                    t-on-change="onKanbanUserFilterChange">
+                                <option value="">Meu Kanban</option>
+                                <t t-foreach="state.kanbanUsers" t-as="u" t-key="u.id">
+                                    <option t-att-value="u.id" t-att-selected="u.id === state.kanbanFilterUserId">
+                                        <t t-esc="u.name"/>
+                                    </option>
+                                </t>
+                            </select>
+                        </div>
                         <div class="pipeline-selector">
-                            <label>Pipeline:</label>
+                            <label>Embudo:</label>
                             <select class="form-select form-select-sm" 
                                     t-on-change="onPipelineSelectChange">
                                 <t t-foreach="state.pipelines" t-as="p" t-key="p.id">
@@ -919,9 +1245,6 @@
                                     </option>
                                 </t>
                             </select>
-                        </div>
-                        <div t-if="!state.pipelines.length" class="alert alert-info py-2 small mb-0">
-                            <i class="fa fa-info-circle"/> Crea pipelines en ⚙️ Configuración → Gestionar Pipelines
                         </div>
                     </div>
 
@@ -982,8 +1305,8 @@
                                 <div class="empty-icon">
                                     <i class="fa fa-columns"/>
                                 </div>
-                                <h3>Sin Pipeline Seleccionado</h3>
-                                <p>Selecciona o crea un pipeline en ⚙️ Configuración</p>
+                                <h3>Sin Embudo Seleccionado</h3>
+                                <p>Selecciona o crea un embudo en ⚙️ Configuración</p>
                             </div>
                     </div>
                 </div>
@@ -1023,7 +1346,7 @@
                             <div class="c360-kpi-divider"/>
                             <div class="c360-kpi">
                                 <span class="c360-kpi-value">€<t t-esc="formatCurrency(state.customerStats.pipelineValue)"/></span>
-                                <span class="c360-kpi-label">Pipeline</span>
+                                <span class="c360-kpi-label">Embudo</span>
                             </div>
                             <div class="c360-kpi-divider"/>
                             <div class="c360-kpi">
@@ -1078,7 +1401,7 @@
 
                     <!-- Tags Section -->
                     <div class="contact-section">
-                        <h4>🏷️ Tags</h4>
+                        <h4>🏷️ Etiquetas</h4>
                         
                         <!-- Active tags on this conversation (colored pills with ×) -->
                         <div t-if="(state.selectedConversation.tag_ids || []).length" class="tag-active-list">
@@ -1168,13 +1491,13 @@
                             </button>
                         </div>
 
-                        <!-- Info Tab (Pipelines) -->
+                        <!-- Info Tab (Embudos) -->
                         <div t-if="state.notesTab === 'info'">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="small text-muted">Flujos</span>
+                                <span class="small text-muted">Embudos</span>
                                 <button class="btn btn-sm btn-outline-primary" t-on-click="openAddToPipelineModal" 
                                         t-att-disabled="!availablePipelinesForModal.length"
-                                        title="Añadir a un flujo">
+                                        title="Añadir a un embudo">
                                     <i class="fa fa-plus"/>
                                 </button>
                             </div>
@@ -1676,7 +1999,7 @@
             <div class="bader-modal-overlay" t-on-click="closePipelineModal">
                 <div class="bader-modal" t-on-click.stop="" style="max-width: 400px;">
                     <div class="bader-modal-header">
-                        <h4><i class="fa fa-columns"/> Añadir a Pipeline</h4>
+                        <h4><i class="fa fa-columns"/> Añadir a Embudo</h4>
                         <button class="btn-close" t-on-click="closePipelineModal"/>
                     </div>
                     <div class="bader-modal-body">

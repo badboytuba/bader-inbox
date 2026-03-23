@@ -22,6 +22,13 @@ class BaderInboxPipeline(models.Model):
     sequence = fields.Integer(string="Sequence", default=10)
     active = fields.Boolean(string="Active", default=True)
     
+    # Owner — each user has their own pipeline(s)
+    user_id = fields.Many2one(
+        "res.users", string="Owner",
+        default=lambda self: self.env.uid,
+        index=True
+    )
+    
     # Stages
     stage_ids = fields.One2many(
         "bader.inbox.pipeline.stage", "pipeline_id", string="Stages",
@@ -57,6 +64,38 @@ class BaderInboxPipeline(models.Model):
                     {"name": "Concluído", "pipeline_id": pipeline.id, "sequence": 3, "fold": True},
                 ])
         return pipelines
+
+    @api.model
+    def get_or_create_user_pipeline(self, target_user_id=None):
+        """Get current user's pipeline, creating default if needed.
+        Managers can pass target_user_id to view another user's pipeline.
+        """
+        uid = target_user_id or self.env.uid
+        pipeline = self.sudo().search([("user_id", "=", uid), ("active", "=", True)], limit=1)
+        if not pipeline:
+            user = self.env["res.users"].sudo().browse(uid)
+            pipeline = self.sudo().create({
+                "name": f"Pipeline de {user.name}",
+                "icon": "📋",
+                "user_id": uid,
+            })
+        return {
+            "id": pipeline.id,
+            "name": pipeline.name,
+            "icon": pipeline.icon,
+            "color": pipeline.color,
+            "user_id": [pipeline.user_id.id, pipeline.user_id.name] if pipeline.user_id else False,
+        }
+
+    @api.model
+    def get_kanban_users(self):
+        """Return list of users who have pipelines (for manager dropdown)."""
+        pipelines = self.sudo().search([("active", "=", True), ("user_id", "!=", False)])
+        seen = {}
+        for p in pipelines:
+            if p.user_id.id not in seen:
+                seen[p.user_id.id] = {"id": p.user_id.id, "name": p.user_id.name}
+        return list(seen.values())
 
 
 class BaderInboxPipelineStage(models.Model):
@@ -154,6 +193,9 @@ class BaderInboxConversationPipeline(models.Model):
     )
     channel_id = fields.Many2one(
         related="conversation_id.channel_id", string="Channel", store=True
+    )
+    tag_ids = fields.Many2many(
+        related="conversation_id.tag_ids", string="Tags", readonly=True
     )
     
     # Computed display name

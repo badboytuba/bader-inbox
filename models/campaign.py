@@ -376,6 +376,10 @@ class BaderInboxCampaignFlow(models.Model):
             raise ValidationError("\n".join(errors))
         return True
 
+    def action_save_from_canvas(self, data):
+        """Alias for frontend compatibility — Flow Designer calls this method name."""
+        return self.save_flow_data(data)
+
 
 class BaderInboxCampaignNode(models.Model):
     """A node in the flow — trigger, action, condition, or delay"""

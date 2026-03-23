@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Translation Settings Form View -->
+    <record id="view_bader_inbox_translation_settings_form" model="ir.ui.view">
+        <field name="name">bader.inbox.translation.settings.form</field>
+        <field name="model">bader.inbox.translation.settings</field>
+        <field name="arch" type="xml">
+            <form string="Configuración de Traducción">
+                <group>
+                    <group string="🔑 API OpenAI (Traducción)">
+                        <field name="openai_api_key" password="True" placeholder="sk-..."/>
+                        <field name="openai_model"/>
+                    </group>
+                    <group string="🌐 Configuración de Idioma">
+                        <field name="target_language"/>
+                    </group>
+                </group>
+                <group>
+                    <group string="⚡ Traducción Automática">
+                        <field name="auto_translate_incoming" widget="boolean_toggle"/>
+                        <field name="auto_translate_outgoing" widget="boolean_toggle"/>
+                    </group>
+                </group>
+                <div class="alert alert-info" role="alert">
+                    <strong>💡 Nota:</strong> Esta API Key es independiente del Agente AI.
+                    <br/>Se usa exclusivamente para traducir mensajes en tiempo real.
+                    <br/>El idioma destino define a qué idioma se traducirán los mensajes recibidos
+                    y el texto que escribas en el compositor.
+                </div>
+                <footer>
+                    <button name="action_test" type="object" string="🔌 Probar Conexión" class="btn-secondary"/>
+                    <button name="action_save" type="object" string="💾 Guardar" class="btn-primary"/>
+                    <button special="cancel" string="Cancelar"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action to open translation settings -->
+    <record id="action_bader_inbox_translation_settings" model="ir.actions.act_window">
+        <field name="name">🌐 Configuración de Traducción</field>
+        <field name="res_model">bader.inbox.translation.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

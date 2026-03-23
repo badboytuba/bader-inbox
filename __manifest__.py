@@ -34,12 +34,14 @@
         "views/pipeline_views.xml",
         "views/ai_assistant_views.xml",
         "views/phone_widget_views.xml",
+        "views/translation_views.xml",
         "views/menus.xml",
         "views/campaign_views.xml",
         "data/chatbot_cron.xml",
         "data/channel_health_cron.xml",
         "data/scheduled_message_cron.xml",
         "data/campaign_cron.xml",
+        "data/message_sync_cron.xml",
     ],
 
     "assets": {

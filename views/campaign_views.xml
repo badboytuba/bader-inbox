@@ -367,7 +367,8 @@
     <menuitem id="menu_campaign_root"
         name="📣 Campanhas"
         parent="menu_bader_inbox_root"
-        sequence="30"/>
+        sequence="30"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <!-- Dashboard Client Action -->
     <record id="action_campaign_dashboard" model="ir.actions.client">
@@ -385,42 +386,49 @@
         name="📊 Dashboard"
         parent="menu_campaign_root"
         action="action_campaign_dashboard"
-        sequence="5"/>
+        sequence="5"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_campaign_list"
         name="Todas as Campanhas"
         parent="menu_campaign_root"
         action="action_campaign"
-        sequence="10"/>
+        sequence="10"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_audience_list"
         name="Audiências"
         parent="menu_campaign_root"
         action="action_audience"
-        sequence="20"/>
+        sequence="20"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_campaign_config"
         name="⚙️ Configuração"
         parent="menu_campaign_root"
-        sequence="50"/>
+        sequence="50"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_throttle_list"
         name="Perfis Anti-Ban"
         parent="menu_campaign_config"
         action="action_throttle"
-        sequence="10"/>
+        sequence="10"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_optout_list"
         name="Opt-out List"
         parent="menu_campaign_config"
         action="action_optout"
-        sequence="20"/>
+        sequence="20"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
     <menuitem id="menu_execution_list"
         name="Execuções"
         parent="menu_campaign_config"
         action="action_execution"
-        sequence="30"/>
+        sequence="30"
+        groups="bader_inbox.group_bader_inbox_manager"/>
 
 </odoo>
 

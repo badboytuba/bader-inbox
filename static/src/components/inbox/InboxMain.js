@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, useRef, onMounted, onWillUnmount } from "@odoo/owl";
+import { Component, useState, onWillStart, useRef, onMounted, onWillUnmount, markup } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { _t } from "@web/core/l10n/translation";
@@ -27,6 +27,16 @@ export class BaderInboxMain extends Component {
             filter: "all",
             channelFilter: null,
             searchQuery: "",
+            remoteSearchResults: [],
+            activeTab: "contacts",
+
+            // Group features
+            groupMembers: [],
+            showGroupPanel: false,
+            groupMemberFilter: "",
+            groupSearchQuery: "",
+            groupSearchResults: [],
+            participantFilter: "",
 
             // Messages
             messages: [],
@@ -39,6 +49,12 @@ export class BaderInboxMain extends Component {
             showQuickReplies: false,
             quickReplyFilter: "",
             quickReplyIndex: 0,
+
+            // Variable Picker
+            showVarPicker: false,
+            varFilter: "",
+            varIndex: 0,
+            varStartPos: 0,
 
             // Emoji Picker
             showEmojiPicker: false,
@@ -67,6 +83,14 @@ export class BaderInboxMain extends Component {
             notesTab: "info",
             loadingNotes: false,
 
+            // @Mention
+            showMentionDropdown: false,
+            mentionQuery: "",
+            mentionUsers: [],
+            mentionCursor: 0,
+            mentionStartPos: -1,
+            mentionedUsers: [],
+
             // Dashboard
             dashboardData: null,
             loadingDashboard: false,
@@ -91,11 +115,18 @@ export class BaderInboxMain extends Component {
 
             // Translation (Phase 3)
             translations: {},
+            translationEnabled: false,
+            translationConfig: {},
+            translatingComposer: false,
+            showLangPicker: false,
+            detectedClientLang: "",
+            composerTargetLang: "",
 
             // UI
             showContactPanel: true,
             viewMode: "list", // "list", "kanban", or "dashboard"
-            darkMode: false,
+            showChannelPopover: false,
+            showTagPopover: false,
             replyingTo: null,
             showReactionPicker: null,
 
@@ -109,6 +140,9 @@ export class BaderInboxMain extends Component {
 
             // Channels
             channels: [],
+
+            // Shared conversations (@mentions from other channels)
+            sharedConversations: [],
 
             // Channel Creation Modal
             showChannelModal: false,
@@ -127,6 +161,9 @@ export class BaderInboxMain extends Component {
             loadingKanban: false,
             convPipelines: [],  // pipeline assignments for selected conversation
             loadingPipelines: false,
+            kanbanUsers: [],         // manager: list of users with pipelines
+            kanbanFilterUserId: null, // manager: currently viewing user's kanban
+            isManager: false,
 
             // Add to Pipeline Modal
             showPipelineModal: false,
@@ -181,10 +218,13 @@ export class BaderInboxMain extends Component {
             this.busService.addChannel("bader_inbox");
             await this.loadChannels();
             await this.loadConversations();
+            this._loadSharedCount();
+            this.state.isManager = await this.user.hasGroup('bader_inbox.group_bader_inbox_manager');
             await this.loadPipelines();
             await this.loadQuickReplies();
             await this.loadTags();
             this.checkAIConfig();
+            this.loadTranslationConfig();
             this._requestNotificationPermission();
 
             // Check if we need to open a specific conversation (from PhoneWhatsAppWidget)
@@ -199,12 +239,7 @@ export class BaderInboxMain extends Component {
         onMounted(() => {
             this.busService.addEventListener("notification", this._boundBusHandler);
 
-            // F1: Restore dark mode from localStorage
-            if (localStorage.getItem("bader_inbox_dark_mode") === "true") {
-                this.state.darkMode = true;
-                const el = document.querySelector(".bader-inbox-container");
-                if (el) el.classList.add("dark-mode");
-            }
+
             // Reduced polling intervals (now mostly for fallback/sync)
             this.conversationPollInterval = setInterval(() => {
                 this._refreshConversations();
@@ -264,21 +299,49 @@ export class BaderInboxMain extends Component {
                 domain.push(["channel_id", "=", this.state.channelFilter]);
             }
 
-            this.state.conversations = await this.orm.searchRead(
-                "bader.inbox.conversation",
-                domain,
-                [
-                    "id", "computed_name", "phone", "last_message", "last_message_date",
-                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
-                    "tag_ids", "ai_active",
-                    "ai_lead_score", "ai_lead_temperature", "ai_resolution",
-                    "ai_response_count", "ai_tools_used", "ai_escalation_reason",
-                    "profile_pic_url",
-                    "utm_source", "utm_medium", "utm_campaign", "channel_origin",
-                    "tracking_code", "tracked_at"
-                ],
-                { order: "last_message_date desc", limit: 100 }
-            );
+            // Filter by tab: contacts vs groups
+            if (this.state.activeTab === "groups") {
+                domain.push(["is_group", "=", true]);
+            } else {
+                domain.push(["is_group", "!=", true]);
+            }
+
+            if (this.state.filter === "shared") {
+                // Shared filter uses a dedicated backend method
+                this.state.sharedConversations = await this.orm.call(
+                    "bader.inbox.conversation",
+                    "get_shared_conversations",
+                    [[
+                        "id", "computed_name", "phone", "last_message", "last_message_date",
+                        "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                        "tag_ids", "ai_active",
+                        "ai_lead_score", "ai_lead_temperature", "ai_resolution",
+                        "ai_response_count", "ai_tools_used", "ai_escalation_reason",
+                        "profile_pic_url",
+                        "utm_source", "utm_medium", "utm_campaign", "channel_origin",
+                        "tracking_code", "tracked_at"
+                    ]],
+                    {}
+                );
+            } else {
+
+                this.state.conversations = await this.orm.searchRead(
+                    "bader.inbox.conversation",
+                    domain,
+                    [
+                        "id", "computed_name", "phone", "last_message", "last_message_date",
+                        "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                        "tag_ids", "ai_active",
+                        "ai_lead_score", "ai_lead_temperature", "ai_resolution",
+                        "ai_response_count", "ai_tools_used", "ai_escalation_reason",
+                        "profile_pic_url", "is_group", "group_jid",
+                        "group_subject", "member_count", "is_muted", "group_pic_url", "group_description",
+                        "utm_source", "utm_medium", "utm_campaign", "channel_origin",
+                        "tracking_code", "tracked_at"
+                    ],
+                    { order: "last_message_date desc", limit: 100 }
+                );
+            }
         } catch (e) {
             console.error("Error loading conversations:", e);
         }
@@ -291,13 +354,27 @@ export class BaderInboxMain extends Component {
         // Silent refresh - NO loading indicator, NO flicker
         try {
             let domain = [];
-            if (this.state.filter === "unread") {
-                domain.push(["unread_count", ">", 0]);
-            } else if (this.state.filter === "mine") {
-                domain.push(["assigned_user_id", "=", this.user.userId]);
+            // Respect active tab filter
+            if (this.state.activeTab === "groups") {
+                domain.push(["is_group", "=", true]);
+            } else {
+                domain.push(["is_group", "!=", true]);
+            }
+            if (this.state.filter === "closed") {
+                domain.push(["state", "=", "resolved"]);
+            } else {
+                domain.push(["state", "!=", "resolved"]);
+                if (this.state.filter === "unread") {
+                    domain.push(["unread_count", ">", 0]);
+                } else if (this.state.filter === "mine") {
+                    domain.push(["assigned_user_id", "=", this.user.userId]);
+                }
             }
             if (this.state.activeTagFilter) {
                 domain.push(["tag_ids", "in", [this.state.activeTagFilter]]);
+            }
+            if (this.state.channelFilter) {
+                domain.push(["channel_id", "=", this.state.channelFilter]);
             }
 
             const freshConvs = await this.orm.searchRead(
@@ -306,10 +383,11 @@ export class BaderInboxMain extends Component {
                 [
                     "id", "computed_name", "phone", "last_message", "last_message_date",
                     "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
-                    "tag_ids", "ai_active",
+                    "tag_ids", "ai_active", "is_pinned",
                     "ai_lead_score", "ai_lead_temperature", "ai_resolution",
                     "ai_response_count", "ai_tools_used", "ai_escalation_reason",
-                    "profile_pic_url",
+                    "profile_pic_url", "is_group", "group_subject",
+                    "member_count", "is_muted", "group_pic_url", "group_description",
                     "utm_source", "utm_medium", "utm_campaign", "channel_origin",
                     "tracking_code", "tracked_at"
                 ],
@@ -383,12 +461,37 @@ export class BaderInboxMain extends Component {
         if (!conversationId) return;
         this.state.loadingMessages = true;
         try {
-            this.state.messages = await this.orm.searchRead(
+            const messages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "quoted_message_id", "quoted_text", "quoted_participant", "is_edited"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "quoted_message_id", "quoted_text", "quoted_participant", "is_edited", "author_id", "sender_name", "sender_phone"],
                 { order: "create_date asc" }
             );
+
+            // Load internal notes and merge into timeline
+            let notes = [];
+            try {
+                notes = await this.orm.searchRead(
+                    "bader.inbox.note",
+                    [["conversation_id", "=", conversationId]],
+                    ["id", "content", "author_id", "create_date", "mentioned_user_ids"],
+                    { order: "create_date asc" }
+                );
+            } catch (_) { /* notes table may not exist yet */ }
+
+            // Tag each item with _type for rendering
+            const taggedMessages = messages.map(m => ({ ...m, _type: "message" }));
+            const taggedNotes = notes.map(n => ({
+                ...n,
+                _type: "note",
+                id: `note_${n.id}`,
+                _noteId: n.id,
+            }));
+
+            // Merge and sort by create_date
+            this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) => {
+                return (a.create_date || "").localeCompare(b.create_date || "");
+            });
 
             await this.orm.call("bader.inbox.conversation", "mark_as_read", [conversationId]);
 
@@ -409,17 +512,49 @@ export class BaderInboxMain extends Component {
             const newMessages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "author_id"],
                 { order: "create_date asc" }
             );
-            // Only update if there are new messages
-            if (newMessages.length !== this.state.messages.length) {
-                this.state.messages = newMessages;
+
+            // Also load notes to keep them in timeline
+            let notes = [];
+            try {
+                notes = await this.orm.searchRead(
+                    "bader.inbox.note",
+                    [["conversation_id", "=", conversationId]],
+                    ["id", "content", "author_id", "create_date", "mentioned_user_ids"],
+                    { order: "create_date asc" }
+                );
+            } catch (_) { /* notes table may not exist */ }
+
+            // Check if message count changed (only real messages, not notes)
+            const currentMsgCount = this.state.messages.filter(m => m._type !== "note").length;
+            if (newMessages.length !== currentMsgCount) {
+                // Merge messages + notes
+                const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
+                const taggedNotes = notes.map(n => ({
+                    ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
+                }));
+                this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
+                    (a.create_date || "").localeCompare(b.create_date || "")
+                );
                 // Scroll to bottom for new messages
                 setTimeout(() => {
                     const container = this.messagesRef.el;
                     if (container) container.scrollTop = container.scrollHeight;
                 }, 100);
+            } else if (notes.length > 0) {
+                // Even if no new messages, ensure notes stay merged
+                const hasNotes = this.state.messages.some(m => m._type === "note");
+                if (!hasNotes) {
+                    const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
+                    const taggedNotes = notes.map(n => ({
+                        ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
+                    }));
+                    this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
+                        (a.create_date || "").localeCompare(b.create_date || "")
+                    );
+                }
             }
         } catch (e) {
             // Silent fail for polling
@@ -708,8 +843,35 @@ export class BaderInboxMain extends Component {
     }
 
     onSearchInput() {
-        // t-model already updates state.searchQuery  
-        // filteredConversations getter handles the filtering reactively
+        // t-model already updates state.searchQuery
+        // Local filtering is instant via filteredConversations getter
+        // Also trigger server-side search for queries >= 2 chars
+        if (this._searchDebounce) clearTimeout(this._searchDebounce);
+        const q = (this.state.searchQuery || "").trim();
+        if (q.length < 2) {
+            this.state.remoteSearchResults = [];
+            return;
+        }
+        this._searchDebounce = setTimeout(async () => {
+            try {
+                const results = await this.orm.searchRead(
+                    "bader.inbox.conversation",
+                    ['|',
+                        ["computed_name", "ilike", q],
+                        ["phone", "ilike", q]
+                    ],
+                    [
+                        "id", "computed_name", "phone", "last_message", "last_message_date",
+                        "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                        "tag_ids", "ai_active", "profile_pic_url",
+                    ],
+                    { order: "last_message_date desc", limit: 30 }
+                );
+                this.state.remoteSearchResults = results;
+            } catch (e) {
+                console.error("Server search error:", e);
+            }
+        }, 300);
     }
 
     filterByTag(tagId) {
@@ -718,19 +880,120 @@ export class BaderInboxMain extends Component {
     }
 
     get filteredConversations() {
-        let convs = this.state.conversations;
+        let convs = this.state.filter === "shared"
+            ? this.state.sharedConversations
+            : this.state.conversations;
+        // Filter by active tab (contacts vs groups)
+        if (this.state.activeTab === "groups") {
+            convs = convs.filter(c => c.is_group);
+        } else {
+            convs = convs.filter(c => !c.is_group);
+        }
         if (this.state.searchQuery) {
             const query = this.state.searchQuery.toLowerCase();
             convs = convs.filter(c =>
                 (c.computed_name || "").toLowerCase().includes(query) ||
                 (c.phone || "").includes(query)
             );
+            // Merge server-side results (deduplicated)
+            if (this.state.remoteSearchResults && this.state.remoteSearchResults.length) {
+                const localIds = new Set(convs.map(c => c.id));
+                for (const rc of this.state.remoteSearchResults) {
+                    if (!localIds.has(rc.id)) convs.push(rc);
+                }
+            }
         }
-        return convs;
+        // Pinned conversations first
+        return [...convs].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0));
     }
 
     get totalUnread() {
         return this.state.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+    }
+
+    get sharedCount() {
+        return this.state.sharedConversations.length;
+    }
+
+    get allCount() {
+        return this.state.conversations.length;
+    }
+
+    get mineCount() {
+        const uid = this.env.services.user?.userId;
+        return this.state.conversations.filter(c => c.assigned_user_id && c.assigned_user_id[0] === uid).length;
+    }
+
+    get groupUnreadCount() {
+        // Sum unread from all group conversations across all loaded convs
+        // Since groups may not be loaded yet, we track this separately
+        return this.state.conversations.filter(c => c.is_group && c.unread_count > 0)
+            .reduce((sum, c) => sum + c.unread_count, 0);
+    }
+
+    switchTab(tab) {
+        this.state.activeTab = tab;
+        this.state.searchQuery = "";
+        this.state.remoteSearchResults = [];
+        this.state.filter = "all";
+        this.loadConversations();
+    }
+
+    // Consistent color for each group participant
+    _participantColors = [
+        "#E91E63", "#9C27B0", "#2196F3", "#009688",
+        "#FF5722", "#795548", "#3F51B5", "#00BCD4",
+        "#FF9800", "#4CAF50", "#F44336", "#607D8B",
+    ];
+    _participantColorMap = {};
+
+    getParticipantColor(name) {
+        if (!name) return "#999";
+        if (!this._participantColorMap[name]) {
+            const idx = Object.keys(this._participantColorMap).length % this._participantColors.length;
+            this._participantColorMap[name] = this._participantColors[idx];
+        }
+        return this._participantColorMap[name];
+    }
+
+    // Channel colors for the conversation indicator dots
+    _channelColors = ["#10B981", "#3B82F6", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4", "#EF4444", "#F97316"];
+
+    getChannelColor(channelId) {
+        if (!channelId) return "#6B7280";
+        const id = Array.isArray(channelId) ? channelId[0] : channelId;
+        return this._channelColors[id % this._channelColors.length];
+    }
+
+    getChannelDisplayName(channelId) {
+        if (!channelId) return "";
+        if (Array.isArray(channelId)) return channelId[1] || "";
+        const ch = this.state.channels.find(c => c.id === channelId);
+        return ch ? ch.name : "";
+    }
+
+    async togglePin(convId, ev) {
+        if (ev) ev.stopPropagation();
+        const conv = this.state.conversations.find(c => c.id === convId);
+        if (!conv) return;
+        const newVal = !conv.is_pinned;
+        await this.orm.write("bader.inbox.conversation", [convId], { is_pinned: newVal });
+        conv.is_pinned = newVal;
+    }
+
+    async _loadSharedCount() {
+        try {
+            this.state.sharedConversations = await this.orm.call(
+                "bader.inbox.conversation",
+                "get_shared_conversations",
+                [["id", "computed_name", "phone", "last_message", "last_message_date",
+                    "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+                    "tag_ids", "profile_pic_url"]],
+                {}
+            );
+        } catch (e) {
+            // Silently fail - not critical for initial load
+        }
     }
 
     async assignConversation() {
@@ -776,8 +1039,18 @@ export class BaderInboxMain extends Component {
     // ==========================================
 
     async sendMessage() {
-        const content = (this.state.composerText || "").trim();
+        let content = (this.state.composerText || "").trim();
         if ((!content && !this.state.attachment) || !this.state.selectedConversation || this.state.sendingMessage) return;
+
+        // Resolve template variables ({nombre}, {telefono}, etc.) before sending
+        if (content) {
+            content = await this._resolveTemplateVars(content);
+        }
+
+        // Check if this is an @mention internal note
+        if (this.state.mentionedUsers.length > 0 && !this.state.attachment) {
+            return this._sendMentionNote(content);
+        }
 
         // F26: Rate limiting — max 10 messages per minute
         if (!this._msgTimestamps) this._msgTimestamps = [];
@@ -823,6 +1096,40 @@ export class BaderInboxMain extends Component {
         } catch (e) {
             console.error(e);
             this.notification.add(_t("Erro ao enviar mensagem"), { type: "danger" });
+        }
+        this.state.sendingMessage = false;
+    }
+
+    async _sendMentionNote(content) {
+        this.state.sendingMessage = true;
+        try {
+            const mentionIds = this.state.mentionedUsers.map(u => u.id);
+            const result = await this.orm.call(
+                "bader.inbox.note",
+                "create_mention_note",
+                [],
+                {
+                    conversation_id: this.state.selectedConversation.id,
+                    content: content,
+                    mentioned_user_ids: mentionIds,
+                }
+            );
+            if (result && !result.error) {
+                this.state.composerText = "";
+                this.state.mentionedUsers = [];
+                const ta = this.composerRef.el;
+                if (ta) ta.style.height = "auto";
+                // Reload messages to show the note inline
+                await this.loadMessages(this.state.selectedConversation.id);
+                const mentionNames = result.mentioned_user_ids.map(u => u[1]).join(", ");
+                this.notification.add(
+                    _t("📝 Nota interna enviada. %s notificado(s).", mentionNames),
+                    { type: "success" }
+                );
+            }
+        } catch (e) {
+            console.error("Error sending mention note:", e);
+            this.notification.add(_t("Erro ao enviar nota interna"), { type: "danger" });
         }
         this.state.sendingMessage = false;
     }
@@ -890,6 +1197,59 @@ export class BaderInboxMain extends Component {
     }
 
     onComposerKeydown(event) {
+        // @Mention dropdown navigation
+        if (this.state.showMentionDropdown) {
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                this.state.mentionCursor = Math.min(
+                    this.state.mentionCursor + 1,
+                    this.state.mentionUsers.length - 1
+                );
+                return;
+            }
+            if (event.key === "ArrowUp") {
+                event.preventDefault();
+                this.state.mentionCursor = Math.max(this.state.mentionCursor - 1, 0);
+                return;
+            }
+            if (event.key === "Enter" && this.state.mentionUsers.length > 0) {
+                event.preventDefault();
+                this.selectMentionUser(this.state.mentionUsers[this.state.mentionCursor]);
+                return;
+            }
+            if (event.key === "Escape") {
+                this.state.showMentionDropdown = false;
+                return;
+            }
+            if (event.key === "Tab" && this.state.mentionUsers.length > 0) {
+                event.preventDefault();
+                this.selectMentionUser(this.state.mentionUsers[this.state.mentionCursor]);
+                return;
+            }
+        }
+        // Variable Picker navigation
+        if (this.state.showVarPicker) {
+            const vars = this._filteredVarOptions();
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                this.state.varIndex = Math.min(this.state.varIndex + 1, vars.length - 1);
+                return;
+            }
+            if (event.key === "ArrowUp") {
+                event.preventDefault();
+                this.state.varIndex = Math.max(this.state.varIndex - 1, 0);
+                return;
+            }
+            if ((event.key === "Enter" || event.key === "Tab") && vars.length > 0) {
+                event.preventDefault();
+                this._insertVar(vars[this.state.varIndex]);
+                return;
+            }
+            if (event.key === "Escape" || event.key === "}") {
+                this.state.showVarPicker = false;
+                return;
+            }
+        }
         // Quick Reply navigation
         if (this.state.showQuickReplies) {
             const filtered = this.filteredQuickReplies();
@@ -926,8 +1286,33 @@ export class BaderInboxMain extends Component {
         el.style.height = "auto";
         el.style.height = Math.min(el.scrollHeight, 160) + "px";
 
-        // Detect / at start of line for quick replies
         const text = el.value;
+        const cursorPos = el.selectionStart;
+
+        // Detect @ for mentions
+        const textBeforeCursor = text.substring(0, cursorPos);
+        const atMatch = textBeforeCursor.match(/@(\w*)$/);
+        if (atMatch) {
+            this.state.mentionStartPos = cursorPos - atMatch[0].length;
+            this.state.mentionQuery = atMatch[1];
+            this.state.mentionCursor = 0;
+            this._searchMentionUsersDebounced(atMatch[1]);
+        } else {
+            this.state.showMentionDropdown = false;
+        }
+
+        // Detect { for variable picker
+        const braceMatch = textBeforeCursor.match(/\{([a-z]*)$/);
+        if (braceMatch) {
+            this.state.showVarPicker = true;
+            this.state.varFilter = braceMatch[1].toLowerCase();
+            this.state.varIndex = 0;
+            this.state.varStartPos = cursorPos - braceMatch[0].length;
+        } else {
+            this.state.showVarPicker = false;
+        }
+
+        // Detect / at start of line for quick replies
         if (text === "/" || text.startsWith("/")) {
             this.state.showQuickReplies = true;
             this.state.quickReplyFilter = text.slice(1).toLowerCase();
@@ -935,6 +1320,58 @@ export class BaderInboxMain extends Component {
         } else {
             this.state.showQuickReplies = false;
         }
+    }
+
+    _searchMentionUsersDebounced(query) {
+        if (this._mentionTimeout) clearTimeout(this._mentionTimeout);
+        this._mentionTimeout = setTimeout(() => this._searchMentionUsers(query), 200);
+    }
+
+    async _searchMentionUsers(query) {
+        try {
+            const users = await this.orm.call(
+                "bader.inbox.conversation",
+                "search_users",
+                [],
+                { query: query, limit: 8 }
+            );
+            // Filter out already-mentioned users
+            const alreadyIds = this.state.mentionedUsers.map(u => u.id);
+            this.state.mentionUsers = users.filter(u => !alreadyIds.includes(u.id));
+            this.state.showMentionDropdown = this.state.mentionUsers.length > 0;
+            this.state.mentionCursor = 0;
+        } catch (e) {
+            console.error("Error searching mention users:", e);
+        }
+    }
+
+    selectMentionUser(user) {
+        const ta = this.composerRef.el;
+        if (!ta) return;
+
+        const text = ta.value;
+        const before = text.substring(0, this.state.mentionStartPos);
+        const after = text.substring(ta.selectionStart);
+        const mentionText = `@${user.name} `;
+
+        this.state.composerText = before + mentionText + after;
+        this.state.showMentionDropdown = false;
+
+        // Track mentioned user
+        if (!this.state.mentionedUsers.find(u => u.id === user.id)) {
+            this.state.mentionedUsers = [...this.state.mentionedUsers, { id: user.id, name: user.name }];
+        }
+
+        // Set cursor position after mention
+        const newPos = before.length + mentionText.length;
+        setTimeout(() => {
+            ta.focus();
+            ta.setSelectionRange(newPos, newPos);
+        }, 10);
+    }
+
+    removeMentionUser(userId) {
+        this.state.mentionedUsers = this.state.mentionedUsers.filter(u => u.id !== userId);
     }
 
     // ──── QUICK REPLIES ────
@@ -961,17 +1398,148 @@ export class BaderInboxMain extends Component {
         );
     }
 
-    selectQuickReply(template) {
-        this.state.composerText = template.content;
+    async selectQuickReply(template) {
         this.state.showQuickReplies = false;
         this.state.quickReplyFilter = "";
         // Increment use counter
         this.orm.call("bader.inbox.template", "write", [[template.id], { use_count: (template.use_count || 0) + 1 }]).catch(() => { });
+
+        // Resolve all template variables (including async ones)
+        const resolved = await this._resolveTemplateVars(template.content);
+        this.state.composerText = resolved;
+
         // Focus composer
         setTimeout(() => {
             const ta = this.composerRef.el;
             if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
         }, 50);
+    }
+
+    /**
+     * Replace template variables with real data from conversation context.
+     * Supported: {nombre}, {telefono}, {agente}, {empresa}, {crm}, {presupuesto}
+     * {crm} and {presupuesto} fetch the most recent record for the partner.
+     */
+    async _resolveTemplateVars(text) {
+        const conv = this.state.selectedConversation;
+        if (!conv) return text;
+
+        const nombre = conv.computed_name || conv.phone || "";
+        const telefono = conv.phone || "";
+        const agente = this.user?.name || "";
+
+        // Async fetch: CRM + Presupuesto in parallel
+        const needsCrm = text.includes("{crm}");
+        const needsPresupuesto = text.includes("{presupuesto}");
+
+        const [crm, presupuesto] = await Promise.all([
+            needsCrm ? this._resolvePartnerCRM() : Promise.resolve(null),
+            needsPresupuesto ? this._resolvePresupuesto() : Promise.resolve(null),
+        ]);
+
+        const vars = {
+            "{nombre}": `*${nombre}*`,
+            "{telefono}": `*${telefono}*`,
+            "{agente}": `*${agente}*`,
+            "{empresa}": `*Bader*`,
+            "{crm}": `*${crm || "N/A"}*`,
+            "{presupuesto}": presupuesto || "*N/A*",
+        };
+
+        let result = text;
+        for (const [key, val] of Object.entries(vars)) {
+            result = result.replaceAll(key, val);
+        }
+        return result;
+    }
+
+    /**
+     * Fetch the most recent CRM opportunity (crm.lead) for the partner.
+     */
+    async _resolvePartnerCRM() {
+        const conv = this.state.selectedConversation;
+        if (!conv?.partner_id) return null;
+        try {
+            const partnerId = Array.isArray(conv.partner_id) ? conv.partner_id[0] : conv.partner_id;
+            const leads = await this.orm.searchRead(
+                "crm.lead",
+                [["partner_id", "=", partnerId]],
+                ["name"],
+                { order: "create_date desc", limit: 1 }
+            );
+            return leads.length > 0 ? leads[0].name : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Fetch the most recent sale.order for the partner.
+     * Returns "SO79417 - https://domain/my/orders/123?access_token=xxx"
+     * so the client gets a clickable link to view the quotation in the portal.
+     */
+    async _resolvePresupuesto() {
+        const conv = this.state.selectedConversation;
+        if (!conv?.partner_id) return null;
+        try {
+            const partnerId = Array.isArray(conv.partner_id) ? conv.partner_id[0] : conv.partner_id;
+            const orders = await this.orm.searchRead(
+                "sale.order",
+                [["partner_id", "=", partnerId]],
+                ["name", "access_token", "id"],
+                { order: "create_date desc", limit: 1 }
+            );
+            if (orders.length === 0) return null;
+
+            const order = orders[0];
+            const host = window.location.host;
+            const token = order.access_token || "";
+            const shortUrl = token
+                ? `${host}/my/orders/${order.id}?access_token=${token}`
+                : `${host}/my/orders/${order.id}`;
+            return `*${order.name}*\n📄 ${shortUrl}`;
+        } catch {
+            return null;
+        }
+    }
+
+    // ──── VARIABLE PICKER ────
+    _allVarOptions() {
+        return [
+            { key: "nombre", label: "{nombre}", desc: "Nombre del contacto", icon: "fa-user" },
+            { key: "telefono", label: "{telefono}", desc: "Teléfono del cliente", icon: "fa-phone" },
+            { key: "agente", label: "{agente}", desc: "Agente logado (tú)", icon: "fa-headset" },
+            { key: "empresa", label: "{empresa}", desc: "Nombre de la empresa", icon: "fa-building" },
+            { key: "crm", label: "{crm}", desc: "Nº CRM más reciente", icon: "fa-briefcase" },
+            { key: "presupuesto", label: "{presupuesto}", desc: "Nº presupuesto más reciente", icon: "fa-file-text-o" },
+        ];
+    }
+
+    _filteredVarOptions() {
+        const q = this.state.varFilter;
+        if (!q) return this._allVarOptions();
+        return this._allVarOptions().filter(v => v.key.includes(q));
+    }
+
+    _insertVar(varOption) {
+        const ta = this.composerRef.el;
+        if (!ta) return;
+        const text = ta.value;
+        const startPos = this.state.varStartPos;
+        const cursorPos = ta.selectionStart;
+        // Replace from { to current cursor with the full variable
+        const before = text.substring(0, startPos);
+        const after = text.substring(cursorPos);
+        const newText = before + varOption.label + after;
+        this.state.composerText = newText;
+        this.state.showVarPicker = false;
+        // Set cursor after the inserted variable
+        const newCursorPos = startPos + varOption.label.length;
+        setTimeout(() => {
+            ta.focus();
+            ta.selectionStart = newCursorPos;
+            ta.selectionEnd = newCursorPos;
+        }, 30);
     }
 
     // ──── EMOJI PICKER ────
@@ -1039,14 +1607,27 @@ export class BaderInboxMain extends Component {
         } catch (e) { }
     }
 
-    // ──── F1: DARK MODE TOGGLE ────
-    toggleDarkMode() {
-        this.state.darkMode = !this.state.darkMode;
-        const el = document.querySelector(".bader-inbox-container");
-        if (el) {
-            el.classList.toggle("dark-mode", this.state.darkMode);
-        }
-        localStorage.setItem("bader_inbox_dark_mode", this.state.darkMode.toString());
+    // ──── POPOVER TOGGLES ────
+    toggleChannelPopover() {
+        this.state.showChannelPopover = !this.state.showChannelPopover;
+        this.state.showTagPopover = false;
+    }
+
+    toggleTagPopover() {
+        this.state.showTagPopover = !this.state.showTagPopover;
+        this.state.showChannelPopover = false;
+    }
+
+    selectChannelFromPopover(channelId) {
+        this.state.channelFilter = channelId;
+        this.state.showChannelPopover = false;
+        this.loadConversations();
+    }
+
+    selectTagFromPopover(tagId) {
+        this.state.activeTagFilter = tagId === this.state.activeTagFilter ? null : tagId;
+        this.state.showTagPopover = false;
+        this.loadConversations();
     }
 
     // ──── F4: READ/UNREAD TOGGLE ────
@@ -1095,10 +1676,14 @@ export class BaderInboxMain extends Component {
         }
     }
 
-    // ──── DASHBOARD VIEW MODE ────
     setViewMode(mode) {
         this.state.viewMode = mode;
-        if (mode === "dashboard" && !this.state.dashboardData) {
+        if (mode === "kanban") {
+            if (this.state.pipelines.length && !this.state.selectedPipelineId) {
+                this.state.selectedPipelineId = this.state.pipelines[0].id;
+            }
+            this.loadKanbanData();
+        } else if (mode === "dashboard") {
             this.loadDashboardData();
         }
     }
@@ -1113,10 +1698,10 @@ export class BaderInboxMain extends Component {
             const dateStr = sevenDaysAgo.toISOString().split("T")[0];
 
             // Fetch conversations
-            const convs = await this.orm.searchRead("bader.inbox.conversation", [], ["id", "state", "assigned_user", "create_date", "last_message_date"]);
+            const convs = await this.orm.searchRead("bader.inbox.conversation", [], ["id", "state", "assigned_user_id", "create_date", "last_message_date"]);
 
             // Fetch messages from last 7 days
-            const msgs = await this.orm.searchRead("bader.inbox.message", [["create_date", ">=", dateStr]], ["direction", "create_date", "author_id", "conversation_id", "status"]);
+            const msgs = await this.orm.searchRead("bader.inbox.message", [["create_date", ">=", dateStr]], ["direction", "create_date", "author_id", "conversation_id"]);
 
             // ── KPI ──
             const openCount = convs.filter(c => c.state === "open" || c.state === "new").length;
@@ -1146,8 +1731,8 @@ export class BaderInboxMain extends Component {
                 agentMap[name].sent++;
             });
             // Count resolved per agent
-            convs.filter(c => c.state === "resolved" && c.assigned_user).forEach(c => {
-                const name = Array.isArray(c.assigned_user) ? c.assigned_user[1] : String(c.assigned_user);
+            convs.filter(c => c.state === "resolved" && c.assigned_user_id).forEach(c => {
+                const name = Array.isArray(c.assigned_user_id) ? c.assigned_user_id[1] : String(c.assigned_user_id);
                 if (agentMap[name]) agentMap[name].resolved++;
             });
             const topAgents = Object.values(agentMap).sort((a, b) => b.sent - a.sent).slice(0, 5);
@@ -1389,10 +1974,41 @@ export class BaderInboxMain extends Component {
             this._mediaRecorder.start();
             this.state.isRecording = true;
             this.state.recordingTime = 0;
+            this.state.waveformBars = new Array(28).fill(3);
             this._recordingInterval = setInterval(() => {
                 this.state.recordingTime++;
                 if (this.state.recordingTime >= 120) this.stopVoiceRecording(); // Max 2 min
             }, 1000);
+
+            // Waveform visualization with Web Audio API
+            try {
+                this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                this._analyser = this._audioCtx.createAnalyser();
+                this._analyser.fftSize = 64;
+                const source = this._audioCtx.createMediaStreamSource(stream);
+                source.connect(this._analyser);
+                this._waveformData = new Uint8Array(this._analyser.frequencyBinCount);
+
+                const updateWaveform = () => {
+                    if (!this.state.isRecording) return;
+                    this._analyser.getByteFrequencyData(this._waveformData);
+                    const bars = [];
+                    const binCount = this._waveformData.length;
+                    const barCount = 28;
+                    for (let i = 0; i < barCount; i++) {
+                        const idx = Math.floor((i / barCount) * binCount);
+                        const val = this._waveformData[idx] || 0;
+                        // Map 0-255 to 3-32 (min 3px, max 32px)
+                        bars.push(Math.max(3, Math.round((val / 255) * 32)));
+                    }
+                    this.state.waveformBars = bars;
+                    this._waveformFrame = requestAnimationFrame(updateWaveform);
+                };
+                this._waveformFrame = requestAnimationFrame(updateWaveform);
+            } catch (audioErr) {
+                // Fallback: keep basic recording if AudioContext unavailable
+                console.warn("Waveform visualization unavailable:", audioErr);
+            }
         } catch (e) {
             this.notification.add(_t("Não foi possível aceder ao microfone"), { type: "danger" });
         }
@@ -1404,6 +2020,7 @@ export class BaderInboxMain extends Component {
             this._mediaRecorder.onstop = async () => {
                 clearInterval(this._recordingInterval);
                 this.state.isRecording = false;
+                this._cleanupWaveform();
                 const blob = new Blob(this._audioChunks, { type: "audio/webm" });
                 // Convert to base64 and send
                 const reader = new FileReader();
@@ -1443,6 +2060,21 @@ export class BaderInboxMain extends Component {
         this._audioChunks = [];
         this.state.isRecording = false;
         this.state.recordingTime = 0;
+        this._cleanupWaveform();
+    }
+
+    _cleanupWaveform() {
+        if (this._waveformFrame) {
+            cancelAnimationFrame(this._waveformFrame);
+            this._waveformFrame = null;
+        }
+        if (this._audioCtx) {
+            this._audioCtx.close().catch(() => { });
+            this._audioCtx = null;
+        }
+        this._analyser = null;
+        this._waveformData = null;
+        this.state.waveformBars = [];
     }
 
     _formatRecordingTime(seconds) {
@@ -1542,6 +2174,14 @@ export class BaderInboxMain extends Component {
             }
         }
 
+        // Load group members if this is a group conversation
+        if (conv.is_group) {
+            this.loadGroupMembers(conv.id);
+        } else {
+            this.state.groupMembers = [];
+            this.state.showGroupPanel = false;
+        }
+
         await Promise.all([
             this.loadContactOpportunities(conv),
             this.loadContactSales(conv),
@@ -1551,6 +2191,137 @@ export class BaderInboxMain extends Component {
         const idx = this.state.conversations.findIndex(c => c.id === conv.id);
         if (idx >= 0) {
             this.state.conversations[idx].unread_count = 0;
+        }
+    }
+    // ──── GROUP FEATURES ────
+    async loadGroupMembers(conversationId) {
+        try {
+            const members = await this.orm.searchRead(
+                "bader.inbox.group.member",
+                [["conversation_id", "=", conversationId]],
+                ["id", "phone", "name", "display_name", "is_admin", "is_superadmin", "partner_id"],
+                { order: "is_superadmin desc, is_admin desc, name" }
+            );
+            this.state.groupMembers = members;
+        } catch (e) {
+            console.debug("Failed to load group members:", e);
+            this.state.groupMembers = [];
+        }
+    }
+
+    async syncGroupInfo() {
+        const conv = this.state.selectedConversation;
+        if (!conv || !conv.is_group) return;
+        try {
+            this.notification.add("Sincronizando grupo...", { type: "info" });
+            const result = await this.orm.call(
+                "bader.inbox.conversation",
+                "action_sync_group_info",
+                [conv.id]
+            );
+            if (result && result.success) {
+                this.notification.add(`Grupo sincronizado! ${result.members || 0} membros`, { type: "success" });
+                // Refresh conversation data
+                const freshConvs = await this.orm.searchRead(
+                    "bader.inbox.conversation",
+                    [["id", "=", conv.id]],
+                    ["group_subject", "group_description", "group_pic_url", "member_count", "is_muted", "computed_name", "contact_name"],
+                    { limit: 1 }
+                );
+                if (freshConvs.length) {
+                    Object.assign(conv, freshConvs[0]);
+                    this.state.selectedConversation = { ...conv };
+                    const idx = this.state.conversations.findIndex(c => c.id === conv.id);
+                    if (idx >= 0) Object.assign(this.state.conversations[idx], freshConvs[0]);
+                }
+                await this.loadGroupMembers(conv.id);
+            } else {
+                this.notification.add(result?.error || "Error al sincronizar", { type: "warning" });
+            }
+        } catch (e) {
+            console.error("Group sync failed:", e);
+            this.notification.add("Error al sincronizar grupo", { type: "danger" });
+        }
+    }
+
+    async toggleMute() {
+        const conv = this.state.selectedConversation;
+        if (!conv || !conv.is_group) return;
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.conversation",
+                "action_toggle_mute",
+                [conv.id]
+            );
+            conv.is_muted = result.muted;
+            this.state.selectedConversation = { ...conv };
+            const idx = this.state.conversations.findIndex(c => c.id === conv.id);
+            if (idx >= 0) this.state.conversations[idx].is_muted = result.muted;
+            this.notification.add(result.muted ? "Grupo silenciado 🔇" : "Notificaciones activadas 🔔", { type: "info" });
+        } catch (e) {
+            console.error("Toggle mute failed:", e);
+        }
+    }
+
+    toggleGroupPanel() {
+        this.state.showGroupPanel = !this.state.showGroupPanel;
+    }
+
+    get filteredGroupMembers() {
+        const q = (this.state.groupMemberFilter || "").toLowerCase();
+        if (!q) return this.state.groupMembers;
+        return this.state.groupMembers.filter(m =>
+            (m.display_name || "").toLowerCase().includes(q) ||
+            (m.phone || "").includes(q)
+        );
+    }
+
+    async searchGroupMessages() {
+        const q = this.state.groupSearchQuery;
+        const conv = this.state.selectedConversation;
+        if (!q || q.length < 2 || !conv) return;
+        try {
+            const domain = [
+                ["conversation_id", "=", conv.id],
+                ["content", "ilike", q],
+            ];
+            if (this.state.participantFilter) {
+                domain.push(["sender_phone", "=", this.state.participantFilter]);
+            }
+            this.state.groupSearchResults = await this.orm.searchRead(
+                "bader.inbox.message",
+                domain,
+                ["id", "content", "sender_name", "sender_phone", "create_date", "direction"],
+                { order: "create_date desc", limit: 50 }
+            );
+        } catch (e) {
+            console.error("Group search failed:", e);
+            this.state.groupSearchResults = [];
+        }
+    }
+
+    async openMemberConversation(member) {
+        if (!member.phone) return;
+        const conv = this.state.selectedConversation;
+        if (!conv) return;
+        // Find or open the individual conversation with this member
+        const convs = await this.orm.searchRead(
+            "bader.inbox.conversation",
+            [
+                ["phone", "=", member.phone],
+                ["is_group", "!=", true],
+                ["channel_id", "=", conv.channel_id[0]],
+            ],
+            ["id", "computed_name", "phone", "last_message", "last_message_date",
+             "unread_count", "state", "assigned_user_id", "partner_id", "channel_id",
+             "tag_ids", "profile_pic_url", "is_group"],
+            { limit: 1 }
+        );
+        if (convs.length) {
+            this.state.activeTab = "contacts";
+            await this.selectConversation(convs[0]);
+        } else {
+            this.notification.add(`No hay conversación individual con ${member.display_name || member.phone}`, { type: "info" });
         }
     }
 
@@ -1671,21 +2442,7 @@ export class BaderInboxMain extends Component {
         this.state.showContactPanel = !this.state.showContactPanel;
     }
 
-    // ==========================================
-    // VIEW MODE TOGGLE
-    // ==========================================
-
-    setViewMode(mode) {
-        this.state.viewMode = mode;
-        if (mode === "kanban") {
-            if (this.state.pipelines.length && !this.state.selectedPipelineId) {
-                this.state.selectedPipelineId = this.state.pipelines[0].id;
-            }
-            this.loadKanbanData();
-        } else if (mode === "dashboard") {
-            this.loadDashboardData();
-        }
-    }
+    // setViewMode is defined earlier with full kanban+dashboard support
 
     // ==========================================
     // PIPELINE / KANBAN
@@ -1693,12 +2450,24 @@ export class BaderInboxMain extends Component {
 
     async loadPipelines() {
         try {
-            this.state.pipelines = await this.orm.searchRead(
+            // Get user's own pipeline (auto-created if needed)
+            const targetUserId = this.state.kanbanFilterUserId || null;
+            const pipeline = await this.orm.call(
                 "bader.inbox.pipeline",
-                [["active", "=", true]],
-                ["id", "name", "icon", "color"],
-                { order: "sequence, name" }
+                "get_or_create_user_pipeline",
+                [targetUserId]
             );
+            this.state.pipelines = [pipeline];
+            this.state.selectedPipelineId = pipeline.id;
+
+            // If manager, also load the user list for the filter
+            if (this.state.isManager && !this.state.kanbanUsers.length) {
+                this.state.kanbanUsers = await this.orm.call(
+                    "bader.inbox.pipeline",
+                    "get_kanban_users",
+                    []
+                );
+            }
         } catch (e) {
             console.error("Error loading pipelines:", e);
         }
@@ -1712,6 +2481,15 @@ export class BaderInboxMain extends Component {
     onPipelineSelectChange(ev) {
         const val = parseInt(ev.target.value, 10);
         if (val) this.selectPipeline(val);
+    }
+
+    async onKanbanUserFilterChange(ev) {
+        const val = parseInt(ev.target.value, 10);
+        this.state.kanbanFilterUserId = val || null;
+        this.state.pipelines = [];
+        this.state.selectedPipelineId = null;
+        await this.loadPipelines();
+        await this.loadKanbanData();
     }
 
     onPipelineModalChange(ev) {
@@ -2385,26 +3163,91 @@ export class BaderInboxMain extends Component {
 
     formatTime(dateStr) {
         if (!dateStr) return "";
-        // Deserialize UTC string to Luxon DateTime (in local/system zone)
         const date = deserializeDateTime(dateStr);
         const now = DateTime.local();
-        // Calculate difference in days (ignoring time)
         const diff = Math.floor(now.diff(date, 'days').days);
 
         if (date.hasSame(now, 'day')) {
             return date.toFormat("HH:mm");
         } else if (diff < 2 && date.hasSame(now.minus({ days: 1 }), 'day')) {
-            return "Ontem";
+            return "Ayer";
         } else if (diff < 7) {
-            return date.toFormat("ccc"); // Short weekday
+            return date.toFormat("ccc");
         } else {
             return date.toFormat("dd/MM");
         }
     }
 
+    getDateLabel(dateStr) {
+        if (!dateStr) return "";
+        const date = deserializeDateTime(dateStr);
+        const now = DateTime.local();
+
+        if (date.hasSame(now, 'day')) {
+            return "Hoy";
+        } else if (date.hasSame(now.minus({ days: 1 }), 'day')) {
+            return "Ayer";
+        } else if (date.year === now.year) {
+            // Same year: "Lun 24 Feb"
+            return date.toFormat("ccc dd LLL");
+        } else {
+            // Different year: "24/02/2025"
+            return date.toFormat("dd/MM/yyyy");
+        }
+    }
+
+    shouldShowDateSeparator(msgIndex) {
+        const msgs = this.state.messages;
+        if (msgIndex === 0) return true;
+        const curr = msgs[msgIndex];
+        const prev = msgs[msgIndex - 1];
+        if (!curr || !prev || !curr.create_date || !prev.create_date) return false;
+        const currDate = deserializeDateTime(curr.create_date);
+        const prevDate = deserializeDateTime(prev.create_date);
+        return !currDate.hasSame(prevDate, 'day');
+    }
+
     getInitials(name) {
         if (!name) return "?";
         return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
+    }
+
+    getAgentName(msg) {
+        if (msg.direction !== "out") return "";
+        if (msg.author_id && msg.author_id[1]) {
+            // Odoo user — return first name only
+            return msg.author_id[1].split(" ")[0];
+        }
+        // Mobile / webhook — show channel name
+        const conv = this.state.selectedConversation;
+        if (conv && conv.channel_id) {
+            const chName = typeof conv.channel_id === "object"
+                ? (conv.channel_id[1] || "Mobile") : "Mobile";
+            return "📱 " + chName;
+        }
+        return "📱 Mobile";
+    }
+
+    getAgentShortName(msg) {
+        if (msg.direction !== "out") return "";
+        if (msg.author_id && msg.author_id[1]) {
+            return msg.author_id[1].split(" ")[0];
+        }
+        return "📱";
+    }
+
+    shouldShowAgentLabel(msgIndex) {
+        const msgs = this.state.messages;
+        const msg = msgs[msgIndex];
+        if (!msg || msg.direction !== "out" || msg._type === "note") return false;
+        // Always show on first outgoing msg
+        if (msgIndex === 0) return true;
+        const prev = msgs[msgIndex - 1];
+        if (!prev || prev.direction !== "out" || prev._type === "note") return true;
+        // Same agent? Skip label
+        const currAuthor = msg.author_id ? msg.author_id[0] : null;
+        const prevAuthor = prev.author_id ? prev.author_id[0] : null;
+        return currAuthor !== prevAuthor;
     }
 
     getAvatarColor(id) {
@@ -2413,11 +3256,95 @@ export class BaderInboxMain extends Component {
 
     getMediaUrl(msg) {
         // Always use Odoo media endpoint for media messages
-        const mediaTypes = ["image", "audio", "video", "document"];
+        const mediaTypes = ["image", "audio", "video", "document", "sticker"];
         if (mediaTypes.includes(msg.message_type)) {
             return `/bader-inbox/media/${msg.id}`;
         }
         return msg.media_url || "";
+    }
+
+    formatLastMessage(lastMessage) {
+        if (!lastMessage) return "Nueva conversación";
+        const mediaIcons = {
+            image: "📷 Imagen",
+            audio: "🎵 Audio",
+            video: "📹 Video",
+            document: "📄 Documento",
+            sticker: "🎭 Sticker",
+            location: "📍 Ubicación",
+            contact: "👤 Contacto",
+            reaction: "💬 Reacción",
+        };
+        return mediaIcons[lastMessage] || lastMessage;
+    }
+
+    onImageError(ev, msg) {
+        const img = ev.target;
+        // Retry once with cache busting
+        if (!img.dataset.retried) {
+            img.dataset.retried = "1";
+            img.src = `/bader-inbox/media/${msg.id}?t=${Date.now()}`;
+            return;
+        }
+        // Show placeholder icon instead of broken image
+        const container = img.parentNode;
+        img.style.display = "none";
+        const placeholder = document.createElement("div");
+        placeholder.className = "image-placeholder";
+        placeholder.innerHTML = '<i class="fa fa-image"></i><span>Imagen no disponible</span>';
+        placeholder.onclick = () => window.open(`/bader-inbox/media/${msg.id}`, "_blank");
+        container.appendChild(placeholder);
+    }
+
+    async loadLottieSticker(ev, msg) {
+        const img = ev.target;
+        const container = img.parentNode;
+        const url = this.getMediaUrl(msg);
+
+        // Hide the broken image
+        img.style.display = "none";
+
+        try {
+            // Fetch the Lottie JSON from the same endpoint
+            const resp = await fetch(url, { credentials: "same-origin" });
+            const ct = resp.headers.get("Content-Type") || "";
+            if (!ct.includes("json")) {
+                container.classList.add("sticker-fallback");
+                return;
+            }
+            const animData = await resp.json();
+
+            // Load lottie-web library if not loaded yet
+            if (!window.lottie) {
+                await new Promise((resolve, reject) => {
+                    const s = document.createElement("script");
+                    s.src = "https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js";
+                    s.onload = resolve;
+                    s.onerror = reject;
+                    document.head.appendChild(s);
+                });
+            }
+
+            // Create animation container
+            const animDiv = document.createElement("div");
+            animDiv.className = "sticker-lottie";
+            animDiv.style.width = "150px";
+            animDiv.style.height = "150px";
+            animDiv.style.cursor = "pointer";
+            container.appendChild(animDiv);
+
+            // Play the Lottie animation
+            window.lottie.loadAnimation({
+                container: animDiv,
+                renderer: "svg",
+                loop: true,
+                autoplay: true,
+                animationData: animData,
+            });
+        } catch (e) {
+            console.warn("Lottie sticker load failed:", e);
+            container.classList.add("sticker-fallback");
+        }
     }
 
     async _onBusNotification({ detail: notifications }) {
@@ -2470,6 +3397,17 @@ export class BaderInboxMain extends Component {
                         msg.status = payload.status;
                     }
                 }
+            } else if (type === "bader_inbox_message_edited") {
+                // Message was edited — update content in-place
+                refreshConversations = true;
+                if (this.state.selectedConversation &&
+                    this.state.selectedConversation.id === payload.conversation_id) {
+                    const msg = this.state.messages.find(m => m.id === payload.message_id);
+                    if (msg) {
+                        msg.content = payload.content;
+                        msg.is_edited = true;
+                    }
+                }
             }
         }
 
@@ -2485,7 +3423,7 @@ export class BaderInboxMain extends Component {
     async loadTags() {
         try {
             this.state.allTags = await this.orm.searchRead(
-                "bader.inbox.tag", [], ["id", "name", "color"], { order: "name" }
+                "bader.inbox.tag", [], ["id", "name", "color", "sync_to_contact"], { order: "name" }
             );
         } catch (e) {
             console.error("Error loading tags:", e);
@@ -2531,7 +3469,7 @@ export class BaderInboxMain extends Component {
             return;
         }
         try {
-            const newTagId = await this.orm.create("bader.inbox.tag", [{ name, color: this.state.newTagColor }]);
+            const newTagId = await this.orm.create("bader.inbox.tag", [{ name, color: this.state.newTagColor, sync_to_contact: true }]);
             await this.loadTags();
             this.state.newTagName = "";
             // Auto-assign to current conversation
@@ -2603,7 +3541,7 @@ export class BaderInboxMain extends Component {
             this.state.notes = await this.orm.searchRead(
                 "bader.inbox.note",
                 [["conversation_id", "=", convId]],
-                ["id", "content", "author_id", "create_date"],
+                ["id", "content", "author_id", "create_date", "mentioned_user_ids"],
                 { order: "create_date desc", limit: 50 }
             );
         } catch (e) {
@@ -2647,17 +3585,7 @@ export class BaderInboxMain extends Component {
         }
     }
 
-    // ──── DASHBOARD ────
-    async loadDashboardData() {
-        this.state.loadingDashboard = true;
-        try {
-            const response = await this.orm.call("bader.inbox.conversation", "get_dashboard_stats", []);
-            this.state.dashboardData = response;
-        } catch (e) {
-            console.error("Error loading dashboard:", e);
-        }
-        this.state.loadingDashboard = false;
-    }
+    // loadDashboardData is defined earlier with full analytics builder
 
     // ──── SCHEDULED MESSAGES ────
     toggleScheduleModal() {
@@ -2757,6 +3685,20 @@ export class BaderInboxMain extends Component {
     }
 
     // ──── TRANSLATION (Phase 3) ────
+    async loadTranslationConfig() {
+        try {
+            const config = await this.orm.call(
+                "bader.inbox.translation.settings", "get_translation_config", []
+            );
+            this.state.translationEnabled = config.enabled;
+            this.state.translationConfig = config;
+        } catch (e) {
+            console.error("Error loading translation config:", e);
+            this.state.translationEnabled = false;
+        }
+    }
+
+    // Translate incoming message → always to Spanish (user's reading language)
     async translateMessage(msgId) {
         const key = `translating_${msgId}`;
         this.state.translations[key] = true;
@@ -2767,10 +3709,20 @@ export class BaderInboxMain extends Component {
                 [msgId, "es"]
             );
             if (result.translated) {
-                const msg = this.state.messages.find(m => m.id === msgId);
-                if (msg) {
-                    msg.translated_content = result.translated;
-                    msg.detected_language = result.language || "";
+                const msgIdx = this.state.messages.findIndex(m => m.id === msgId);
+                if (msgIdx >= 0) {
+                    // Force reactivity by creating new object
+                    this.state.messages[msgIdx] = {
+                        ...this.state.messages[msgIdx],
+                        translated_content: result.translated,
+                        detected_language: result.language || "",
+                    };
+                    this.state.messages = [...this.state.messages];
+                    // Auto-detect client language from first incoming message
+                    if (result.language && result.language !== "es" && !this.state.detectedClientLang) {
+                        this.state.detectedClientLang = result.language;
+                        this.state.composerTargetLang = result.language;
+                    }
                 }
                 this.state.translations[`show_${msgId}`] = true;
             } else if (result.error) {
@@ -2787,6 +3739,172 @@ export class BaderInboxMain extends Component {
         const key = `show_${msgId}`;
         this.state.translations[key] = !this.state.translations[key];
         this.state.translations = { ...this.state.translations };
+    }
+
+    // Language picker for composer
+    toggleLangPicker() {
+        this.state.showLangPicker = !this.state.showLangPicker;
+    }
+
+    get translationLanguages() {
+        const langs = [
+            { code: "en", name: "English", flag: "🇬🇧" },
+            { code: "pt", name: "Português", flag: "🇵🇹" },
+            { code: "fr", name: "Français", flag: "🇫🇷" },
+            { code: "it", name: "Italiano", flag: "🇮🇹" },
+            { code: "de", name: "Deutsch", flag: "🇩🇪" },
+            { code: "ar", name: "العربية", flag: "🇸🇦" },
+            { code: "zh", name: "中文", flag: "🇨🇳" },
+            { code: "he", name: "עברית", flag: "🇮🇱" },
+            { code: "es", name: "Español", flag: "🇪🇸" },
+        ];
+        // Put detected client language first if it exists
+        const detected = this.state.detectedClientLang;
+        if (detected) {
+            const idx = langs.findIndex(l => l.code === detected);
+            if (idx > 0) {
+                const [lang] = langs.splice(idx, 1);
+                lang.detected = true;
+                langs.unshift(lang);
+            }
+        }
+        return langs;
+    }
+
+    async selectComposerLang(langCode) {
+        this.state.showLangPicker = false;
+        this.state.composerTargetLang = langCode;
+        const text = (this.state.composerText || "").trim();
+        if (!text) return;
+        this.state.translatingComposer = true;
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.translation.settings", "translate_text",
+                [text, langCode]
+            );
+            if (result.translated) {
+                this.state.composerText = result.translated;
+                const langNames = { en: "English", pt: "Português", fr: "Français", it: "Italiano", de: "Deutsch", ar: "العربية", zh: "中文", he: "עברית", es: "Español" };
+                this.notification.add(
+                    `✅ Traducido a ${langNames[langCode] || langCode}`,
+                    { type: "success" }
+                );
+            } else if (result.error) {
+                this.notification.add(result.error, { type: "warning" });
+            }
+        } catch (e) {
+            console.error("Composer translation error:", e);
+            this.notification.add("Error al traducir", { type: "danger" });
+        }
+        this.state.translatingComposer = false;
+    }
+
+    // Detect client language from messages when opening a conversation
+    detectClientLanguage() {
+        const incomingMsgs = this.state.messages.filter(m => m.direction === "in" && m.detected_language);
+        if (incomingMsgs.length > 0) {
+            const lastDetected = incomingMsgs[incomingMsgs.length - 1].detected_language;
+            if (lastDetected && lastDetected !== "es") {
+                this.state.detectedClientLang = lastDetected;
+                this.state.composerTargetLang = lastDetected;
+            }
+        }
+    }
+
+    // ──── WHATSAPP TEXT FORMATTING ────
+    /**
+     * Convert WhatsApp-style formatting to HTML for display in Bader Inbox.
+     * *bold* → <b>, _italic_ → <i>, ~strike~ → <s>, URLs → <a>
+     */
+    formatWhatsAppText(msg) {
+        if (!msg || !msg.content) return "";
+        let text = msg.content;
+
+        // Strip any existing HTML tags (content from WhatsApp/Evolution API 
+        // may already contain <a> tags or other HTML)
+        const stripDiv = document.createElement("div");
+        stripDiv.innerHTML = text;
+        text = stripDiv.textContent || stripDiv.innerText || text;
+
+        // HTML-escape to prevent XSS
+        const escDiv = document.createElement("div");
+        escDiv.textContent = text;
+        text = escDiv.innerHTML;
+
+        // Convert newlines to <br>
+        text = text.replace(/\n/g, "<br>");
+
+        // ── URL Linkification (single-pass to avoid double-replacement) ──
+        // Collect all URLs into placeholders first, then replace at the end
+        const urlMap = [];
+        const placeholder = (idx) => `\x00URL${idx}\x00`;
+
+        // Helper: extract a clean display label from a URL
+        const getUrlLabel = (rawUrl) => {
+            try {
+                const u = new URL(rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`);
+                const domain = u.hostname.replace(/^www\./, "");
+                // For Google redirect URLs, show the final destination
+                if (domain === "google.com" && u.pathname === "/url") {
+                    const dest = u.searchParams.get("url");
+                    if (dest) {
+                        try {
+                            const d = new URL(dest);
+                            return `🔗 ${d.hostname.replace(/^www\./, "")}`;
+                        } catch (_) { }
+                    }
+                }
+                return `🔗 ${domain}`;
+            } catch (_) {
+                return rawUrl.length > 40 ? rawUrl.substring(0, 37) + "..." : rawUrl;
+            }
+        };
+
+        // 1. Match https/http URLs
+        text = text.replace(/(https?:\/\/[^\s<]+)/g, (match) => {
+            const idx = urlMap.length;
+            // Clean trailing HTML entities that got captured
+            const clean = match.replace(/&amp;/g, "&");
+            urlMap.push({ url: clean, display: match, label: getUrlLabel(clean) });
+            return placeholder(idx);
+        });
+
+        // 2. Match bare domain URLs (domain.com/path...) — won't match inside placeholders
+        text = text.replace(/(?<![\/\w\x00])([\w.-]+\.\w{2,}\/[^\s<\x00]*)/g, (match, p1) => {
+            const idx = urlMap.length;
+            urlMap.push({ url: `https://${p1}`, display: match, label: getUrlLabel(p1) });
+            return placeholder(idx);
+        });
+
+        // WhatsApp text formatting
+        // *bold* → <b>
+        text = text.replace(/\*((?!\s)[^*]+(?<!\s))\*/g, "<b>$1</b>");
+        // _italic_ → <i>
+        text = text.replace(/\_((?!\s)[^_]+(?<!\s))\_/g, "<i>$1</i>");
+        // ~strikethrough~ → <s>
+        text = text.replace(/\~((?!\s)[^~]+(?<!\s))\~/g, "<s>$1</s>");
+        // ```monospace``` → <code>
+        text = text.replace(/```([\s\S]+?)```/g, "<code>$1</code>");
+
+        // Replace placeholders with final <a> tags
+        for (let i = 0; i < urlMap.length; i++) {
+            const u = urlMap[i];
+            const link = `<a href="${u.url}" target="_blank" rel="noopener" style="color:#25D366;text-decoration:underline">${u.label}</a>`;
+            text = text.replace(placeholder(i), link);
+        }
+
+        return markup(text);
+    }
+
+    // ──── CONTACT CARD PARSER ────
+    parseContactCard(msg) {
+        if (!msg || !msg.content || msg.message_type !== "contact") return null;
+        try {
+            return JSON.parse(msg.content);
+        } catch (e) {
+            // Fallback: treat content as display name
+            return { displayName: msg.content, phone: "" };
+        }
     }
 
     // ──── LINK PREVIEW HELPER (Phase 3) ────

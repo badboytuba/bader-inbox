@@ -2,11 +2,12 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_bader_inbox_channel_all,bader.inbox.channel.all,model_bader_inbox_channel,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_conversation_all,bader.inbox.conversation.all,model_bader_inbox_conversation,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_message_all,bader.inbox.message.all,model_bader_inbox_message,bader_inbox.group_bader_inbox_user,1,1,1,1
-access_bader_inbox_settings_all,bader.inbox.settings.all,model_bader_inbox_settings,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_settings_all,bader.inbox.settings.all,model_bader_inbox_settings,bader_inbox.group_bader_inbox_manager,1,1,1,1
+access_bader_inbox_settings_user,bader.inbox.settings.user,model_bader_inbox_settings,bader_inbox.group_bader_inbox_user,1,0,0,0
 access_bader_inbox_template_all,bader.inbox.template.all,model_bader_inbox_template,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_chatbot_all,bader.inbox.chatbot.all,model_bader_inbox_chatbot,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_tag_all,bader.inbox.tag.all,model_bader_inbox_tag,bader_inbox.group_bader_inbox_user,1,1,1,1
-access_bader_inbox_channel_user,bader.inbox.channel.user,model_bader_inbox_channel,base.group_user,1,1,1,1
+access_bader_inbox_channel_user,bader.inbox.channel.user,model_bader_inbox_channel,base.group_user,1,0,0,0
 access_bader_inbox_conversation_user,bader.inbox.conversation.user,model_bader_inbox_conversation,base.group_user,1,1,1,0
 access_bader_inbox_message_user,bader.inbox.message.user,model_bader_inbox_message,base.group_user,1,1,1,0
 access_bader_inbox_settings_user,bader.inbox.settings.user,model_bader_inbox_settings,base.group_user,1,0,0,0
@@ -24,7 +25,7 @@ access_bader_inbox_note_user,bader.inbox.note.user,model_bader_inbox_note,base.g
 access_bader_inbox_scheduled_message_all,bader.inbox.scheduled.message.all,model_bader_inbox_scheduled_message,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_scheduled_message_user,bader.inbox.scheduled.message.user,model_bader_inbox_scheduled_message,base.group_user,1,1,1,0
 access_bader_inbox_ai_assistant_all,bader.inbox.ai.assistant.all,model_bader_inbox_ai_assistant,bader_inbox.group_bader_inbox_user,1,1,1,1
-access_bader_inbox_ai_assistant_user,bader.inbox.ai.assistant.user,model_bader_inbox_ai_assistant,base.group_user,1,1,1,1
+access_bader_inbox_ai_assistant_user,bader.inbox.ai.assistant.user,model_bader_inbox_ai_assistant,base.group_user,1,0,0,0
 access_bader_inbox_audit_log_all,bader.inbox.audit.log.all,model_bader_inbox_audit_log,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_audit_log_user,bader.inbox.audit.log.user,model_bader_inbox_audit_log,base.group_user,1,0,1,0
 access_bader_inbox_campaign_all,bader.inbox.campaign.all,model_bader_inbox_campaign,bader_inbox.group_bader_inbox_user,1,1,1,1
@@ -47,3 +48,7 @@ access_bader_inbox_campaign_audience_all,bader.inbox.campaign.audience.all,model
 access_bader_inbox_campaign_audience_user,bader.inbox.campaign.audience.user,model_bader_inbox_campaign_audience,base.group_user,1,1,1,0
 access_bader_inbox_campaign_ab_variant_all,bader.inbox.campaign.ab.variant.all,model_bader_inbox_campaign_ab_variant,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_campaign_ab_variant_user,bader.inbox.campaign.ab.variant.user,model_bader_inbox_campaign_ab_variant,base.group_user,1,0,0,0
+access_bader_inbox_translation_settings_all,bader.inbox.translation.settings.all,model_bader_inbox_translation_settings,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_translation_settings_user,bader.inbox.translation.settings.user,model_bader_inbox_translation_settings,base.group_user,1,1,1,0
+access_bader_inbox_group_member_all,bader.inbox.group.member.all,model_bader_inbox_group_member,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_group_member_user,bader.inbox.group.member.user,model_bader_inbox_group_member,base.group_user,1,0,0,0

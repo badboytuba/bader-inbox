@@ -13,8 +13,10 @@ from . import settings
 from . import template
 from . import ai_assistant
 from . import audit_log
+from . import translation
 from . import campaign
 from . import campaign_execution
 from . import campaign_throttle
 from . import campaign_audience
 from . import campaign_triggers
+from . import group_member

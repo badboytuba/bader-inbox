@@ -4,11 +4,47 @@
 import logging
 import json
 import base64
+import time
 import requests as req_lib
 from odoo import http, fields
 from odoo.http import request
 
 _logger = logging.getLogger(__name__)
+
+# BUG 4 FIX: Module-level LID → phone cache for resolving LID contacts
+# Key: LID (e.g. "258363908694225@lid"), Value: phone number
+# Persisted to DB via ir.config_parameter to survive restarts
+_lid_phone_cache = {}
+_lid_cache_loaded = False
+
+
+def _load_lid_cache():
+    """Load LID→phone cache from DB on first use."""
+    global _lid_phone_cache, _lid_cache_loaded
+    if _lid_cache_loaded:
+        return
+    try:
+        params = request.env["ir.config_parameter"].sudo()
+        raw = params.get_param("bader_inbox.lid_phone_cache", "{}")
+        _lid_phone_cache = json.loads(raw) if raw else {}
+        _lid_cache_loaded = True
+    except Exception:
+        _lid_cache_loaded = True
+
+
+def _save_lid_to_db(lid, phone):
+    """Save a new LID→phone mapping to DB."""
+    _lid_phone_cache[lid] = phone
+    try:
+        params = request.env["ir.config_parameter"].sudo()
+        # Keep cache size reasonable (max 500 entries)
+        if len(_lid_phone_cache) > 500:
+            keys = list(_lid_phone_cache.keys())
+            for k in keys[:100]:
+                del _lid_phone_cache[k]
+        params.set_param("bader_inbox.lid_phone_cache", json.dumps(_lid_phone_cache))
+    except Exception as e:
+        _logger.debug(f"Failed to persist LID cache: {e}")
 
 
 def _json_ok(data=None):
@@ -52,9 +88,15 @@ class BaderInboxWebhook(http.Controller):
         """Serve stored media content for a message.
         If not stored yet, downloads on-demand from media_url or Evolution API."""
         try:
-            message = request.env["bader.inbox.message"].sudo().browse(message_id)
-            if not message.exists():
+            # H1 FIX: Access check — browse WITHOUT sudo to respect record rules
+            # The user must have access to the message's conversation via channel
+            message_check = request.env["bader.inbox.message"].search(
+                [("id", "=", message_id)], limit=1
+            )
+            if not message_check:
                 return request.not_found()
+            # Now use sudo for the actual media operations
+            message = message_check.sudo()
             
             media_types = ("image", "audio", "video", "document", "sticker")
             if message.message_type not in media_types:
@@ -80,17 +122,15 @@ class BaderInboxWebhook(http.Controller):
                         result = api.download_media(instance_name, msg_key, msg_content)
                         if result and result.get("base64"):
                             data = base64.b64decode(result["base64"])
-                            # Cache for future requests
                             try:
                                 update_vals = {"media_data": result["base64"]}
                                 if result.get("mimetype") and not message.media_mimetype:
                                     update_vals["media_mimetype"] = result["mimetype"]
                                 message.write(update_vals)
-                                _logger.info(f"Media cached via API for message {message_id}")
                             except Exception as ce:
                                 _logger.warning(f"Failed to cache API media: {ce}")
                 except Exception as e:
-                    _logger.warning(f"downloadMedia API failed for serve_media {message_id}: {e}")
+                    _logger.warning(f"downloadMedia API failed: {e}")
             
             # 3) Download from media_url (WA CDN) if not stored
             if not data and message.media_url:
@@ -98,22 +138,41 @@ class BaderInboxWebhook(http.Controller):
                     resp = req_lib.get(message.media_url, timeout=15, stream=True)
                     if resp.status_code == 200:
                         data = resp.content
-                        # Cache it in media_data for future requests
                         try:
                             message.write({"media_data": base64.b64encode(data).decode()})
-                            _logger.info(f"Media cached from URL for message {message_id}")
                         except Exception as ce:
                             _logger.warning(f"Failed to cache media: {ce}")
-                        # Update mimetype from response if available
                         ct = resp.headers.get("Content-Type")
                         if ct and not message.media_mimetype:
                             message.write({"media_mimetype": ct.split(";")[0]})
                 except Exception as e:
-                    _logger.warning(f"Media URL download failed for {message_id}: {e}")
+                    _logger.warning(f"Media URL download failed: {e}")
             
             if not data:
-                _logger.warning(f"No media data available for message {message_id}")
                 return request.not_found()
+            
+            # Detect Lottie/WAZ stickers (ZIP format) - extract Lottie JSON for frontend player
+            if message.message_type == "sticker" and data[:2] == b"PK":
+                try:
+                    import zipfile
+                    import io
+                    with zipfile.ZipFile(io.BytesIO(data), "r") as z:
+                        # Find the animation JSON file inside the WAZ
+                        json_name = None
+                        for name in z.namelist():
+                            if name.endswith(".json") and "trust_token" not in name:
+                                json_name = name
+                                break
+                        if json_name:
+                            lottie_data = z.read(json_name)
+                            return request.make_response(lottie_data, [
+                                ("Content-Type", "application/json"),
+                                ("Content-Length", str(len(lottie_data))),
+                                ("Cache-Control", "public, max-age=86400"),
+                                ("X-Sticker-Type", "lottie"),
+                            ])
+                except Exception as ze:
+                    _logger.warning(f"Failed to extract Lottie from WAZ: {ze}")
             
             mimetype = message.media_mimetype or "application/octet-stream"
             headers = [
@@ -121,8 +180,10 @@ class BaderInboxWebhook(http.Controller):
                 ("Content-Length", str(len(data))),
                 ("Cache-Control", "public, max-age=86400"),
             ]
+            # L1 FIX: Sanitize filename for Content-Disposition header
             if message.media_filename:
-                headers.append(("Content-Disposition", f'inline; filename="{message.media_filename}"'))
+                safe_name = message.media_filename.replace('"', '').replace('\n', '').replace('\r', '')[:200]
+                headers.append(("Content-Disposition", f'inline; filename="{safe_name}"'))
             
             return request.make_response(data, headers)
         except Exception as e:
@@ -138,7 +199,8 @@ class BaderInboxWebhook(http.Controller):
         try:
             # Parse raw JSON body (Evolution API sends plain JSON, not JSON-RPC)
             raw_body = request.httprequest.get_data(as_text=True)
-            _logger.info(f"Webhook raw body for channel {channel_id} (first 500 chars): {raw_body[:500]}")
+            # L3 FIX: Reduced logging — only log event type, not full body with PII
+            _logger.debug(f"Webhook body for channel {channel_id}: {len(raw_body)} bytes")
             
             try:
                 data = json.loads(raw_body) if raw_body else {}
@@ -172,51 +234,186 @@ class BaderInboxWebhook(http.Controller):
                 return self._handle_connection_update(channel, data)
             elif event == "qrcode.updated":
                 return self._handle_qrcode_update(channel, data)
+            elif event in ("groups.update", "groups.upsert"):
+                return self._handle_group_update(channel, data)
             
             _logger.info(f"Ignoring event: {event}")
             return _json_ok({"status": "ignored"})
             
         except Exception as e:
+            # M2 FIX: Don't leak internal error details to external callers
             _logger.error(f"Webhook error: {e}", exc_info=True)
-            return _json_error(str(e))
+            return _json_error("Internal error")
+    def _handle_group_update(self, channel, data):
+        """Handle groups.update / groups.upsert events.
+        
+        Updates group subject, description, picture, etc. when changed.
+        """
+        try:
+            group_data = data.get("data", {})
+            # Data can be a list or single dict
+            groups_list = group_data if isinstance(group_data, list) else [group_data]
+            
+            Conv = request.env["bader.inbox.conversation"].sudo()
+            
+            for g in groups_list:
+                if not isinstance(g, dict):
+                    continue
+                jid = g.get("id") or g.get("jid") or ""
+                if not jid or "@g.us" not in jid:
+                    continue
+                
+                conversation = Conv.search([
+                    ("group_jid", "=", jid),
+                    ("channel_id", "=", channel.id),
+                ], limit=1)
+                
+                if not conversation:
+                    continue
+                
+                vals = {}
+                if g.get("subject"):
+                    vals["group_subject"] = g["subject"]
+                    vals["contact_name"] = g["subject"]
+                if g.get("desc") or g.get("description"):
+                    vals["group_description"] = g.get("desc") or g.get("description")
+                if g.get("profilePictureUrl") or g.get("picture"):
+                    vals["group_pic_url"] = g.get("profilePictureUrl") or g.get("picture")
+                
+                if vals:
+                    conversation.write(vals)
+                    _logger.info(f"Group updated: {jid} → {vals}")
+            
+            return _json_ok({"status": "group_updated"})
+        except Exception as e:
+            _logger.error(f"Group update handler error: {e}", exc_info=True)
+            return _json_ok({"status": "error"})
 
     def _extract_phone_info(self, key):
         """Extract phone and remote_jid from message key.
         
         Evolution API often uses LID (Linked ID) as remoteJid but provides
         the real phone number in senderPn. We must check senderPn first.
+        
+        Returns: (phone, whatsapp_id, phone_source, group_info)
+        group_info is None for individual chats, or a dict with
+        {group_jid, participant_phone, participant_jid} for group messages.
         """
         remote_jid = key.get("remoteJid", "")
         sender_pn = key.get("senderPn", "")
         participant = key.get("participant", "")
         
-        # Priority: senderPn > participant > remoteJid
+        # Check if this is a group message
+        if remote_jid and remote_jid.endswith("@g.us"):
+            group_jid = remote_jid
+            group_phone = remote_jid.split("@")[0]  # numeric part as phone
+            # Extract participant (who sent the message in the group)
+            # Priority: participantPn (real phone) > senderPn > participant (may be LID)
+            participant_pn = key.get("participantPn", "")
+            participant_phone = ""
+            if participant_pn and "@s.whatsapp.net" in participant_pn:
+                participant_phone = participant_pn.split("@")[0]
+            elif sender_pn and "@s.whatsapp.net" in sender_pn:
+                participant_phone = sender_pn.split("@")[0]
+            elif participant and "@" in participant:
+                # Fallback: strip @lid suffix (this gives LID number, not real phone)
+                participant_phone = participant.split("@")[0]
+            group_info = {
+                "group_jid": group_jid,
+                "participant_phone": participant_phone,
+                "participant_jid": participant_pn or participant or sender_pn or "",
+            }
+            _logger.info(f"Group message: {group_jid}, participant: {participant_phone}")
+            return group_phone, group_jid, group_jid, group_info
+        
+        # Skip newsletters, broadcasts, status
+        skip_suffixes = ("@newsletter", "@broadcast", "@status")
+        if remote_jid and any(remote_jid.endswith(s) for s in skip_suffixes):
+            _logger.info(f"Skipping non-personal JID: {remote_jid}")
+            return None, None, None, None
+        
+        # Individual chat: Priority senderPn > participant > remoteJid
         phone_source = ""
         if sender_pn and "@s.whatsapp.net" in sender_pn:
             phone_source = sender_pn
+            # Persist LID → phone mapping to DB (survives restarts)
+            if remote_jid and remote_jid.endswith("@lid"):
+                phone = sender_pn.split("@")[0]
+                _save_lid_to_db(remote_jid, phone)
+                _logger.info(f"LID cache saved: {remote_jid} → {phone}")
         elif participant and "@s.whatsapp.net" in participant:
             phone_source = participant
         elif remote_jid and "@s.whatsapp.net" in remote_jid:
             phone_source = remote_jid
         else:
-            # No valid @s.whatsapp.net source found
-            # Skip groups, newsletters, broadcasts, status
-            skip_suffixes = ("@g.us", "@newsletter", "@broadcast", "@status")
-            if remote_jid and any(remote_jid.endswith(s) for s in skip_suffixes):
-                _logger.info(f"Skipping non-personal JID: {remote_jid}")
-                return None, None, None
-            # LID without senderPn — can't resolve phone
+            # LID without senderPn — try resolving from cache, then API
             if remote_jid and remote_jid.endswith("@lid"):
-                _logger.warning(f"LID without senderPn, cannot resolve: {remote_jid}")
-                return None, None, None
-            _logger.warning(f"Unknown JID format: {remote_jid}")
-            return None, None, None
+                _load_lid_cache()
+                cached_phone = _lid_phone_cache.get(remote_jid)
+                if cached_phone:
+                    _logger.info(f"LID resolved from cache: {remote_jid} → {cached_phone}")
+                    phone_source = f"{cached_phone}@s.whatsapp.net"
+                else:
+                    # Fallback: try Evolution API findContacts to resolve the LID
+                    resolved_phone = self._resolve_lid_via_api(remote_jid)
+                    if resolved_phone:
+                        _save_lid_to_db(remote_jid, resolved_phone)
+                        _logger.info(f"LID resolved via API: {remote_jid} → {resolved_phone}")
+                        phone_source = f"{resolved_phone}@s.whatsapp.net"
+                    else:
+                        _logger.warning(f"LID unresolvable: {remote_jid}")
+                        return None, None, None, None
+            else:
+                _logger.warning(f"Unknown JID format: {remote_jid}")
+                return None, None, None, None
         
         # Strip any @ suffix to get just the number
         phone = phone_source.split("@")[0] if "@" in phone_source else phone_source
         whatsapp_id = phone_source
         
-        return phone, whatsapp_id, phone_source
+        return phone, whatsapp_id, phone_source, None
+
+    def _resolve_lid_via_api(self, lid):
+        """Try to resolve a LID to a phone number via Evolution API findContacts.
+        
+        Queries all connected channels' instances to find the contact.
+        Returns the phone number string or None.
+        """
+        try:
+            channels = request.env["bader.inbox.channel"].sudo().search([
+                ("state", "=", "connected"),
+                ("evolution_instance_name", "!=", False),
+            ], limit=5)
+            
+            api = request.env["bader.inbox.evolution.api"].sudo()
+            
+            for channel in channels:
+                try:
+                    result = api._request(
+                        "POST",
+                        f"/chat/findContacts/{channel.evolution_instance_name}",
+                        {"where": {"id": lid}}
+                    )
+                    contacts = result if isinstance(result, list) else [result] if isinstance(result, dict) else []
+                    for contact in contacts:
+                        if not isinstance(contact, dict):
+                            continue
+                        # The contact may have a 'id' with @s.whatsapp.net format
+                        wid = contact.get("wid") or contact.get("id") or ""
+                        if "@s.whatsapp.net" in str(wid):
+                            phone = str(wid).split("@")[0]
+                            if phone.isdigit() and len(phone) >= 8:
+                                return phone
+                        # Also check 'number' field
+                        number = contact.get("number") or contact.get("phone") or ""
+                        if str(number).isdigit() and len(str(number)) >= 8:
+                            return str(number)
+                except Exception as e:
+                    _logger.debug(f"LID API resolve attempt failed for {channel.name}: {e}")
+                    continue
+        except Exception as e:
+            _logger.debug(f"LID API resolution error: {e}")
+        return None
 
     def _process_media_download(self, channel, message, key, message_content=None):
         """Download media content for a message.
@@ -265,7 +462,8 @@ class BaderInboxWebhook(http.Controller):
         except Exception as me:
             _logger.error(f"Media download error: {me}")
 
-    def _create_message(self, conversation, direction, msg_type, content, msg_id, media_info, quote_info=None):
+    def _create_message(self, conversation, direction, msg_type, content, msg_id,
+                        media_info, quote_info=None, sender_name=None, sender_phone=None):
         """Create a new message record"""
         Message = request.env["bader.inbox.message"].sudo()
         
@@ -284,8 +482,14 @@ class BaderInboxWebhook(http.Controller):
             "whatsapp_message_id": msg_id,
             "status": "read" if direction == "in" else "sent",
         }
+        if sender_name:
+            message_vals["sender_name"] = sender_name
+        if sender_phone:
+            message_vals["sender_phone"] = sender_phone
         if media_info:
-            message_vals.update(media_info)
+            # Strip non-model fields before create
+            safe_info = {k: v for k, v in media_info.items() if k not in ("is_animated",)}
+            message_vals.update(safe_info)
         if quote_info:
             message_vals.update(quote_info)
         
@@ -349,39 +553,115 @@ class BaderInboxWebhook(http.Controller):
                 
                 _logger.warning(f"Content fallback used. Full msg_obj keys: {list(msg_obj.keys())}, messageType: {msg_type_field}")
             
-            phone, whatsapp_id, phone_source = self._extract_phone_info(key)
+            phone, whatsapp_id, phone_source, group_info = self._extract_phone_info(key)
             
             if not phone:
                 _logger.warning("No phone extracted")
                 return _json_error("No phone number")
             
+            is_group = group_info is not None
+            from_me = key.get("fromMe", False)
             Conversation = request.env["bader.inbox.conversation"].sudo()
-            conversation = Conversation.get_or_create(
-                channel_id=channel.id,
-                phone=phone,
-                whatsapp_id=whatsapp_id,
-                contact_name=push_name
-            )
+
+            # For outgoing messages (broadcasts), pushName is the sender's own name,
+            # not the recipient's. Try to resolve the real contact name via Evolution API.
+            if not from_me or is_group:
+                # Incoming message or group: use pushName directly
+                resolved_contact_name = push_name if not is_group else (push_name or "")
+            else:
+                # Outgoing message: try to fetch the recipient's WhatsApp name
+                resolved_contact_name = None
+                try:
+                    EvolutionAPI = request.env["bader.inbox.evolution.api"].sudo()
+                    instance_name = channel.evolution_instance
+                    if instance_name:
+                        resolved_contact_name = EvolutionAPI.fetch_contact_name(instance_name, phone)
+                        if resolved_contact_name:
+                            _logger.info(f"Resolved outgoing contact name via API: {phone} → {resolved_contact_name}")
+                except Exception as e:
+                    _logger.debug(f"Could not fetch contact name for {phone}: {e}")
+
+            # BUG 3 FIX: Retry on serialization failures (concurrent webhook updates)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    conversation = Conversation.get_or_create(
+                        channel_id=channel.id,
+                        phone=phone,
+                        whatsapp_id=whatsapp_id,
+                        contact_name=resolved_contact_name,
+                        is_group=is_group,
+                        group_jid=group_info.get("group_jid") if group_info else None,
+                    )
+                    break
+                except Exception as retry_err:
+                    err_str = str(retry_err).lower()
+                    if "serialize" in err_str or "concurrent" in err_str:
+                        if attempt < max_retries - 1:
+                            request.env.cr.rollback()
+                            wait_time = 0.1 * (attempt + 1)
+                            _logger.warning(f"Serialization retry {attempt + 1}/{max_retries} for phone {phone}, waiting {wait_time}s")
+                            time.sleep(wait_time)
+                            continue
+                    raise
             
             # Parse content
             msg_type, content, media_info = self._parse_message_content(message_content)
             _logger.info(f"Parsed: type={msg_type}, content_len={len(content) if content else 0}, media_keys={list(media_info.keys()) if media_info else []}")
             
-            from_me = key.get("fromMe", False)
             direction = "out" if from_me else "in"
             msg_id = key.get("id", "")
 
             # Handle EDITED messages
+            # Method 1: Evolution API sets isEdited + editedMessageId (some versions)
             is_edited = msg_obj.get("isEdited", False)
             edited_msg_id = msg_obj.get("editedMessageId", "")
             if is_edited and edited_msg_id:
                 return self._handle_edited_message(conversation, edited_msg_id, content, msg_type)
 
+            # Method 2: Baileys sends edits as protocolMessage.editedMessage
+            # The protocolMessage contains the new content AND the original message key
+            if isinstance(message_content, dict) and "protocolMessage" in message_content:
+                proto = message_content["protocolMessage"]
+                if isinstance(proto, dict) and proto.get("editedMessage"):
+                    # Extract original message key ID
+                    proto_key = proto.get("key", {})
+                    original_msg_id = proto_key.get("id", "")
+                    if not original_msg_id:
+                        # Fallback: some versions put key directly in protocolMessage
+                        original_msg_id = proto.get("editedMessageId", "")
+                    if original_msg_id:
+                        # Parse the new content from the edited message
+                        edited_content = proto["editedMessage"]
+                        new_type, new_text, _ = self._parse_message_content(edited_content)
+                        _logger.info(
+                            f"Edit via protocolMessage detected: original_id={original_msg_id}, "
+                            f"new_text='{(new_text or '')[:60]}'"
+                        )
+                        return self._handle_edited_message(
+                            conversation, original_msg_id, new_text, new_type
+                        )
+                    _logger.warning("protocolMessage.editedMessage found but no original key ID")
+                # Non-edit protocol messages (read receipts, etc.) — skip
+                elif proto.get("type") not in (None, 0):
+                    _logger.info(f"Skipping non-edit protocolMessage type={proto.get('type')}")
+                    return _json_ok({"status": "protocol_ignored"})
+
             # Extract quote info from contextInfo
             quote_info = self._extract_quote_info(message_content)
             
+            # Determine sender info for group messages
+            sender_name_val = None
+            sender_phone_val = None
+            if is_group and direction == "in":
+                sender_name_val = push_name or ""
+                sender_phone_val = group_info.get("participant_phone", "") if group_info else ""
+
             # Create message
-            new_message = self._create_message(conversation, direction, msg_type, content, msg_id, media_info, quote_info)
+            new_message = self._create_message(
+                conversation, direction, msg_type, content, msg_id, media_info, quote_info,
+                sender_name=sender_name_val, sender_phone=sender_phone_val
+            )
             if not new_message:
                 return _json_ok({"status": "duplicate"})
             
@@ -417,7 +697,43 @@ class BaderInboxWebhook(http.Controller):
                     tracking_vals["tracked_at"] = fields.Datetime.now()
                 if tracking_vals:
                     conversation.sudo().write(tracking_vals)
-                    _logger.info(f"Tracking saved for conv {conversation.id}: source={tracking_vals.get('utm_source')}, campaign={tracking_vals.get('utm_campaign')}")            
+                    _logger.info(f"Tracking saved for conv {conversation.id}: source={tracking_vals.get('utm_source')}, campaign={tracking_vals.get('utm_campaign')}")
+
+            # Extract CTWA (Click-to-WhatsApp) ad context from Meta campaigns
+            # Meta Ads send ad data inside contextInfo.externalAdReply within message content
+            if not conversation.utm_source and isinstance(message_content, dict):
+                ad_reply = self._extract_ctwa_ad_context(message_content)
+                if ad_reply:
+                    ctwa_vals = {"tracked_at": fields.Datetime.now()}
+                    source_type = ad_reply.get("sourceType", "")
+                    if source_type:
+                        ctwa_vals["utm_source"] = source_type  # e.g. "ctwa"
+                    else:
+                        ctwa_vals["utm_source"] = "meta_ads"
+                    ctwa_vals["utm_medium"] = "click_to_whatsapp"
+                    # Use ad title as campaign name if available
+                    ad_title = ad_reply.get("title", "")
+                    ad_body = ad_reply.get("body", "")
+                    if ad_title:
+                        ctwa_vals["utm_campaign"] = str(ad_title)[:256]
+                    ctwa_vals["channel_origin"] = "Meta Ads (CTWA)"
+                    # Store source URL and CTWA click ID
+                    source_url = ad_reply.get("sourceUrl", "")
+                    if source_url:
+                        ctwa_vals["referrer_url"] = str(source_url)[:256]
+                    ctwa_clid = ad_reply.get("ctwaClid", "")
+                    if ctwa_clid:
+                        ctwa_vals["tracking_code"] = str(ctwa_clid)[:256]
+                    # Store ad body in landing_page field for reference
+                    if ad_body:
+                        ctwa_vals["landing_page"] = str(ad_body)[:256]
+                    conversation.sudo().write(ctwa_vals)
+                    _logger.info(
+                        f"CTWA ad context saved for conv {conversation.id}: "
+                        f"source={ctwa_vals.get('utm_source')}, "
+                        f"campaign={ctwa_vals.get('utm_campaign')}, "
+                        f"clid={ctwa_clid[:30] if ctwa_clid else 'N/A'}"
+                    )            
             # Store raw key/content for ALL messages (useful for debugging and deferred media download)
             try:
                 update_vals = {}
@@ -457,7 +773,7 @@ class BaderInboxWebhook(http.Controller):
             
         except Exception as e:
             _logger.error(f"Error handling message: {e}", exc_info=True)
-            return _json_error(str(e))
+            return _json_error("Internal error")
 
     def _send_bus_notification(self, conversation, message, contact_name, phone):
         """Send bus notification for real-time updates"""
@@ -479,8 +795,33 @@ class BaderInboxWebhook(http.Controller):
         except Exception as e:
             _logger.warning(f"Bus notification error: {e}")
 
+    @staticmethod
+    def _is_safe_url(url):
+        """C2 FIX: Block SSRF — reject internal/private IPs and localhost."""
+        import ipaddress
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(url)
+            hostname = parsed.hostname or ""
+            # Block obvious internal hostnames
+            blocked_hosts = ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "metadata.google", "169.254.169.254")
+            if hostname.lower() in blocked_hosts or hostname.endswith(".local"):
+                return False
+            # Resolve and check for private IP ranges
+            import socket
+            try:
+                ip = socket.gethostbyname(hostname)
+                addr = ipaddress.ip_address(ip)
+                if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                    return False
+            except (socket.gaierror, ValueError):
+                return False
+            return True
+        except Exception:
+            return False
+
     def _extract_link_preview(self, message):
-        """Extract OG tags from URLs in message content"""
+        """Extract OG tags from URLs in message content (with SSRF protection)"""
         import re as re_mod
         if not message.content or message.message_type != "text":
             return
@@ -489,13 +830,28 @@ class BaderInboxWebhook(http.Controller):
         if not urls:
             return
         url = urls[0]
+        # C2 FIX: SSRF protection — block internal/private URLs
+        if not self._is_safe_url(url):
+            _logger.warning(f"Link preview blocked (SSRF protection): {url}")
+            return
         try:
+            # L2 FIX: Stream response with size limit to prevent memory exhaustion
             resp = req_lib.get(url, timeout=5, headers={
                 "User-Agent": "Mozilla/5.0 (compatible; BaderBot/1.0)"
-            }, allow_redirects=True)
+            }, allow_redirects=True, stream=True)
             if resp.status_code != 200:
                 return
-            html = resp.text[:50000]
+            # Read max 100KB to prevent memory exhaustion
+            chunks = []
+            size = 0
+            for chunk in resp.iter_content(chunk_size=8192, decode_unicode=True):
+                chunks.append(chunk if isinstance(chunk, str) else chunk.decode("utf-8", errors="ignore"))
+                size += len(chunk)
+                if size > 100_000:
+                    break
+            html = "".join(chunks)[:50000]
+            resp.close()
+
             def _og(prop):
                 m = re_mod.search(
                     rf'<meta\s+(?:property|name)=["\']og:{prop}["\']\s+content=["\']([^"\']*)["\']',
@@ -503,7 +859,7 @@ class BaderInboxWebhook(http.Controller):
                 )
                 if not m:
                     m = re_mod.search(
-                        rf'<meta\s+content=["\']([^"\']*)["\']\\s+(?:property|name)=["\']og:{prop}["\']',
+                        rf'<meta\s+content=["\']([^"\']*)["\']\s+(?:property|name)=["\']og:{prop}["\']',
                         html, re_mod.IGNORECASE
                     )
                 return m.group(1) if m else None
@@ -527,7 +883,7 @@ class BaderInboxWebhook(http.Controller):
             })
             message.sudo().write({"link_preview": preview})
         except Exception as e:
-            _logger.debug(f"Link preview extraction failed for {url}: {e}")
+            _logger.debug(f"Link preview extraction failed: {e}")
 
     def _trigger_chatbot(self, conversation, message):
         """Check and execute chatbot rules"""
@@ -663,6 +1019,58 @@ class BaderInboxWebhook(http.Controller):
             "quoted_participant": participant.split("@")[0] if "@" in participant else participant,
         }
 
+    def _extract_ctwa_ad_context(self, content):
+        """Extract Click-to-WhatsApp (CTWA) ad context from Meta campaigns.
+        
+        Meta Ads (Facebook/Instagram) attach ad metadata inside:
+        contextInfo.externalAdReply within the message content.
+        
+        Typical structure:
+        {
+            "extendedTextMessage": {
+                "text": "¡Hola! Quiero más información",
+                "contextInfo": {
+                    "externalAdReply": {
+                        "title": "Ad Campaign Title",
+                        "body": "Ad body text",
+                        "sourceUrl": "https://fb.me/...",
+                        "mediaUrl": "https://...",
+                        "sourceType": "ctwa",
+                        "ctwaClid": "campaign_click_id_123"
+                    }
+                }
+            }
+        }
+        
+        Also check top-level contextInfo for simple conversation messages.
+        """
+        if not content or not isinstance(content, dict):
+            return None
+        
+        # Check contextInfo in all message type wrappers
+        context_info = None
+        for msg_key in ("extendedTextMessage", "conversation", "imageMessage",
+                        "videoMessage", "audioMessage", "documentMessage",
+                        "contactMessage", "locationMessage"):
+            inner = content.get(msg_key)
+            if isinstance(inner, dict) and "contextInfo" in inner:
+                context_info = inner["contextInfo"]
+                break
+        
+        # Also check top-level contextInfo (some Evolution API versions)
+        if not context_info:
+            context_info = content.get("contextInfo")
+        
+        if not context_info or not isinstance(context_info, dict):
+            return None
+        
+        ad_reply = context_info.get("externalAdReply")
+        if not ad_reply or not isinstance(ad_reply, dict):
+            return None
+        
+        _logger.info(f"CTWA ad context found: {json.dumps(ad_reply, default=str)[:300]}")
+        return ad_reply
+
     def _handle_edited_message(self, conversation, edited_msg_id, new_content, msg_type):
         """Handle an edited message by updating the original message content.
         
@@ -785,7 +1193,33 @@ class BaderInboxWebhook(http.Controller):
         elif "stickerMessage" in content:
             msg_type = "sticker"
             stk = content["stickerMessage"]
-            media_info = {"media_mimetype": stk.get("mimetype"), "media_url": stk.get("url")}
+            media_info = {
+                "media_mimetype": stk.get("mimetype", "image/webp"),
+                "media_url": stk.get("url"),
+                "is_animated": stk.get("isAnimated", False),
+            }
+        elif "lottieStickerMessage" in content:
+            # Lottie animated stickers — unwrap to inner stickerMessage
+            wrapper = content["lottieStickerMessage"]
+            if isinstance(wrapper, dict) and "message" in wrapper:
+                return self._parse_message_content(wrapper["message"])
+            if isinstance(wrapper, dict) and "stickerMessage" in wrapper:
+                return self._parse_message_content(wrapper)
+            # Fallback: treat as sticker with available fields
+            msg_type = "sticker"
+            media_info = {
+                "media_mimetype": wrapper.get("mimetype", "image/webp"),
+                "media_url": wrapper.get("url"),
+                "is_animated": True,
+            }
+        elif "stickerSentByMeMessage" in content:
+            # Unwrap stickers sent by the user (wrapped by Evolution API)
+            wrapper = content["stickerSentByMeMessage"]
+            if isinstance(wrapper, dict) and "message" in wrapper:
+                return self._parse_message_content(wrapper["message"])
+            # Direct sticker data in wrapper
+            if isinstance(wrapper, dict) and "stickerMessage" in wrapper:
+                return self._parse_message_content(wrapper)
         elif "locationMessage" in content:
             msg_type = "location"
             loc = content["locationMessage"]
@@ -805,6 +1239,68 @@ class BaderInboxWebhook(http.Controller):
             view_once = content["viewOnceMessageV2"]
             if isinstance(view_once, dict) and "message" in view_once:
                 return self._parse_message_content(view_once["message"])
+        elif "templateMessage" in content:
+            # WhatsApp template messages (sent by businesses)
+            tmpl = content["templateMessage"]
+            if isinstance(tmpl, dict):
+                # Try hydratedTemplate (most common in Baileys/Evolution API)
+                hydrated = (
+                    tmpl.get("hydratedTemplate")
+                    or tmpl.get("hydratedFourRowTemplate")
+                    or {}
+                )
+                if isinstance(hydrated, dict):
+                    title = hydrated.get("hydratedTitleText", "")
+                    body = hydrated.get("hydratedContentText", "")
+                    footer = hydrated.get("hydratedFooterText", "")
+                    text = "\n".join(filter(None, [title, body, footer]))
+                # Some versions wrap the actual message inside
+                if not text and "message" in tmpl:
+                    return self._parse_message_content(tmpl["message"])
+                # highlyStructuredMessage format
+                if not text and "hydratedHsm" in tmpl:
+                    hsm = tmpl["hydratedHsm"]
+                    if isinstance(hsm, dict):
+                        hydrated = hsm.get("hydratedTemplate", {})
+                        if isinstance(hydrated, dict):
+                            title = hydrated.get("hydratedTitleText", "")
+                            body = hydrated.get("hydratedContentText", "")
+                            text = "\n".join(filter(None, [title, body]))
+                # Fallback: try body/text fields directly
+                if not text:
+                    text = tmpl.get("body") or tmpl.get("text") or tmpl.get("caption") or ""
+            if not text:
+                text = "[Template message]"
+                _logger.warning(f"Could not extract text from templateMessage: {list(tmpl.keys()) if isinstance(tmpl, dict) else type(tmpl)}")
+        elif "contactMessage" in content:
+            msg_type = "contact"
+            contact = content["contactMessage"]
+            display_name = contact.get("displayName", "")
+            vcard = contact.get("vcard", "")
+            # Extract phone from vCard (TEL field)
+            phone = ""
+            if vcard:
+                import re
+                tel_match = re.search(r'TEL[^:]*:([\+\d\s\-]+)', vcard)
+                if tel_match:
+                    phone = tel_match.group(1).strip()
+            text = json.dumps({"displayName": display_name, "phone": phone, "vcard": vcard})
+        elif "contactsArrayMessage" in content:
+            msg_type = "contact"
+            arr = content["contactsArrayMessage"]
+            contacts = arr.get("contacts", [])
+            parsed = []
+            for c in contacts:
+                display_name = c.get("displayName", "")
+                vcard = c.get("vcard", "")
+                phone = ""
+                if vcard:
+                    import re
+                    tel_match = re.search(r'TEL[^:]*:([\+\d\s\-]+)', vcard)
+                    if tel_match:
+                        phone = tel_match.group(1).strip()
+                parsed.append({"displayName": display_name, "phone": phone})
+            text = json.dumps({"contacts": parsed, "count": len(parsed)})
         else:
             # Unknown content type — log it for debugging
             _logger.warning(f"Unknown message content format. Keys: {list(content.keys())}")
