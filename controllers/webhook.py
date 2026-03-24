@@ -789,6 +789,8 @@ class BaderInboxWebhook(http.Controller):
                     "content": message.content,
                     "status": message.status,
                     "create_date": str(message.create_date),
+                    "sender_name": message.sender_name or "",
+                    "sender_phone": message.sender_phone or "",
                 }
             }
             request.env["bus.bus"]._sendone("bader_inbox", "bader_inbox_new_message", payload)
