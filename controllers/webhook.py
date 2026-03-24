@@ -230,6 +230,8 @@ class BaderInboxWebhook(http.Controller):
                 return self._handle_message(channel, data)
             elif event == "messages.update":
                 return self._handle_message_update(channel, data)
+            elif event in ("groups.upsert", "groups.update"):
+                return self._handle_groups_upsert(channel, data)
             elif event == "connection.update":
                 return self._handle_connection_update(channel, data)
             elif event == "qrcode.updated":
@@ -604,6 +606,18 @@ class BaderInboxWebhook(http.Controller):
                             time.sleep(wait_time)
                             continue
                     raise
+            
+            # For groups without a subject: try extracting name from webhook payload
+            if is_group and conversation.is_group and not conversation.group_subject:
+                group_name = self._extract_group_name_from_payload(data, msg_obj)
+                if group_name:
+                    conversation.write({
+                        'group_subject': group_name,
+                        'contact_name': group_name,
+                    })
+                    _logger.info(f"Group name extracted from webhook: {group_name}")
+                else:
+                    _logger.info(f"Group {conversation.group_jid} still has no subject. Data root keys: {list(data.keys())}")
             
             # Parse content
             msg_type, content, media_info = self._parse_message_content(message_content)
@@ -1111,6 +1125,40 @@ class BaderInboxWebhook(http.Controller):
             pass
         
         return _json_ok({"status": "edited"})
+
+    def _extract_group_name_from_payload(self, data, msg_obj):
+        """Try to extract the group name/subject from the webhook payload.
+        
+        Baileys/Evolution API may include group metadata in various locations
+        depending on the version. This method checks all known locations.
+        Returns the group subject string or None.
+        """
+        # Check in the root data object
+        for root in (data, data.get("data", {})):
+            if not isinstance(root, dict):
+                continue
+            # Direct subject field
+            if root.get("subject"):
+                return root["subject"]
+            # verifiedBizName sometimes holds group name
+            if root.get("verifiedBizName"):
+                return root["verifiedBizName"]
+            # groupMetadata sub-object
+            gm = root.get("groupMetadata") or root.get("groupInfo") or {}
+            if isinstance(gm, dict) and gm.get("subject"):
+                return gm["subject"]
+        
+        # Check inside msg_obj
+        if isinstance(msg_obj, dict):
+            if msg_obj.get("verifiedBizName"):
+                return msg_obj["verifiedBizName"]
+            # Some versions include source with metadata
+            source = msg_obj.get("source", {})
+            if isinstance(source, dict):
+                if source.get("verifiedBizName"):
+                    return source["verifiedBizName"]
+        
+        return None
 
     def _parse_message_content(self, content):
         """Parse message content from API format
