@@ -617,21 +617,15 @@ class BaderInboxWebhook(http.Controller):
                     })
                     _logger.info(f"Group name extracted from webhook: {group_name}")
                 else:
-                    # Deep debug: log the FULL payload structure to discover where group name lives
+                    # TEMP DEBUG: save payload to group_description for inspection
                     import json as _json
                     try:
-                        # Log root data keys + nested data keys
-                        inner = data.get("data", {})
-                        inner_keys = list(inner.keys()) if isinstance(inner, dict) else "list" if isinstance(inner, list) else type(inner).__name__
-                        _logger.warning(
-                            f"GROUP_NAME_MISSING for {conversation.group_jid}. "
-                            f"Root keys: {list(data.keys())}. "
-                            f"Inner data keys: {inner_keys}. "
-                            f"MSG_OBJ keys: {list(msg_obj.keys()) if isinstance(msg_obj, dict) else 'N/A'}. "
-                            f"Full data sample: {_json.dumps(data, default=str)[:800]}"
-                        )
+                        payload_dump = _json.dumps(data, default=str)[:2000]
+                        conversation.write({
+                            'group_description': f"PAYLOAD_DEBUG: {payload_dump}",
+                        })
                     except Exception:
-                        _logger.warning(f"GROUP_NAME_MISSING for {conversation.group_jid}")
+                        pass
             
             # Parse content
             msg_type, content, media_info = self._parse_message_content(message_content)
