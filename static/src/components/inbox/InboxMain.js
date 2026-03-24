@@ -319,6 +319,7 @@ export class BaderInboxMain extends Component {
                         "ai_response_count", "ai_tools_used", "ai_escalation_reason",
                         "profile_pic_url", "is_group", "group_jid",
                         "group_subject", "member_count", "is_muted", "group_pic_url", "group_description",
+                        "assigned_by_uid",
                         "utm_source", "utm_medium", "utm_campaign", "channel_origin",
                         "tracking_code", "tracked_at"
                     ]],
@@ -338,7 +339,7 @@ export class BaderInboxMain extends Component {
                         "profile_pic_url", "is_group", "group_jid",
                         "group_subject", "member_count", "is_muted", "group_pic_url", "group_description",
                         "utm_source", "utm_medium", "utm_campaign", "channel_origin",
-                        "tracking_code", "tracked_at"
+                        "tracking_code", "tracked_at", "assigned_by_uid"
                     ],
                     { order: "last_message_date desc", limit: 100 }
                 );
@@ -997,15 +998,64 @@ export class BaderInboxMain extends Component {
         }
     }
 
-    async assignConversation() {
+    async showAssignDropdown() {
         if (!this.state.selectedConversation) return;
-        this.action.doAction({
-            type: "ir.actions.act_window",
-            res_model: "bader.inbox.conversation",
-            res_id: this.state.selectedConversation.id,
-            views: [[false, "form"]],
-            target: "new",
-        });
+        // Get channel users for assignment
+        const channelId = this.state.selectedConversation.channel_id;
+        let users = [];
+        if (channelId) {
+            const channel = await this.orm.read("bader.inbox.channel", [channelId[0]], ["allowed_user_ids"]);
+            if (channel.length && channel[0].allowed_user_ids.length) {
+                users = await this.orm.read("res.users", channel[0].allowed_user_ids, ["id", "name"]);
+            }
+        }
+        if (!users.length) {
+            users = await this.orm.searchRead("res.users", [["share", "=", false]], ["id", "name"], { limit: 20 });
+        }
+        // Build selection items
+        const items = users.map(u => ({ label: u.name, value: u.id }));
+        // Simple prompt: use native confirm for now, pick first or ask
+        const choices = users.map(u => u.name).join("\n");
+        const selected = prompt(_t("Selecione o usuário para atribuir:\n\n") + choices + "\n\n" + _t("Digite o nome exato:"));
+        if (!selected) return;
+        const user = users.find(u => u.name.toLowerCase() === selected.toLowerCase());
+        if (!user) {
+            this.notification.add(_t("Usuário não encontrado."), { type: "warning" });
+            return;
+        }
+        try {
+            await this.orm.call("bader.inbox.conversation", "action_assign_user",
+                [this.state.selectedConversation.id, user.id]);
+            this.state.selectedConversation.assigned_user_id = [user.id, user.name];
+            this.state.selectedConversation.assigned_by_uid = [this.env.uid, ""];
+            this.notification.add(_t("Conversa atribuída a ") + user.name, { type: "success" });
+            await this.loadConversations();
+        } catch (e) {
+            console.error(e);
+            this.notification.add(_t("Erro ao atribuir conversa."), { type: "danger" });
+        }
+    }
+
+    async unassignConversation() {
+        if (!this.state.selectedConversation) return;
+        const assigneeName = this.state.selectedConversation.assigned_user_id
+            ? this.state.selectedConversation.assigned_user_id[1] : "";
+        if (!confirm(_t("Deseja desasignar ") + assigneeName + "?")) return;
+        try {
+            const result = await this.orm.call("bader.inbox.conversation", "action_unassign",
+                [this.state.selectedConversation.id]);
+            if (result && result.error) {
+                this.notification.add(result.error, { type: "warning" });
+                return;
+            }
+            this.state.selectedConversation.assigned_user_id = false;
+            this.state.selectedConversation.assigned_by_uid = false;
+            this.notification.add(_t("Atribuição removida!"), { type: "success" });
+            await this.loadConversations();
+        } catch (e) {
+            console.error(e);
+            this.notification.add(_t("Erro ao desasignar conversa."), { type: "danger" });
+        }
     }
 
     async resolveConversation() {

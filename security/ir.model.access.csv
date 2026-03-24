@@ -52,3 +52,5 @@ access_bader_inbox_translation_settings_all,bader.inbox.translation.settings.all
 access_bader_inbox_translation_settings_user,bader.inbox.translation.settings.user,model_bader_inbox_translation_settings,base.group_user,1,1,1,0
 access_bader_inbox_group_member_all,bader.inbox.group.member.all,model_bader_inbox_group_member,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_group_member_user,bader.inbox.group.member.user,model_bader_inbox_group_member,base.group_user,1,0,0,0
+access_bader_inbox_assignment_log_all,bader.inbox.assignment.log.all,model_bader_inbox_assignment_log,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_assignment_log_user,bader.inbox.assignment.log.user,model_bader_inbox_assignment_log,base.group_user,1,0,0,0

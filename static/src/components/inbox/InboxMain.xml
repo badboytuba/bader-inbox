@@ -256,7 +256,17 @@
                                 <button class="btn-chat-action" title="Buscar" t-on-click="toggleMessageSearch">
                                     <i class="fa fa-search"/>
                                 </button>
-                                <button class="btn-chat-action" title="Asignar" t-on-click="assignConversation">
+                                <!-- Assignment: show assignee or assign button -->
+                                <t t-if="state.selectedConversation.assigned_user_id">
+                                    <div class="chat-assignee-badge" t-att-title="'Asignado a: ' + state.selectedConversation.assigned_user_id[1]">
+                                        <span class="assignee-avatar-sm" t-esc="getInitials(state.selectedConversation.assigned_user_id[1])"/>
+                                        <span class="assignee-name-sm" t-esc="state.selectedConversation.assigned_user_id[1]"/>
+                                        <button class="btn-unassign" title="Desasignar" t-on-click="unassignConversation">
+                                            <i class="fa fa-times"/>
+                                        </button>
+                                    </div>
+                                </t>
+                                <button t-else="" class="btn-chat-action" title="Asignar" t-on-click="showAssignDropdown">
                                     <i class="fa fa-user-plus"/>
                                 </button>
                                 <button class="btn-chat-action" title="Exportar CSV" t-on-click="exportConversation">

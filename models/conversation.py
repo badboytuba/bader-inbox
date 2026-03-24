@@ -54,6 +54,10 @@ class BaderInboxConversation(models.Model):
     assigned_user_id = fields.Many2one(
         "res.users", string="Assigned To", tracking=True
     )
+    assigned_by_uid = fields.Many2one(
+        "res.users", string="Assigned By",
+        help="User who performed the assignment"
+    )
     team_id = fields.Many2one("crm.team", string="Team")
     
     # CRM Integration
@@ -657,6 +661,49 @@ class BaderInboxConversation(models.Model):
         """Assign to current user"""
         self.ensure_one()
         self.assigned_user_id = self.env.user
+        self.assigned_by_uid = self.env.user
+
+    @api.model
+    def action_assign_user(self, conversation_id, user_id):
+        """Assign a specific user to a conversation."""
+        conv = self.browse(conversation_id)
+        if not conv.exists():
+            return False
+        old_user = conv.assigned_user_id
+        conv.write({
+            'assigned_user_id': user_id,
+            'assigned_by_uid': self.env.uid,
+        })
+        self.env['bader.inbox.assignment.log'].sudo().create({
+            'conversation_id': conversation_id,
+            'action': 'assign',
+            'user_id': user_id,
+            'performed_by_id': self.env.uid,
+        })
+        return True
+
+    @api.model
+    def action_unassign(self, conversation_id):
+        """Remove assignment. Only admin or the assigner can unassign."""
+        conv = self.browse(conversation_id)
+        if not conv.exists() or not conv.assigned_user_id:
+            return False
+        is_manager = self.env.user.has_group('bader_inbox.group_bader_inbox_manager')
+        is_assigner = conv.assigned_by_uid.id == self.env.uid
+        if not is_manager and not is_assigner:
+            return {'error': 'No tiene permiso para desasignar esta conversación.'}
+        old_user_id = conv.assigned_user_id.id
+        conv.write({
+            'assigned_user_id': False,
+            'assigned_by_uid': False,
+        })
+        self.env['bader.inbox.assignment.log'].sudo().create({
+            'conversation_id': conversation_id,
+            'action': 'unassign',
+            'user_id': old_user_id,
+            'performed_by_id': self.env.uid,
+        })
+        return True
 
     def action_close(self):
         """Close/resolve conversation"""
@@ -1110,3 +1157,28 @@ class BaderInboxTag(models.Model):
             self.name, new_cat.id, self.name, self.id
         )
         return new_cat
+
+
+class BaderInboxAssignmentLog(models.Model):
+    """Log of conversation assignment and unassignment actions."""
+
+    _name = "bader.inbox.assignment.log"
+    _description = "Assignment Log"
+    _order = "create_date desc"
+
+    conversation_id = fields.Many2one(
+        "bader.inbox.conversation", string="Conversation",
+        required=True, ondelete="cascade", index=True
+    )
+    action = fields.Selection([
+        ("assign", "Assigned"),
+        ("unassign", "Unassigned"),
+    ], string="Action", required=True)
+    user_id = fields.Many2one(
+        "res.users", string="User",
+        help="The user who was assigned/unassigned"
+    )
+    performed_by_id = fields.Many2one(
+        "res.users", string="Performed By",
+        help="The user who executed the action"
+    )
