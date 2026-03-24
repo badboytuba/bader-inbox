@@ -41,10 +41,10 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     def _request(self, method, endpoint, data=None, params=None):
         """Make API request"""
         config = self._get_config()
-        # Normalize URL and ensure /api prefix
         base_url = config['url'].rstrip('/')
-        if not endpoint.startswith('/api'):
-            endpoint = '/api' + endpoint
+        # Ensure endpoint starts with /
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
         url = f"{base_url}{endpoint}"
         
         headers = {
@@ -360,7 +360,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         try:
             config = self._get_config()
             base_url = config['url'].rstrip('/')
-            url = f"{base_url}/api/instance/profilePicture/{instance_name}?number={clean_phone}"
+            url = f"{base_url}/instance/profilePicture/{instance_name}?number={clean_phone}"
             headers = {"apikey": config["key"]}
 
             response = requests.get(url, headers=headers, timeout=10)
