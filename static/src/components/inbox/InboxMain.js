@@ -317,7 +317,8 @@ export class BaderInboxMain extends Component {
                         "tag_ids", "ai_active",
                         "ai_lead_score", "ai_lead_temperature", "ai_resolution",
                         "ai_response_count", "ai_tools_used", "ai_escalation_reason",
-                        "profile_pic_url",
+                        "profile_pic_url", "is_group", "group_jid",
+                        "group_subject", "member_count", "is_muted", "group_pic_url", "group_description",
                         "utm_source", "utm_medium", "utm_campaign", "channel_origin",
                         "tracking_code", "tracked_at"
                     ]],

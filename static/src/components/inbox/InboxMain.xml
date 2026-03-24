@@ -411,9 +411,9 @@
                                     </t>
                                     <!-- Regular message -->
                                     <t t-else="">
-                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}{{ state.currentConversation and state.currentConversation.is_group and msg.direction === 'in' ? ' group-msg-row' : '' }}" t-att-data-msg-id="msg.id">
+                                    <div t-attf-class="message {{ msg.direction === 'out' ? 'outgoing' : 'incoming' }}{{ state.selectedConversation and state.selectedConversation.is_group and msg.direction === 'in' ? ' group-msg-row' : '' }}" t-att-data-msg-id="msg.id">
                                         <!-- Group sender avatar -->
-                                        <div t-if="state.currentConversation and state.currentConversation.is_group and msg.direction === 'in' and msg.sender_name"
+                                        <div t-if="state.selectedConversation and state.selectedConversation.is_group and msg.direction === 'in' and msg.sender_name"
                                              class="group-sender-avatar"
                                              t-att-style="'background-color:' + getParticipantColor(msg.sender_name)"
                                              t-att-title="(msg.sender_name || '') + (msg.sender_phone ? ' (' + msg.sender_phone + ')' : '')">
@@ -421,7 +421,7 @@
                                         </div>
                                         <div class="message-bubble">
                                             <!-- Group sender name -->
-                                            <div t-if="state.currentConversation and state.currentConversation.is_group and msg.direction === 'in' and msg.sender_name"
+                                            <div t-if="state.selectedConversation and state.selectedConversation.is_group and msg.direction === 'in' and msg.sender_name"
                                                  class="group-sender-name"
                                                  t-att-style="'color:' + getParticipantColor(msg.sender_name)">
                                                 <t t-esc="msg.sender_name"/>
