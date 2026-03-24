@@ -617,13 +617,9 @@ class BaderInboxWebhook(http.Controller):
                     })
                     _logger.info(f"Group name extracted from webhook: {group_name}")
                 else:
-                    # TEMP DEBUG: save payload to group_description for inspection
-                    import json as _json
+                    # Webhook doesn't include group subject — try API sync
                     try:
-                        payload_dump = _json.dumps(data, default=str)[:2000]
-                        conversation.write({
-                            'group_description': f"PAYLOAD_DEBUG: {payload_dump}",
-                        })
+                        conversation.auto_sync_group_info()
                     except Exception:
                         pass
             
