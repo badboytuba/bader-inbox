@@ -143,7 +143,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "number": phone,
             "text": text,
         }
-        result = self._request("POST", f"/message/text/{instance_name}", data)
+        result = self._request("POST", f"/api/message/text/{instance_name}", data)
         return {
             "success": "key" in result or result.get("status") == "sent",
             "message_id": result.get("key", {}).get("id") if isinstance(result.get("key"), dict) else result.get("messageId"),
@@ -162,11 +162,11 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         For base64, use data URI format: "data:{mimetype};base64,{data}"
         """
         endpoint_map = {
-            "image": "/message/image",
-            "audio": "/message/audio",
-            "video": "/message/video",
-            "document": "/message/document",
-            "sticker": "/message/image",  # fallback stickers to image
+            "image": "/api/message/image",
+            "audio": "/api/message/audio",
+            "video": "/api/message/video",
+            "document": "/api/message/document",
+            "sticker": "/api/message/image",  # fallback stickers to image
         }
         # Map media type to the URL key the API expects
         url_key_map = {
@@ -185,7 +185,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "sticker": "image/webp",
         }
         
-        endpoint = endpoint_map.get(media_type, "/message/document")
+        endpoint = endpoint_map.get(media_type, "/api/message/document")
         url_key = url_key_map.get(media_type, "documentUrl")
         
         data = {"number": phone}
@@ -241,7 +241,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "messageContent": content,
         }
         try:
-            result = self._request("POST", f"/message/downloadMedia/{instance_name}", data)
+            result = self._request("POST", f"/api/message/downloadMedia/{instance_name}", data)
             if isinstance(result, dict):
                 base64_data = result.get("base64") or result.get("data") or result.get("media")
                 mimetype = result.get("mimetype") or result.get("mediaType", "")
