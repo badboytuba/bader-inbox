@@ -514,7 +514,7 @@ export class BaderInboxMain extends Component {
             const newMessages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "author_id"],
+                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "author_id", "sender_name", "sender_phone"],
                 { order: "create_date asc" }
             );
 
@@ -529,9 +529,16 @@ export class BaderInboxMain extends Component {
                 );
             } catch (_) { /* notes table may not exist */ }
 
-            // Check if message count changed (only real messages, not notes)
-            const currentMsgCount = this.state.messages.filter(m => m._type !== "note").length;
-            if (newMessages.length !== currentMsgCount) {
+            // Determine if we need to update — check 3 conditions:
+            const currentMsgs = this.state.messages.filter(m => m._type !== "note");
+            const countChanged = newMessages.length !== currentMsgs.length;
+            const hasPending = currentMsgs.some(m => m._isPending);
+            const statusChanged = !countChanged && currentMsgs.some(m => {
+                const serverMsg = newMessages.find(sm => sm.id === m.id);
+                return serverMsg && serverMsg.status !== m.status;
+            });
+
+            if (countChanged || hasPending || statusChanged) {
                 // Merge messages + notes
                 const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
                 const taggedNotes = notes.map(n => ({
@@ -540,11 +547,13 @@ export class BaderInboxMain extends Component {
                 this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
                     (a.create_date || "").localeCompare(b.create_date || "")
                 );
-                // Scroll to bottom for new messages
-                setTimeout(() => {
-                    const container = this.messagesRef.el;
-                    if (container) container.scrollTop = container.scrollHeight;
-                }, 100);
+                // Scroll to bottom only for new messages (not status updates)
+                if (countChanged || hasPending) {
+                    setTimeout(() => {
+                        const container = this.messagesRef.el;
+                        if (container) container.scrollTop = container.scrollHeight;
+                    }, 100);
+                }
             } else if (notes.length > 0) {
                 // Even if no new messages, ensure notes stay merged
                 const hasNotes = this.state.messages.some(m => m._type === "note");
@@ -1174,6 +1183,8 @@ export class BaderInboxMain extends Component {
             // Server accepted — silent refresh to get the real message ID and status
             // (replaces the optimistic message with actual data, no loading indicator)
             await this._refreshMessages(convId);
+            // Second refresh after 3s to catch delivery/read status updates
+            setTimeout(() => this._refreshMessages(convId), 3000);
         } catch (e) {
             console.error(e);
             // Mark the optimistic message as failed
