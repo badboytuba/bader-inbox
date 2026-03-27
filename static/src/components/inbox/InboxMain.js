@@ -1128,7 +1128,7 @@ export class BaderInboxMain extends Component {
             message_type: isMedia ? (mediaInfo?.type || "document") : "text",
             content: sentContent || (isMedia ? `📎 ${mediaInfo?.name || "Archivo"}` : ""),
             status: "sending",
-            create_date: luxon.DateTime.now().toISO(),
+            create_date: luxon.DateTime.now().toFormat("yyyy-MM-dd HH:mm:ss"),
             media_url: null,
             media_mimetype: null,
             media_filename: mediaInfo?.name || null,
