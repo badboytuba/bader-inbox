@@ -231,13 +231,13 @@ class BaderInboxWebhook(http.Controller):
             elif event == "messages.update":
                 return self._handle_message_update(channel, data)
             elif event in ("groups.upsert", "groups.update"):
-                return self._handle_groups_upsert(channel, data)
+                return self._handle_group_update(channel, data)
+            elif event == "group-participants.update":
+                return self._handle_group_participants_update(channel, data)
             elif event == "connection.update":
                 return self._handle_connection_update(channel, data)
             elif event == "qrcode.updated":
                 return self._handle_qrcode_update(channel, data)
-            elif event in ("groups.update", "groups.upsert"):
-                return self._handle_group_update(channel, data)
             
             _logger.info(f"Ignoring event: {event}")
             return _json_ok({"status": "ignored"})
@@ -289,6 +289,46 @@ class BaderInboxWebhook(http.Controller):
             return _json_ok({"status": "group_updated"})
         except Exception as e:
             _logger.error(f"Group update handler error: {e}", exc_info=True)
+            return _json_ok({"status": "error"})
+
+    def _handle_group_participants_update(self, channel, data):
+        """Handle group-participants.update events.
+        
+        Fired when members join/leave a group.
+        Payload: {"groupJid": "...@g.us", "action": "add|remove|promote|demote",
+                  "participants": ["phone@s.whatsapp.net", ...]}
+        """
+        try:
+            event_data = data.get("data", {})
+            if not isinstance(event_data, dict):
+                return _json_ok({"status": "ignored"})
+            
+            group_jid = event_data.get("groupJid") or event_data.get("id") or ""
+            if not group_jid or "@g.us" not in group_jid:
+                return _json_ok({"status": "ignored"})
+            
+            action = event_data.get("action", "unknown")
+            participants = event_data.get("participants", [])
+            
+            Conv = request.env["bader.inbox.conversation"].sudo()
+            conversation = Conv.search([
+                ("group_jid", "=", group_jid),
+                ("channel_id", "=", channel.id),
+            ], limit=1)
+            
+            if conversation:
+                # Update member count
+                member_count = conversation.member_count or 0
+                if action == "add":
+                    member_count += len(participants)
+                elif action == "remove":
+                    member_count = max(0, member_count - len(participants))
+                conversation.write({"member_count": member_count})
+                _logger.info(f"Group participants {action}: {group_jid} ({len(participants)} members, total: {member_count})")
+            
+            return _json_ok({"status": "participants_updated"})
+        except Exception as e:
+            _logger.error(f"Group participants handler error: {e}", exc_info=True)
             return _json_ok({"status": "error"})
 
     def _extract_phone_info(self, key):

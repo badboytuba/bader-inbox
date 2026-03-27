@@ -124,11 +124,16 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         }
 
     def set_webhook(self, instance_name, webhook_url):
-        """Configure webhook for instance (lowercase event names for Baileys API)"""
+        """Configure webhook for instance (includes group events)"""
         data = {
             "webhookUrl": webhook_url,
             "enabled": True,
-            "events": ["messages.upsert", "messages.update", "connection.update", "qrcode.updated"]
+            "events": [
+                "messages.upsert", "messages.update",
+                "connection.update", "qrcode.updated",
+                "groups.upsert", "groups.update",
+                "group-participants.update",
+            ]
         }
         return self._request("POST", f"/webhook/set/{instance_name}", data)
 
@@ -444,9 +449,24 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
     def fetch_group_info(self, instance_name, group_jid):
         """Fetch information about a specific group (subject, description, picture).
         
-        Uses GET /group/fetchAllGroups/{instance}?getParticipants=false
-        and filters by JID. Returns dict with group info or None.
+        Tries the new /api/instance/groupMetadata endpoint first,
+        then falls back to /group/fetchAllGroups.
+        Returns dict with group info or None.
         """
+        try:
+            # Try new dedicated endpoint first
+            result = self._request(
+                "GET",
+                f"/api/instance/groupMetadata/{instance_name}",
+                params={"groupJid": group_jid}
+            )
+            if isinstance(result, dict) and (result.get("subject") or result.get("id")):
+                return result
+            # If result is a dict with error, fall through to legacy
+        except Exception:
+            pass
+        
+        # Fallback: fetch all groups and filter
         try:
             result = self._request(
                 "GET",
@@ -460,10 +480,9 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
                 gid = g.get("id") or g.get("jid") or ""
                 if gid == group_jid or str(gid).startswith(group_jid.split("@")[0]):
                     return g
-            return None
         except Exception as e:
             _logger.debug(f"Group info fetch failed for {group_jid}: {e}")
-            return None
+        return None
 
     def fetch_group_participants(self, instance_name, group_jid):
         """Fetch the member list of a specific group.
@@ -487,10 +506,23 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             return []
 
     def fetch_all_groups(self, instance_name):
-        """Fetch all groups with participants for batch sync.
+        """Fetch all groups for batch sync.
         
-        GET /group/fetchAllGroups/{instance}?getParticipants=true
+        Tries new /api/instance/groups endpoint first,
+        then falls back to /group/fetchAllGroups.
         """
+        try:
+            # Try new endpoint
+            result = self._request(
+                "GET",
+                f"/api/instance/groups/{instance_name}"
+            )
+            if isinstance(result, list) and len(result) > 0:
+                return result
+        except Exception:
+            pass
+        
+        # Fallback to legacy
         try:
             result = self._request(
                 "GET",
