@@ -1113,39 +1113,73 @@ export class BaderInboxMain extends Component {
         }
         this._msgTimestamps.push(now);
 
+        // Save content before clearing
+        const sentContent = content;
+        const convId = this.state.selectedConversation.id;
+        const isMedia = !!this.state.attachment;
+        const mediaInfo = this.state.attachment ? { ...this.state.attachment } : null;
+
+        // Optimistic: add message to chat immediately (no flash!)
+        const optimisticId = `pending_${Date.now()}`;
+        const optimisticMsg = {
+            id: optimisticId,
+            _type: "message",
+            direction: "out",
+            message_type: isMedia ? (mediaInfo?.type || "document") : "text",
+            content: sentContent || (isMedia ? `📎 ${mediaInfo?.name || "Archivo"}` : ""),
+            status: "sending",
+            create_date: luxon.DateTime.now().toISO(),
+            media_url: null,
+            media_mimetype: null,
+            media_filename: mediaInfo?.name || null,
+            _isPending: true,
+        };
+        this.state.messages = [...this.state.messages, optimisticMsg];
+
+        // Clear composer immediately (feels instant)
+        this.state.composerText = "";
+        const ta = this.composerRef.el;
+        if (ta) ta.style.height = "auto";
+
+        // Scroll to bottom to show the new message
+        setTimeout(() => {
+            const container = this.messagesRef.el;
+            if (container) container.scrollTop = container.scrollHeight;
+        }, 50);
+
         this.state.sendingMessage = true;
         try {
-            if (this.state.attachment) {
-                // Send with media
+            if (isMedia) {
                 await this.orm.call(
                     "bader.inbox.message",
                     "send_message",
                     [],
                     {
-                        conversation_id: this.state.selectedConversation.id,
-                        content: content,
-                        msg_type: this.state.attachment.type,
-                        media_data: this.state.attachment.data,
-                        media_filename: this.state.attachment.name
+                        conversation_id: convId,
+                        content: sentContent,
+                        msg_type: mediaInfo.type,
+                        media_data: mediaInfo.data,
+                        media_filename: mediaInfo.name
                     }
                 );
                 this.state.attachment = null;
             } else {
-                // Send text only
                 await this.orm.call(
                     "bader.inbox.message",
                     "send_message",
-                    [this.state.selectedConversation.id, content, "text"]
+                    [convId, sentContent, "text"]
                 );
             }
 
-            this.state.composerText = "";
-            // Reset textarea height after send
-            const ta = this.composerRef.el;
-            if (ta) ta.style.height = "auto";
-            await this.loadMessages(this.state.selectedConversation.id);
+            // Server accepted — silent refresh to get the real message ID and status
+            // (replaces the optimistic message with actual data, no loading indicator)
+            await this._refreshMessages(convId);
         } catch (e) {
             console.error(e);
+            // Mark the optimistic message as failed
+            this.state.messages = this.state.messages.map(m =>
+                m.id === optimisticId ? { ...m, status: "failed", _isPending: false } : m
+            );
             this.notification.add(_t("Erro ao enviar mensagem"), { type: "danger" });
         }
         this.state.sendingMessage = false;

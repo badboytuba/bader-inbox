@@ -533,8 +533,9 @@
                                                 <span t-if="msg.direction === 'out' and !msg.author_id" class="agent-inline mobile">📱</span>
                                                 <span class="message-time" t-esc="formatTime(msg.create_date)"/>
                                                 <span t-if="msg.is_edited" class="message-edited"><i class="fa fa-pencil"/> editado</span>
-                                                <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : 'sent' }}">
-                                                    <span t-if="msg.status === 'failed'"><i class="fa fa-times"/></span>
+                                                <span t-if="msg.direction === 'out'" t-attf-class="message-status {{ msg.status === 'read' ? 'read' : msg.status === 'delivered' ? 'delivered' : msg.status === 'failed' ? 'failed' : msg.status === 'sending' ? 'sending' : 'sent' }}">
+                                                    <span t-if="msg.status === 'sending'"><i class="fa fa-clock-o fa-spin"/></span>
+                                                    <span t-elif="msg.status === 'failed'"><i class="fa fa-times"/></span>
                                                     <span t-elif="msg.status === 'delivered' or msg.status === 'read'"><i class="fa fa-check"/><i class="fa fa-check"/></span>
                                                     <span t-else=""><i class="fa fa-check"/></span>
                                                 </span>

@@ -1571,6 +1571,17 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                         &.failed {
                             color: #EF4444;
                         }
+
+                        &.sending {
+                            color: $bader-text-light;
+                            opacity: 0.6;
+                            animation: pulse-sending 1.2s ease infinite;
+                        }
+                    }
+
+                    @keyframes pulse-sending {
+                        0%, 100% { opacity: 0.4; }
+                        50% { opacity: 0.8; }
                     }
 
                     .message-status-placeholder {
