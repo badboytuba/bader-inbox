@@ -533,13 +533,9 @@ export class BaderInboxMain extends Component {
             const currentMsgs = this.state.messages.filter(m => m._type !== "note");
             const countChanged = newMessages.length !== currentMsgs.length;
             const hasPending = currentMsgs.some(m => m._isPending);
-            const statusChanged = !countChanged && currentMsgs.some(m => {
-                const serverMsg = newMessages.find(sm => sm.id === m.id);
-                return serverMsg && serverMsg.status !== m.status;
-            });
 
-            if (countChanged || hasPending || statusChanged) {
-                // Merge messages + notes
+            if (countChanged || hasPending) {
+                // Full replacement needed (new messages arrived or pending swap)
                 const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
                 const taggedNotes = notes.map(n => ({
                     ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
@@ -547,17 +543,20 @@ export class BaderInboxMain extends Component {
                 this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
                     (a.create_date || "").localeCompare(b.create_date || "")
                 );
-                // Scroll to bottom only for new messages (not status updates)
-                if (countChanged || hasPending) {
-                    setTimeout(() => {
-                        const container = this.messagesRef.el;
-                        if (container) container.scrollTop = container.scrollHeight;
-                    }, 100);
+                setTimeout(() => {
+                    const container = this.messagesRef.el;
+                    if (container) container.scrollTop = container.scrollHeight;
+                }, 100);
+            } else {
+                // In-place status update — NO re-render, NO blink
+                for (const serverMsg of newMessages) {
+                    const localMsg = this.state.messages.find(m => m.id === serverMsg.id);
+                    if (localMsg && localMsg.status !== serverMsg.status) {
+                        localMsg.status = serverMsg.status;
+                    }
                 }
-            } else if (notes.length > 0) {
-                // Even if no new messages, ensure notes stay merged
-                const hasNotes = this.state.messages.some(m => m._type === "note");
-                if (!hasNotes) {
+                // Ensure notes stay merged
+                if (notes.length > 0 && !this.state.messages.some(m => m._type === "note")) {
                     const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
                     const taggedNotes = notes.map(n => ({
                         ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
