@@ -508,7 +508,7 @@ export class BaderInboxMain extends Component {
     }
 
     async _refreshMessages(conversationId) {
-        // Silent refresh - no loading indicator, no scroll jump
+        // Silent refresh - no loading indicator, no scroll jump, NO BLINK
         if (!conversationId) return;
         try {
             const newMessages = await this.orm.searchRead(
@@ -529,42 +529,70 @@ export class BaderInboxMain extends Component {
                 );
             } catch (_) { /* notes table may not exist */ }
 
-            // Determine if we need to update — check 3 conditions:
-            const currentMsgs = this.state.messages.filter(m => m._type !== "note");
-            const countChanged = newMessages.length !== currentMsgs.length;
-            const hasPending = currentMsgs.some(m => m._isPending);
+            // Strategy: ALL updates in-place to avoid DOM re-render (no blink)
+            const currentMsgs = this.state.messages;
+            const pendingMsgs = currentMsgs.filter(m => m._isPending);
+            const realMsgIds = new Set(currentMsgs.filter(m => !m._isPending && m._type === "message").map(m => m.id));
 
-            if (countChanged || hasPending) {
-                // Full replacement needed (new messages arrived or pending swap)
-                const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
-                const taggedNotes = notes.map(n => ({
-                    ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
-                }));
-                this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
+            // 1. Replace pending messages with their real server counterparts
+            if (pendingMsgs.length > 0) {
+                // Find the newest server message not already in our list — that's the real version
+                const newServerMsgs = newMessages.filter(sm => !realMsgIds.has(sm.id));
+                for (let i = 0; i < pendingMsgs.length && i < newServerMsgs.length; i++) {
+                    const pending = pendingMsgs[i];
+                    const real = newServerMsgs[i];
+                    const idx = currentMsgs.indexOf(pending);
+                    if (idx !== -1) {
+                        // In-place property swap — same object, no DOM rebuild
+                        Object.assign(currentMsgs[idx], real, { _type: "message", _isPending: false });
+                    }
+                }
+                // Remove any leftover pending messages not matched
+                for (const p of pendingMsgs) {
+                    if (p._isPending) {
+                        const idx = currentMsgs.indexOf(p);
+                        if (idx !== -1) currentMsgs.splice(idx, 1);
+                    }
+                }
+            }
+
+            // 2. In-place status updates for existing messages
+            for (const serverMsg of newMessages) {
+                const localMsg = currentMsgs.find(m => m.id === serverMsg.id && m._type === "message");
+                if (localMsg && localMsg.status !== serverMsg.status) {
+                    localMsg.status = serverMsg.status;
+                }
+            }
+
+            // 3. Append truly new messages (not pending replacements)
+            const allLocalIds = new Set(currentMsgs.filter(m => m._type === "message").map(m => m.id));
+            let hasNewMessages = false;
+            for (const sm of newMessages) {
+                if (!allLocalIds.has(sm.id)) {
+                    currentMsgs.push({ ...sm, _type: "message" });
+                    hasNewMessages = true;
+                }
+            }
+
+            // 4. Ensure notes stay merged
+            if (notes.length > 0 && !currentMsgs.some(m => m._type === "note")) {
+                for (const n of notes) {
+                    currentMsgs.push({
+                        ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
+                    });
+                }
+                hasNewMessages = true;
+            }
+
+            // 5. Re-sort only if we added new items
+            if (hasNewMessages) {
+                currentMsgs.sort((a, b) =>
                     (a.create_date || "").localeCompare(b.create_date || "")
                 );
                 setTimeout(() => {
                     const container = this.messagesRef.el;
                     if (container) container.scrollTop = container.scrollHeight;
                 }, 100);
-            } else {
-                // In-place status update — NO re-render, NO blink
-                for (const serverMsg of newMessages) {
-                    const localMsg = this.state.messages.find(m => m.id === serverMsg.id);
-                    if (localMsg && localMsg.status !== serverMsg.status) {
-                        localMsg.status = serverMsg.status;
-                    }
-                }
-                // Ensure notes stay merged
-                if (notes.length > 0 && !this.state.messages.some(m => m._type === "note")) {
-                    const taggedMessages = newMessages.map(m => ({ ...m, _type: "message" }));
-                    const taggedNotes = notes.map(n => ({
-                        ...n, _type: "note", id: `note_${n.id}`, _noteId: n.id,
-                    }));
-                    this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
-                        (a.create_date || "").localeCompare(b.create_date || "")
-                    );
-                }
             }
         } catch (e) {
             // Silent fail for polling
