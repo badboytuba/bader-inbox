@@ -135,7 +135,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
                 "group-participants.update",
             ]
         }
-        return self._request("POST", f"/webhook/set/{instance_name}", data)
+        return self._request("POST", f"/api/webhook/set/{instance_name}", data)
 
     def send_text(self, instance_name, phone, text):
         """Send text message"""
