@@ -1378,12 +1378,20 @@ class BaderInboxWebhook(http.Controller):
                 tel_match = re.search(r'TEL[^:]*:([\+\d\s\-]+)', vcard)
                 if tel_match:
                     phone = tel_match.group(1).strip()
-            text = json.dumps({"displayName": display_name, "phone": phone, "vcard": vcard})
+            # Human-readable text for preview + full metadata in media_info
+            parts = []
+            if display_name:
+                parts.append(f"📇 {display_name}")
+            if phone:
+                parts.append(f"📞 {phone}")
+            text = "\n".join(parts) if parts else "📇 Contacto compartido"
+            media_info = {"displayName": display_name, "phone": phone, "vcard": vcard}
         elif "contactsArrayMessage" in content:
             msg_type = "contact"
             arr = content["contactsArrayMessage"]
             contacts = arr.get("contacts", [])
             parsed = []
+            names = []
             for c in contacts:
                 display_name = c.get("displayName", "")
                 vcard = c.get("vcard", "")
@@ -1394,7 +1402,10 @@ class BaderInboxWebhook(http.Controller):
                     if tel_match:
                         phone = tel_match.group(1).strip()
                 parsed.append({"displayName": display_name, "phone": phone})
-            text = json.dumps({"contacts": parsed, "count": len(parsed)})
+                if display_name:
+                    names.append(display_name)
+            text = f"📇 {len(parsed)} contactos: {', '.join(names)}" if names else f"📇 {len(parsed)} contactos compartidos"
+            media_info = {"contacts": parsed, "count": len(parsed)}
         else:
             # Unknown content type — log it for debugging
             _logger.warning(f"Unknown message content format. Keys: {list(content.keys())}")
