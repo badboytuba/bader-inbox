@@ -60,7 +60,14 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
                 params=params,
             )
             response.raise_for_status()
-            return response.json()
+            # Handle empty responses (some endpoints return 200 with no body)
+            if not response.content or not response.text.strip():
+                return {}
+            try:
+                return response.json()
+            except ValueError:
+                _logger.warning(f"Non-JSON response from {url}: {response.text[:200]}")
+                return {}
         except requests.exceptions.RequestException as e:
             _logger.error(f"API request failed: {e}")
             return {"success": False, "error": str(e)}
@@ -470,7 +477,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         try:
             result = self._request(
                 "GET",
-                f"/group/fetchAllGroups/{instance_name}",
+                f"/api/group/fetchAllGroups/{instance_name}",
                 params={"getParticipants": "false"}
             )
             groups = result if isinstance(result, list) else []
@@ -493,7 +500,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         try:
             result = self._request(
                 "GET",
-                f"/group/participants/{instance_name}",
+                f"/api/group/participants/{instance_name}",
                 params={"groupJid": group_jid}
             )
             if isinstance(result, list):
@@ -526,7 +533,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         try:
             result = self._request(
                 "GET",
-                f"/group/fetchAllGroups/{instance_name}",
+                f"/api/group/fetchAllGroups/{instance_name}",
                 params={"getParticipants": "true"}
             )
             return result if isinstance(result, list) else []
