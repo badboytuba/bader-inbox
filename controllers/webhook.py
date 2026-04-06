@@ -403,8 +403,10 @@ class BaderInboxWebhook(http.Controller):
                         _logger.info(f"LID resolved via API: {remote_jid} → {resolved_phone}")
                         phone_source = f"{resolved_phone}@s.whatsapp.net"
                     else:
-                        _logger.warning(f"LID unresolvable: {remote_jid}")
-                        return None, None, None, None
+                        # LID unresolvable — use LID number as temporary phone
+                        lid_number = remote_jid.split("@")[0]
+                        _logger.warning(f"LID unresolvable: {remote_jid} — using LID as temp phone: {lid_number}")
+                        phone_source = remote_jid
             else:
                 _logger.warning(f"Unknown JID format: {remote_jid}")
                 return None, None, None, None
@@ -595,6 +597,9 @@ class BaderInboxWebhook(http.Controller):
                 
                 _logger.warning(f"Content fallback used. Full msg_obj keys: {list(msg_obj.keys())}, messageType: {msg_type_field}")
             
+            # Inject senderPn from message level into key if not already present
+            if not key.get("senderPn") and msg_obj.get("senderPn"):
+                key["senderPn"] = msg_obj["senderPn"]
             phone, whatsapp_id, phone_source, group_info = self._extract_phone_info(key)
             
             if not phone:
