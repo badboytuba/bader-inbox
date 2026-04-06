@@ -31,7 +31,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "bader_inbox.evolution_url", 
             "https://whatsapp.odontowave.com"
         )
-        # Normalize URL - remove /api suffix if present (endpoints already include /api/)
+        # Normalize URL - remove /api suffix if present (all endpoints include /api/ prefix)
         url = re.sub(r'/api/?$', '', url.rstrip('/'))
         return {
             "url": url,
@@ -82,17 +82,17 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
                 "enabled": True,
                 "events": ["messages.upsert", "messages.update", "connection.update", "qrcode.updated"]
             }
-        result = self._request("POST", "/instance/create", data)
+        result = self._request("POST", "/api/instance/create", data)
         return {"success": "instance" in result or "instanceName" in result, **result}
 
     def delete_instance(self, instance_name):
         """Delete WhatsApp instance"""
-        return self._request("DELETE", f"/instance/delete/{instance_name}")
+        return self._request("DELETE", f"/api/instance/delete/{instance_name}")
 
 
     def get_qrcode(self, instance_name):
         """Get QR code for instance"""
-        result = self._request("GET", f"/instance/qrcode/{instance_name}")
+        result = self._request("GET", f"/api/instance/qrcode/{instance_name}")
         # Handle different response formats
         qr = result.get("qrcode") or result.get("base64")
         if isinstance(qr, dict):
@@ -111,7 +111,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         - 404 if instance doesn't exist
         - 503 if instance exists but is disconnected
         """
-        result = self._request("GET", f"/instance/status/{instance_name}")
+        result = self._request("GET", f"/api/instance/status/{instance_name}")
         # Handle error responses (404, 503)
         if result.get("success") is False:
             error_str = str(result.get("error", "")).lower()
@@ -304,7 +304,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         Returns True if instance responds, False if 'not found' or error.
         """
         try:
-            result = self._request("GET", f"/webhook/find/{instance_name}")
+            result = self._request("GET", f"/api/webhook/find/{instance_name}")
             if isinstance(result, dict) and result.get("error"):
                 error_msg = str(result.get("error", "")) + str(result.get("message", ""))
                 if "not found" in error_msg.lower() or "does not exist" in error_msg.lower():
@@ -359,7 +359,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
 
     def list_instances(self):
         """List all instances"""
-        result = self._request("GET", "/instance/list")
+        result = self._request("GET", "/api/instance/list")
         return result.get("instances", []) if isinstance(result, dict) else result
 
     def get_profile_picture(self, instance_name, phone):
@@ -372,7 +372,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         try:
             config = self._get_config()
             base_url = config['url'].rstrip('/')
-            url = f"{base_url}/instance/profilePicture/{instance_name}?number={clean_phone}"
+            url = f"{base_url}/api/instance/profilePicture/{instance_name}?number={clean_phone}"
             headers = {"apikey": config["key"]}
 
             response = requests.get(url, headers=headers, timeout=10)
@@ -399,7 +399,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             jid = f"{clean_phone}@s.whatsapp.net"
             result = self._request(
                 "POST",
-                f"/chat/findContacts/{instance_name}",
+                f"/api/chat/findContacts/{instance_name}",
                 {"where": {"id": jid}}
             )
             # Response can be a list or dict with contact info
@@ -422,7 +422,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         Returns list of pending message objects.
         """
         try:
-            result = self._request("GET", f"/messages/pending/{instance_name}")
+            result = self._request("GET", f"/api/messages/pending/{instance_name}")
             if isinstance(result, list):
                 return result
             if isinstance(result, dict) and result.get("messages"):
@@ -444,7 +444,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         if not message_ids:
             return True
         try:
-            result = self._request("POST", "/messages/ack", {"ids": message_ids})
+            result = self._request("POST", "/api/messages/ack", {"ids": message_ids})
             _logger.info(f"Acknowledged {len(message_ids)} pending messages")
             return True
         except Exception as e:
