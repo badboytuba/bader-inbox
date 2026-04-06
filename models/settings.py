@@ -13,7 +13,7 @@ class BaderInboxSettings(models.TransientModel):
     evolution_url = fields.Char(
         string="URL da API Evolution",
         default=lambda self: self.env["ir.config_parameter"].sudo().get_param(
-            "bader_inbox.evolution_url", "https://whatsapp.odontowave.com"
+            "bader_inbox.evolution_url", "https://whatsapp.bader.es"
         ),
         required=True
     )

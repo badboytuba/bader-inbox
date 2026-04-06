@@ -28,8 +28,8 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         params = self.env["ir.config_parameter"].sudo()
         # Evolution API URL (Production)
         url = params.get_param(
-            "bader_inbox.evolution_url", 
-            "https://whatsapp.odontowave.com"
+            "bader_inbox.evolution_url",
+            "https://whatsapp.bader.es"
         )
         # Normalize URL - remove /api suffix if present (all endpoints include /api/ prefix)
         url = re.sub(r'/api/?$', '', url.rstrip('/'))

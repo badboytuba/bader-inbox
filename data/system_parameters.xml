@@ -3,7 +3,7 @@
     <!-- Evolution API URL - OdontoWave WhatsApp Server (Production) -->
     <record id="bader_inbox_evolution_url" model="ir.config_parameter">
         <field name="key">bader_inbox.evolution_url</field>
-        <field name="value">https://whatsapp.odontowave.com</field>
+        <field name="value">https://whatsapp.bader.es</field>
     </record>
     <!-- Evolution API Key - SESSION_SECRET from server -->
     <record id="bader_inbox_evolution_key" model="ir.config_parameter">

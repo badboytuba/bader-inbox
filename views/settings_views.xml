@@ -8,7 +8,7 @@
             <form string="Configuração API Evolution">
                 <group>
                     <group string="🔗 Conexão Evolution API">
-                        <field name="evolution_url" placeholder="https://whatsapp.odontowave.com"/>
+                        <field name="evolution_url" placeholder="https://whatsapp.bader.es"/>
                         <field name="evolution_key" password="True" placeholder="Sua chave API Evolution"/>
                     </group>
                 </group>
