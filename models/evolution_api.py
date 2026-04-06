@@ -38,7 +38,7 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             "key": params.get_param("bader_inbox.evolution_key", ""),
         }
 
-    def _request(self, method, endpoint, data=None, params=None):
+    def _request(self, method, endpoint, data=None, params=None, timeout=30):
         """Make API request"""
         config = self._get_config()
         base_url = config['url'].rstrip('/')
@@ -46,17 +46,17 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
         url = f"{base_url}{endpoint}"
-        
+
         headers = {
             "apikey": config["key"],
             "Content-Type": "application/json",
         }
-        
+
         _logger.info(f"Evolution API: {method} {url}")
-        
+
         try:
             response = requests.request(
-                method, url, json=data, headers=headers, timeout=30,
+                method, url, json=data, headers=headers, timeout=timeout,
                 params=params,
             )
             response.raise_for_status()
@@ -82,12 +82,12 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
                 "enabled": True,
                 "events": ["messages.upsert", "messages.update", "connection.update", "qrcode.updated"]
             }
-        result = self._request("POST", "/api/instance/create", data)
+        result = self._request("POST", "/api/instance/create", data, timeout=90)
         return {"success": "instance" in result or "instanceName" in result, **result}
 
     def delete_instance(self, instance_name):
         """Delete WhatsApp instance"""
-        return self._request("DELETE", f"/api/instance/delete/{instance_name}")
+        return self._request("DELETE", f"/api/instance/delete/{instance_name}", timeout=60)
 
 
     def get_qrcode(self, instance_name):

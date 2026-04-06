@@ -97,46 +97,56 @@ class BaderInboxChannel(models.Model):
         rec = self.sudo()  # bypass record rules for channel writes
         try:
             api = self.env["bader.inbox.evolution_api"]
-            
+
             # Generate instance name
             instance_name = f"bader_{self.id}_{self.name.lower().replace(' ', '_')}"
             rec.evolution_instance_name = instance_name
-            
+
             # Generate webhook URL BEFORE creating instance
             base_url = self.env["ir.config_parameter"].sudo().get_param("web.base.url")
-            
+
             # Generate or reuse token
             if not rec.webhook_token:
                 rec.webhook_token = str(uuid.uuid4())
-                
+
             webhook_url = f"{base_url}/bader-inbox/webhook/{self.id}/{rec.webhook_token}"
             rec.webhook_url = webhook_url
-            
+
             # Create instance WITH webhook configured
+            # On timeout, the instance is likely created — QR will arrive via webhook
             result = api.create_instance(instance_name, webhook_url=webhook_url)
-            if not result.get("success"):
+            timed_out = "timed out" in str(result.get("error", "")).lower()
+
+            if not result.get("success") and not timed_out:
                 raise UserError(_("Failed to create instance: %s") % result.get("error"))
-            
-            # Also try set_webhook as fallback for older API versions
-            try:
-                api.set_webhook(instance_name, webhook_url)
-            except Exception:
-                pass  # Ignore - webhook was already set during creation
-            
-            # Get QR code
-            qr_result = api.get_qrcode(instance_name)
-            if qr_result.get("qrcode"):
-                rec.qrcode_base64 = qr_result["qrcode"]
-                rec.state = "qr_ready"
-            else:
-                rec.state = "connecting"
+
+            # Set state to connecting — webhook will upgrade to qr_ready/connected
+            rec.state = "connecting"
+
+            if not timed_out:
+                # Also try set_webhook as fallback for older API versions
+                try:
+                    api.set_webhook(instance_name, webhook_url)
+                except Exception:
+                    pass  # Ignore - webhook was already set during creation
+
+                # Get QR code (non-blocking: if it fails, webhook delivers it)
+                try:
+                    qr_result = api.get_qrcode(instance_name)
+                    if qr_result.get("qrcode"):
+                        rec.qrcode_base64 = qr_result["qrcode"]
+                        rec.state = "qr_ready"
+                except Exception:
+                    _logger.info(f"QR fetch timed out for {instance_name}, waiting for webhook delivery")
 
             # Auto-associate the connecting user to this channel
             if self.env.user not in rec.allowed_user_ids:
                 rec.allowed_user_ids = [(4, self.env.user.id)]
 
             return True
-            
+
+        except UserError:
+            raise
         except Exception as e:
             _logger.error(f"Connection error: {e}")
             rec.state = "error"
@@ -282,47 +292,55 @@ class BaderInboxChannel(models.Model):
         """Manual reconnect: recreate instance and reconfigure webhook."""
         self.ensure_one()
         rec = self.sudo()
-        
+
         if not rec.evolution_instance_name:
             # No instance name yet — use normal connect flow
             return self.action_connect()
-        
+
         api = self.env["bader.inbox.evolution_api"]
-        
+
         # Try to delete old instance (ignore errors)
         try:
             api.delete_instance(rec.evolution_instance_name)
         except Exception:
             pass
-        
+
         # Recreate
         try:
             result = api.create_instance(
                 rec.evolution_instance_name,
                 webhook_url=rec.webhook_url
             )
-            if result.get("success") is False:
+            timed_out = "timed out" in str(result.get("error", "")).lower()
+
+            if result.get("success") is False and not timed_out:
                 raise UserError(
                     _("Failed to recreate instance: %s") % result.get("error")
                 )
-            
-            # Set webhook
-            try:
-                api.set_webhook(rec.evolution_instance_name, rec.webhook_url)
-            except Exception:
-                pass
-            
-            # Get QR code
-            qr_result = api.get_qrcode(rec.evolution_instance_name)
-            if qr_result.get("qrcode"):
-                rec.qrcode_base64 = qr_result["qrcode"]
-                rec.state = "qr_ready"
-            else:
-                rec.state = "connecting"
-            
+
+            rec.state = "connecting"
+
+            if not timed_out:
+                # Set webhook
+                try:
+                    api.set_webhook(rec.evolution_instance_name, rec.webhook_url)
+                except Exception:
+                    pass
+
+                # Get QR code (non-blocking)
+                try:
+                    qr_result = api.get_qrcode(rec.evolution_instance_name)
+                    if qr_result.get("qrcode"):
+                        rec.qrcode_base64 = qr_result["qrcode"]
+                        rec.state = "qr_ready"
+                except Exception:
+                    _logger.info(f"QR fetch timed out for {rec.evolution_instance_name}, waiting for webhook")
+
             rec.reconnect_attempts = 0
             rec.health_status = "ok"
-            
+
+        except UserError:
+            raise
         except Exception as e:
             _logger.error(f"Manual reconnect error: {e}")
             rec.state = "error"
