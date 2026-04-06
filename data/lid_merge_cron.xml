@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Resolve LID-based conversations and merge duplicates — every 10 minutes -->
+    <record id="ir_cron_lid_merge" model="ir.cron">
+        <field name="name">Bader Inbox: LID Merge &amp; Resolve</field>
+        <field name="model_id" ref="model_bader_inbox_conversation"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_lid_merge()</field>
+        <field name="interval_number">10</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+        <field name="priority">15</field>
+    </record>
+</odoo>

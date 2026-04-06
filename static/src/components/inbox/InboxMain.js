@@ -239,23 +239,35 @@ export class BaderInboxMain extends Component {
         onMounted(() => {
             this.busService.addEventListener("notification", this._boundBusHandler);
 
-
-            // Reduced polling intervals (now mostly for fallback/sync)
+            // Fallback polling (bus handles real-time, polling is safety net)
             this.conversationPollInterval = setInterval(() => {
-                this._refreshConversations();
+                if (!document.hidden) this._refreshConversations();
             }, 60000); // 60s fallback
 
             this.messagePollInterval = setInterval(() => {
-                // Keep checking messages occasionally just in case
-                if (this.state.selectedConversation) {
+                if (!document.hidden && this.state.selectedConversation) {
                     this._refreshMessages(this.state.selectedConversation.id);
                 }
             }, 30000); // 30s fallback
+
+            // Refresh when tab becomes visible again
+            this._boundVisibilityHandler = () => {
+                if (!document.hidden) {
+                    this._refreshConversations();
+                    if (this.state.selectedConversation) {
+                        this._refreshMessages(this.state.selectedConversation.id);
+                    }
+                }
+            };
+            document.addEventListener("visibilitychange", this._boundVisibilityHandler);
         });
 
         onWillUnmount(() => {
             this.stopQRPolling();
             this.busService.removeEventListener("notification", this._boundBusHandler);
+            if (this._boundVisibilityHandler) {
+                document.removeEventListener("visibilitychange", this._boundVisibilityHandler);
+            }
             if (this.conversationPollInterval) clearInterval(this.conversationPollInterval);
             if (this.messagePollInterval) clearInterval(this.messagePollInterval);
         });
@@ -3508,6 +3520,18 @@ export class BaderInboxMain extends Component {
                         msg.status = payload.status;
                     }
                 }
+            } else if (type === "bader_inbox_channel_update") {
+                // Channel connection status changed — refresh channels list
+                if (payload.channel_id && this.state.channels) {
+                    const ch = this.state.channels.find(c => c.id === payload.channel_id);
+                    if (ch) {
+                        ch.state = payload.state;
+                        if (payload.phone) ch.phone = payload.phone;
+                        if (payload.phone_name) ch.phone_name = payload.phone_name;
+                    }
+                }
+                // Refresh channels from server for complete data
+                this.loadChannels();
             } else if (type === "bader_inbox_message_edited") {
                 // Message was edited — update content in-place
                 refreshConversations = true;

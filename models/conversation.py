@@ -1097,6 +1097,100 @@ class BaderInboxConversation(models.Model):
 
         return convs.sorted("last_message_date", reverse=True)[:limit].read(fields_list)
 
+    # ── LID Merge Cron ─────────────────────────────────────────────
+
+    @api.model
+    def cron_lid_merge(self):
+        """Resolve LID-based conversations and merge duplicates.
+
+        Finds conversations whose phone looks like a LID number (very long
+        numeric string, typically >12 digits, not a valid phone).
+        For each, queries the Evolution API LID cache to try to resolve
+        the real phone number. If a conversation with the real phone already
+        exists on the same channel, merges messages into it.
+        """
+        import json
+
+        # LID numbers are typically 15+ digit numeric strings
+        # Real phone numbers are 7-15 digits
+        self.env.cr.execute("""
+            SELECT id, phone, channel_id, whatsapp_id
+            FROM bader_inbox_conversation
+            WHERE is_group = FALSE
+              AND LENGTH(phone) > 15
+              AND phone ~ '^[0-9]+$'
+        """)
+        lid_convs = self.env.cr.dictfetchall()
+
+        if not lid_convs:
+            return
+
+        _logger.info(f"LID merge cron: found {len(lid_convs)} LID-based conversations to check")
+
+        # Try to resolve via Odoo's LID cache (ir.config_parameter)
+        params = self.env["ir.config_parameter"].sudo()
+        raw_cache = params.get_param("bader_inbox.lid_phone_cache", "{}")
+        try:
+            lid_cache = json.loads(raw_cache) if raw_cache else {}
+        except Exception:
+            lid_cache = {}
+
+        merged = 0
+        resolved = 0
+
+        for row in lid_convs:
+            lid_phone = row["phone"]
+            channel_id = row["channel_id"]
+            conv_id = row["id"]
+
+            # Try cache lookup: LID format is "123456@lid"
+            real_phone = lid_cache.get(f"{lid_phone}@lid")
+
+            if not real_phone:
+                continue
+
+            resolved += 1
+
+            # Check if a conversation with the real phone already exists
+            real_conv = self.search([
+                ("channel_id", "=", channel_id),
+                ("phone", "=", real_phone),
+            ], limit=1)
+
+            if real_conv:
+                # Merge: move all messages from LID conv to real conv
+                self.env.cr.execute("""
+                    UPDATE bader_inbox_message
+                    SET conversation_id = %s
+                    WHERE conversation_id = %s
+                """, [real_conv.id, conv_id])
+
+                # Delete the LID conversation
+                self.env.cr.execute("""
+                    DELETE FROM bader_inbox_conversation WHERE id = %s
+                """, [conv_id])
+
+                merged += 1
+                _logger.info(
+                    f"LID merge: merged conversation {conv_id} "
+                    f"(LID {lid_phone}) into {real_conv.id} (phone {real_phone})"
+                )
+            else:
+                # No duplicate — just update the phone to the real number
+                self.env.cr.execute("""
+                    UPDATE bader_inbox_conversation
+                    SET phone = %s, whatsapp_id = %s, write_date = NOW() AT TIME ZONE 'UTC'
+                    WHERE id = %s
+                """, [real_phone, f"{real_phone}@s.whatsapp.net", conv_id])
+                _logger.info(
+                    f"LID resolve: updated conversation {conv_id} "
+                    f"phone {lid_phone} → {real_phone}"
+                )
+
+        if resolved > 0:
+            self.env.cr.commit()
+            _logger.info(f"LID merge cron done: {resolved} resolved, {merged} merged")
+
 
 class BaderInboxTag(models.Model):
     """Conversation tags — optionally synced to res.partner.category"""

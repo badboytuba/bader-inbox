@@ -198,35 +198,34 @@ class BaderInboxChannel(models.Model):
     @api.model
     def cron_health_check(self):
         """Cron job: verify Evolution API instances and auto-reconnect.
-        
+
         Called every 5 minutes. For each channel that should be connected,
         checks if the Evolution API instance still exists (it may have been
         lost after an API server restart). If lost, recreates the instance
         and reconfigures the webhook automatically.
+
+        Also auto-recovers disconnected channels (max 3 attempts before giving up).
         """
-        # Channels that SHOULD be connected
+        api = self.env["bader.inbox.evolution_api"]
+        now = fields.Datetime.now()
+
+        # 1) Channels that SHOULD be connected
         channels = self.search([
             ("state", "in", ["connected", "connecting", "qr_ready"]),
             ("evolution_instance_name", "!=", False),
         ])
-        
-        if not channels:
-            return
-        
-        api = self.env["bader.inbox.evolution_api"]
-        now = fields.Datetime.now()
-        
+
         for channel in channels:
             try:
                 instance_name = channel.evolution_instance_name
                 webhook_url = channel.webhook_url
-                
+
                 if not instance_name or not webhook_url:
                     continue
-                
+
                 # Use ensure_instance to check and recreate if needed
                 result = api.ensure_instance(instance_name, webhook_url)
-                
+
                 if result.get("error"):
                     _logger.warning(
                         f"Health check failed for channel {channel.name} "
@@ -245,7 +244,7 @@ class BaderInboxChannel(models.Model):
                     )
                 else:
                     self._health_check_update_raw(channel.id, now, "ok", 0)
-                    
+
             except Exception as e:
                 _logger.error(
                     f"Health check error for channel {channel.name}: {e}",
@@ -253,6 +252,43 @@ class BaderInboxChannel(models.Model):
                 )
                 try:
                     self._health_check_update_raw(channel.id, now, "error")
+                except Exception:
+                    pass
+
+        # 2) Auto-recover disconnected channels (max 3 attempts)
+        disconnected = self.search([
+            ("state", "=", "disconnected"),
+            ("evolution_instance_name", "!=", False),
+            ("webhook_url", "!=", False),
+            ("reconnect_attempts", "<", 3),
+        ])
+        for channel in disconnected:
+            try:
+                _logger.info(
+                    f"Auto-recovery: attempting reconnect for channel "
+                    f"{channel.name} (#{channel.id}), attempt {channel.reconnect_attempts + 1}"
+                )
+                result = api.ensure_instance(
+                    channel.evolution_instance_name, channel.webhook_url
+                )
+                if result.get("error"):
+                    self._health_check_update_raw(
+                        channel.id, now, "error",
+                        channel.reconnect_attempts + 1,
+                    )
+                else:
+                    self._health_check_update_raw(
+                        channel.id, now, "warning",
+                        channel.reconnect_attempts + 1,
+                        state="connecting",
+                    )
+            except Exception as e:
+                _logger.error(f"Auto-recovery error for channel {channel.name}: {e}")
+                try:
+                    self._health_check_update_raw(
+                        channel.id, now, "error",
+                        channel.reconnect_attempts + 1,
+                    )
                 except Exception:
                     pass
 

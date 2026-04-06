@@ -42,6 +42,7 @@
         "data/scheduled_message_cron.xml",
         "data/campaign_cron.xml",
         "data/message_sync_cron.xml",
+        "data/lid_merge_cron.xml",
     ],
 
     "assets": {

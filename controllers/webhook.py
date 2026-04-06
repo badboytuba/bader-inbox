@@ -1546,6 +1546,21 @@ class BaderInboxWebhook(http.Controller):
             
             channel.sudo().write(update_vals)
             _logger.info(f"Channel {channel.id} state updated to {new_state}")
+
+            # Push channel status change to UI via bus
+            try:
+                request.env["bus.bus"]._sendone(
+                    "bader_inbox", "bader_inbox_channel_update",
+                    {
+                        "channel_id": channel.id,
+                        "state": new_state,
+                        "phone": update_vals.get("phone"),
+                        "phone_name": update_vals.get("phone_name"),
+                    }
+                )
+            except Exception:
+                pass
+
             return _json_ok()
         except Exception as e:
             _logger.error(f"Connection update error: {e}", exc_info=True)
