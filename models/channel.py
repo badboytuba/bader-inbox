@@ -189,7 +189,8 @@ class BaderInboxChannel(models.Model):
                     rec.phone = status["phone"]
                 if status.get("name"):
                     rec.phone_name = status["name"]
-            else:
+            elif rec.state not in ("qr_ready", "connecting"):
+                # Don't overwrite qr_ready/connecting — the QR flow is in progress
                 rec.state = "disconnected"
 
     # ── Health Check & Auto-Reconnect ──────────────────────────────

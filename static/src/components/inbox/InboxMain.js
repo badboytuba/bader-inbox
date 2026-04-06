@@ -794,19 +794,7 @@ export class BaderInboxMain extends Component {
         if (!this.state.currentChannelId) return;
 
         try {
-            // Actively check connection status via Evolution API
-            // (don't rely solely on webhook)
-            try {
-                await this.orm.call(
-                    "bader.inbox.channel",
-                    "action_check_status",
-                    [this.state.currentChannelId]
-                );
-            } catch (e) {
-                // Ignore — channel may not have instance yet
-            }
-
-            // Get updated channel with QR code and state
+            // Read QR and state from DB (webhook keeps these updated)
             const channels = await this.orm.searchRead(
                 "bader.inbox.channel",
                 [["id", "=", this.state.currentChannelId]],
