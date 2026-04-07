@@ -601,9 +601,13 @@ class BaderInboxWebhook(http.Controller):
             if not key.get("senderPn") and msg_obj.get("senderPn"):
                 key["senderPn"] = msg_obj["senderPn"]
             phone, whatsapp_id, phone_source, group_info = self._extract_phone_info(key)
-            
+
             if not phone:
-                _logger.warning("No phone extracted")
+                # Only warn if this wasn't an expected skip (newsletter, broadcast, status)
+                remote_jid = key.get("remoteJid", "")
+                skip_suffixes = ("@newsletter", "@broadcast", "@status")
+                if not any(remote_jid.endswith(s) for s in skip_suffixes):
+                    _logger.warning(f"No phone extracted from JID: {remote_jid}")
                 return _json_error("No phone number")
             
             is_group = group_info is not None
