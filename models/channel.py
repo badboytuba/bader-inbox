@@ -166,32 +166,58 @@ class BaderInboxChannel(models.Model):
             rec.state = "disconnected"
 
     def action_refresh_qr(self):
-        """Refresh QR code"""
+        """Refresh QR code. If instance is dead (dropped from memory after
+        exhausting QR retries), the /qrcode endpoint auto-revives it.
+        If still no QR after revive, try a full reconnect."""
         self.ensure_one()
         rec = self.sudo()
-        if rec.evolution_instance_name:
-            api = self.env["bader.inbox.evolution_api"]
-            qr_result = api.get_qrcode(rec.evolution_instance_name)
-            if qr_result.get("qrcode"):
-                rec.qrcode_base64 = qr_result["qrcode"]
-                rec.state = "qr_ready"
+        if not rec.evolution_instance_name:
+            return self.action_connect()
+
+        api = self.env["bader.inbox.evolution_api"]
+        qr_result = api.get_qrcode(rec.evolution_instance_name)
+
+        if qr_result.get("qrcode"):
+            rec.qrcode_base64 = qr_result["qrcode"]
+            rec.state = "qr_ready"
+            return True
+
+        # QR not available — the API may have started reviving the instance.
+        # Wait briefly and retry once.
+        import time
+        time.sleep(4)
+        qr_result = api.get_qrcode(rec.evolution_instance_name)
+        if qr_result.get("qrcode"):
+            rec.qrcode_base64 = qr_result["qrcode"]
+            rec.state = "qr_ready"
+            return True
+
+        # Still nothing — force full reconnect
+        _logger.info(
+            f"QR refresh failed for {rec.evolution_instance_name}, "
+            f"attempting full reconnect"
+        )
+        return self.action_reconnect()
 
     def action_check_status(self):
-        """Check connection status"""
+        """Check connection status. If the API reports the instance needs
+        reviving (in DB but not in memory), trigger a reconnect."""
         self.ensure_one()
         rec = self.sudo()
-        if rec.evolution_instance_name:
-            api = self.env["bader.inbox.evolution_api"]
-            status = api.get_instance_status(rec.evolution_instance_name)
-            if status.get("connected"):
-                rec.state = "connected"
-                if status.get("phone"):
-                    rec.phone = status["phone"]
-                if status.get("name"):
-                    rec.phone_name = status["name"]
-            elif rec.state not in ("qr_ready", "connecting"):
-                # Don't overwrite qr_ready/connecting — the QR flow is in progress
-                rec.state = "disconnected"
+        if not rec.evolution_instance_name:
+            return
+
+        api = self.env["bader.inbox.evolution_api"]
+        status = api.get_instance_status(rec.evolution_instance_name)
+
+        if status.get("connected"):
+            rec.state = "connected"
+            if status.get("phone"):
+                rec.phone = status["phone"]
+            if status.get("name"):
+                rec.phone_name = status["name"]
+        elif status.get("status") == "disconnected" and rec.state not in ("qr_ready", "connecting"):
+            rec.state = "disconnected"
 
     # ── Health Check & Auto-Reconnect ──────────────────────────────
 
