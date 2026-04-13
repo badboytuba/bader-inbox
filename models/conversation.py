@@ -432,9 +432,13 @@ class BaderInboxConversation(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        now = fields.Datetime.now()
         for vals in vals_list:
             if vals.get("phone"):
                 vals["phone"] = self._clean_phone(vals["phone"])
+            # Ensure last_message_date is never NULL so sorting works correctly
+            if not vals.get("last_message_date"):
+                vals["last_message_date"] = now
         return super().create(vals_list)
 
 
