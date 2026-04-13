@@ -444,13 +444,36 @@ class BaderInboxConversation(models.Model):
 
     @api.model
     def _find_partner_by_phone(self, phone):
-        """Search res.partner by phone number (last 9 digits for flexible matching)."""
+        """Search res.partner by phone number with multiple matching strategies.
+
+        Tries progressively shorter suffixes so different formats all match:
+          DB has +54 9 11 2233-4455, webhook sends 5491122334455 → match on last 10 digits.
+        """
         if not phone:
             return self.env["res.partner"].browse()
-        search_phone = phone[-9:] if len(phone) > 9 else phone
-        return self.env["res.partner"].search([
-            "|", ("phone", "ilike", search_phone), ("mobile", "ilike", search_phone)
+        Partner = self.env["res.partner"]
+        clean = self._clean_phone(phone)
+        if not clean:
+            return Partner.browse()
+
+        # Strategy 1: exact match on cleaned digits
+        partner = Partner.search([
+            "|", ("phone", "ilike", clean), ("mobile", "ilike", clean)
         ], limit=1)
+        if partner:
+            return partner
+
+        # Strategy 2: try last 10 digits (covers country-code differences)
+        for suffix_len in (10, 9, 8):
+            if len(clean) > suffix_len:
+                suffix = clean[-suffix_len:]
+                partner = Partner.search([
+                    "|", ("phone", "ilike", suffix), ("mobile", "ilike", suffix)
+                ], limit=1)
+                if partner:
+                    return partner
+
+        return Partner.browse()
 
     @api.model
     def get_or_create(self, channel_id, phone, whatsapp_id=None, contact_name=None,
@@ -521,7 +544,10 @@ class BaderInboxConversation(models.Model):
             if not is_group and not conversation.partner_id:
                 partner = self._find_partner_by_phone(phone)
                 if partner:
-                    conversation.partner_id = partner
+                    conversation.write({
+                        "partner_id": partner.id,
+                        "contact_name": partner.name,
+                    })
                     _logger.info(f"Auto-linked partner {partner.id} ({partner.name}) to conversation {conversation.id}")
             # For groups: never overwrite contact_name with sender pushName
             # Only update contact_name for individual chats
@@ -545,12 +571,15 @@ class BaderInboxConversation(models.Model):
         """Bulk fix: link res.partner to all existing conversations without partner_id.
         Call this once to fix historical data. Can be run from Odoo shell or scheduled action.
         """
-        unlinked = self.search([("partner_id", "=", False)])
+        unlinked = self.search([("partner_id", "=", False), ("is_group", "=", False)])
         linked_count = 0
         for conv in unlinked:
             partner = self._find_partner_by_phone(conv.phone)
             if partner:
-                conv.partner_id = partner
+                conv.write({
+                    "partner_id": partner.id,
+                    "contact_name": partner.name,
+                })
                 linked_count += 1
         _logger.info(f"auto_link_partners: linked {linked_count}/{len(unlinked)} conversations")
         return {"linked": linked_count, "total": len(unlinked)}
@@ -599,53 +628,57 @@ class BaderInboxConversation(models.Model):
         """Find or create conversation by phone - used by PhoneWhatsAppWidget"""
         if not phone:
             return {"success": False, "error": "No phone number provided"}
-        
-        # Clean phone number
+
         clean_phone = self._clean_phone(phone)
-        
-        # Find existing conversation with this phone
-        conversation = self.search([
-            ("phone", "ilike", clean_phone)
-        ], limit=1)
-        
+
+        # Resolve the partner upfront (explicit id takes priority, then search)
+        partner = None
+        if partner_id:
+            partner = self.env["res.partner"].browse(partner_id)
+            if not partner.exists():
+                partner = None
+        if not partner:
+            partner = self._find_partner_by_phone(clean_phone)
+
+        # Find existing conversation (try exact, then suffix match)
+        conversation = self.search([("phone", "=", clean_phone)], limit=1)
         if not conversation:
-            # Get the default/first active channel
-            channel = self.env["bader.inbox.channel"].search([
-                ("state", "=", "connected")
-            ], limit=1)
-            
-            if not channel:
-                channel = self.env["bader.inbox.channel"].search([], limit=1)
-            
+            # Suffix fallback: last 10 digits ilike
+            suffix = clean_phone[-10:] if len(clean_phone) > 10 else clean_phone
+            conversation = self.search([("phone", "ilike", suffix)], limit=1)
+
+        if conversation:
+            # Existing conversation: ensure partner is linked
+            if partner and not conversation.partner_id:
+                conversation.write({
+                    "partner_id": partner.id,
+                    "contact_name": partner.name,
+                })
+                _logger.info(
+                    "Auto-linked partner %s (%s) to existing conversation %s",
+                    partner.id, partner.name, conversation.id,
+                )
+        else:
+            # Need to create — get a channel first
+            channel = self.env["bader.inbox.channel"].search(
+                [("state", "=", "connected")], limit=1
+            ) or self.env["bader.inbox.channel"].search([], limit=1)
             if not channel:
                 return {"success": False, "error": "No WhatsApp channel available"}
-            
-            # Try to get partner data
-            partner = None
-            if partner_id:
-                partner = self.env["res.partner"].browse(partner_id)
-                if not partner.exists():
-                    partner = None
-            
-            if not partner and phone:
-                partner = self.env["res.partner"].search([
-                    "|", ("phone", "ilike", clean_phone), ("mobile", "ilike", clean_phone)
-                ], limit=1)
-            
-            # Create conversation
+
             conversation = self.create({
                 "channel_id": channel.id,
                 "phone": clean_phone,
                 "contact_name": contact_name or (partner.name if partner else ""),
                 "partner_id": partner.id if partner else False,
             })
-        
+
         return {
             "success": True,
             "conversation_id": conversation.id,
             "channel_id": conversation.channel_id.id,
             "phone": conversation.phone,
-            "contact_name": conversation.contact_name,
+            "contact_name": conversation.computed_name,
             "partner_id": conversation.partner_id.id if conversation.partner_id else False,
         }
 
