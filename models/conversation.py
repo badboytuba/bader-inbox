@@ -249,7 +249,6 @@ class BaderInboxConversation(models.Model):
                         _logger.warning("Tag sync on partner link failed for tag '%s': %s", tag.name, e)
 
 
-    
     # Notes (internal)
     note_ids = fields.One2many(
         "bader.inbox.note", "conversation_id", string="Internal Notes"
@@ -360,12 +359,13 @@ class BaderInboxConversation(models.Model):
             pic = info.get("profilePictureUrl") or info.get("picture") or ""
             if pic:
                 vals["group_pic_url"] = pic
-            # Count members from size field
-            size = info.get("size") or info.get("participants", [])
-            if isinstance(size, int) and size > 0:
+            # Count members from size field (don't use `or` — size=0 is falsy)
+            size = info.get("size")
+            participants = info.get("participants", [])
+            if isinstance(size, int) and size >= 0:
                 vals["member_count"] = size
-            elif isinstance(size, list):
-                vals["member_count"] = len(size)
+            elif isinstance(participants, list) and participants:
+                vals["member_count"] = len(participants)
             if vals:
                 self.write(vals)
                 _logger.info(f"Auto-synced group {self.group_jid}: {vals.get('group_subject', '?')}")

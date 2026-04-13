@@ -41,6 +41,8 @@ export class BaderInboxMain extends Component {
             // Messages
             messages: [],
             loadingMessages: false,
+            hasMoreMessages: false,      // F2: pagination
+            loadingOlderMessages: false, // F2: loading previous page
             composerText: "",
             sendingMessage: false,
 
@@ -61,11 +63,15 @@ export class BaderInboxMain extends Component {
             emojiCategory: "people",
             emojiSearch: "",
 
-            // Message Search
+            // Message Search (#9 advanced)
             showMessageSearch: false,
             messageSearchQuery: "",
             messageSearchResults: [],
             messageSearchIndex: -1,
+            msgSearchType: "",       // "" | "text" | "image" | "audio" | "video" | "document"
+            msgSearchDirection: "",  // "" | "in" | "out"
+            msgSearchDateFrom: "",   // "YYYY-MM-DD"
+            msgSearchDateTo: "",
 
             // Drag & Drop
             isDragOver: false,
@@ -130,6 +136,16 @@ export class BaderInboxMain extends Component {
             replyingTo: null,
             showReactionPicker: null,
 
+            // F3: Quick internal notes toggle
+            isNoteMode: false,
+
+            // F7: Forward message modal
+            showForwardModal: false,
+            forwardingMsg: null,
+            forwardSearch: "",
+            forwardResults: [],
+            forwardingTo: null,  // conversation being forwarded to
+
             // Dashboard (F20/F21/F23)
             dashboardData: null,
             loadingDashboard: false,
@@ -137,6 +153,11 @@ export class BaderInboxMain extends Component {
             // F9: Voice Recording
             isRecording: false,
             recordingTime: 0,
+            audioPreviewUrl: null,   // object URL for preview player
+            sendingAudio: false,     // sending in progress
+
+            // F18: Typing indicators — Set of conversation IDs where contact is composing
+            typingConversations: new Set(),
 
             // Channels
             channels: [],
@@ -213,9 +234,12 @@ export class BaderInboxMain extends Component {
         this.messagePollInterval = null;
         this._notificationsEnabled = false;
         this._boundBusHandler = this._onBusNotification.bind(this);
+        this._typingTimers = {};  // F18: {conversationId: timeoutId}
 
         onWillStart(async () => {
             this.busService.addChannel("bader_inbox");
+            // #10: Restore persisted UI state before loading data
+            this._restoreUIState();
             await this.loadChannels();
             await this.loadConversations();
             this._loadSharedCount();
@@ -233,6 +257,10 @@ export class BaderInboxMain extends Component {
                 await this.openConversationById(params.conversation_id);
             } else if (params.phone) {
                 await this.openConversationByPhone(params.phone);
+            } else {
+                // #10: Re-open last conversation if no explicit param
+                const lastConvId = this._getPersistedState("lastConversationId");
+                if (lastConvId) await this.openConversationById(parseInt(lastConvId, 10));
             }
         });
 
@@ -270,6 +298,8 @@ export class BaderInboxMain extends Component {
             }
             if (this.conversationPollInterval) clearInterval(this.conversationPollInterval);
             if (this.messagePollInterval) clearInterval(this.messagePollInterval);
+            // F18: Clear all typing timers
+            Object.values(this._typingTimers || {}).forEach(t => clearTimeout(t));
         });
     }
 
@@ -471,15 +501,34 @@ export class BaderInboxMain extends Component {
         }
     }
 
+    // ──── F2: PAGINATED MESSAGE LOADING ────
+    static MSG_PAGE_SIZE = 50;
+
     async loadMessages(conversationId) {
         if (!conversationId) return;
         this.state.loadingMessages = true;
+        this.state.hasMoreMessages = false;
+        this.state.loadingOlderMessages = false;
         try {
+            const fields = ["id", "direction", "message_type", "content", "status", "create_date",
+                "media_url", "media_mimetype", "media_filename", "link_preview",
+                "detected_language", "translated_content",
+                "quoted_message_id", "quoted_text", "quoted_participant",
+                "is_edited", "author_id", "sender_name", "sender_phone"];
+
+            // Count total messages to know if pagination needed
+            const total = await this.orm.searchCount(
+                "bader.inbox.message",
+                [["conversation_id", "=", conversationId]]
+            );
+            const pageSize = BaderInboxMain.MSG_PAGE_SIZE;
+            const offset = Math.max(0, total - pageSize);
+
             const messages = await this.orm.searchRead(
                 "bader.inbox.message",
                 [["conversation_id", "=", conversationId]],
-                ["id", "direction", "message_type", "content", "status", "create_date", "media_url", "media_mimetype", "media_filename", "link_preview", "detected_language", "translated_content", "quoted_message_id", "quoted_text", "quoted_participant", "is_edited", "author_id", "sender_name", "sender_phone"],
-                { order: "create_date asc" }
+                fields,
+                { order: "create_date asc", limit: pageSize, offset }
             );
 
             // Load internal notes and merge into timeline
@@ -493,7 +542,6 @@ export class BaderInboxMain extends Component {
                 );
             } catch (_) { /* notes table may not exist yet */ }
 
-            // Tag each item with _type for rendering
             const taggedMessages = messages.map(m => ({ ...m, _type: "message" }));
             const taggedNotes = notes.map(n => ({
                 ...n,
@@ -502,10 +550,14 @@ export class BaderInboxMain extends Component {
                 _noteId: n.id,
             }));
 
-            // Merge and sort by create_date
-            this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) => {
-                return (a.create_date || "").localeCompare(b.create_date || "");
-            });
+            this.state.messages = [...taggedMessages, ...taggedNotes].sort((a, b) =>
+                (a.create_date || "").localeCompare(b.create_date || "")
+            );
+
+            // Track pagination state
+            this.state.hasMoreMessages = offset > 0;
+            this._msgPaginationOffset = offset;
+            this._msgPaginationConvId = conversationId;
 
             await this.orm.call("bader.inbox.conversation", "mark_as_read", [conversationId]);
 
@@ -517,6 +569,57 @@ export class BaderInboxMain extends Component {
             console.error("Error loading messages:", e);
         }
         this.state.loadingMessages = false;
+    }
+
+    async loadOlderMessages() {
+        if (!this.state.hasMoreMessages || this.state.loadingOlderMessages) return;
+        const convId = this._msgPaginationConvId;
+        const currentOffset = this._msgPaginationOffset;
+        if (!convId || currentOffset <= 0) return;
+
+        this.state.loadingOlderMessages = true;
+        try {
+            const pageSize = BaderInboxMain.MSG_PAGE_SIZE;
+            const newOffset = Math.max(0, currentOffset - pageSize);
+            const fields = ["id", "direction", "message_type", "content", "status", "create_date",
+                "media_url", "media_mimetype", "media_filename", "link_preview",
+                "detected_language", "translated_content",
+                "quoted_message_id", "quoted_text", "quoted_participant",
+                "is_edited", "author_id", "sender_name", "sender_phone"];
+
+            const olderMessages = await this.orm.searchRead(
+                "bader.inbox.message",
+                [["conversation_id", "=", convId]],
+                fields,
+                { order: "create_date asc", limit: pageSize, offset: newOffset }
+            );
+
+            const tagged = olderMessages.map(m => ({ ...m, _type: "message" }));
+            // Merge: prepend older messages, avoid duplicates
+            const existingIds = new Set(this.state.messages.map(m => m.id));
+            const newOnes = tagged.filter(m => !existingIds.has(m.id));
+
+            // Save scroll position to restore after prepend
+            const container = this.messagesRef.el;
+            const prevScrollHeight = container ? container.scrollHeight : 0;
+
+            this.state.messages = [...newOnes, ...this.state.messages].sort((a, b) =>
+                (a.create_date || "").localeCompare(b.create_date || "")
+            );
+
+            this._msgPaginationOffset = newOffset;
+            this.state.hasMoreMessages = newOffset > 0;
+
+            // Restore scroll position so view doesn't jump to top
+            setTimeout(() => {
+                if (container) {
+                    container.scrollTop = container.scrollHeight - prevScrollHeight;
+                }
+            }, 50);
+        } catch (e) {
+            console.error("Error loading older messages:", e);
+        }
+        this.state.loadingOlderMessages = false;
     }
 
     async _refreshMessages(conversationId) {
@@ -866,6 +969,7 @@ export class BaderInboxMain extends Component {
 
     setFilter(filter) {
         this.state.filter = filter;
+        this._persistUIState("filter", filter); // #10
         this.loadConversations();
     }
 
@@ -1134,8 +1238,8 @@ export class BaderInboxMain extends Component {
             content = await this._resolveTemplateVars(content);
         }
 
-        // Check if this is an @mention internal note
-        if (this.state.mentionedUsers.length > 0 && !this.state.attachment) {
+        // F3: Quick internal note mode (or @mention note)
+        if (this.state.isNoteMode || (this.state.mentionedUsers.length > 0 && !this.state.attachment)) {
             return this._sendMentionNote(content);
         }
 
@@ -1223,6 +1327,18 @@ export class BaderInboxMain extends Component {
         this.state.sendingMessage = false;
     }
 
+    toggleNoteMode() {
+        this.state.isNoteMode = !this.state.isNoteMode;
+        if (!this.state.isNoteMode) {
+            this.state.mentionedUsers = [];
+        }
+        // Focus composer
+        setTimeout(() => {
+            const ta = this.composerRef.el;
+            if (ta) ta.focus();
+        }, 50);
+    }
+
     async _sendMentionNote(content) {
         this.state.sendingMessage = true;
         try {
@@ -1240,15 +1356,16 @@ export class BaderInboxMain extends Component {
             if (result && !result.error) {
                 this.state.composerText = "";
                 this.state.mentionedUsers = [];
+                this.state.isNoteMode = false;
                 const ta = this.composerRef.el;
                 if (ta) ta.style.height = "auto";
                 // Reload messages to show the note inline
                 await this.loadMessages(this.state.selectedConversation.id);
-                const mentionNames = result.mentioned_user_ids.map(u => u[1]).join(", ");
-                this.notification.add(
-                    _t("📝 Nota interna enviada. %s notificado(s).", mentionNames),
-                    { type: "success" }
-                );
+                const mentions = result.mentioned_user_ids || [];
+                const msg = mentions.length
+                    ? _t("📝 Nota interna enviada. %s notificado(s).", mentions.map(u => u[1]).join(", "))
+                    : _t("📝 Nota interna guardada.");
+                this.notification.add(msg, { type: "success" });
             }
         } catch (e) {
             console.error("Error sending mention note:", e);
@@ -1257,30 +1374,66 @@ export class BaderInboxMain extends Component {
         this.state.sendingMessage = false;
     }
 
-    // ──── F15: EXPORT CONVERSATION ────
-    exportConversation() {
-        if (!this.state.selectedConversation || !this.state.messages.length) {
-            this.notification.add(_t("Sem mensagens para exportar"), { type: "warning" });
+    // ──── F19: EXPORT CONVERSATION (full history) ────
+    async exportConversation() {
+        if (!this.state.selectedConversation) {
+            this.notification.add(_t("No hay conversación seleccionada"), { type: "warning" });
             return;
         }
         const conv = this.state.selectedConversation;
         const contactName = conv.computed_name || conv.phone || "Desconhecido";
-        const header = "Data;Direcção;Contacto;Conteúdo\n";
-        const rows = this.state.messages.map(m => {
-            const date = m.create_date || "";
-            const dir = m.direction === "out" ? "Enviado" : "Recebido";
-            const content = (m.content || m.message_type || "").replace(/"/g, '""').replace(/\n/g, ' ');
-            return `"${date}";"${dir}";"${contactName}";"${content}"`;
-        }).join("\n");
-        const csv = "\uFEFF" + header + rows; // UTF-8 BOM for Excel
+        const agentName = conv.assigned_user_id ? conv.assigned_user_id[1] : "";
+
+        // Fetch ALL messages from server (not just in-memory loaded ones)
+        let allMessages = [];
+        try {
+            allMessages = await this.orm.searchRead(
+                "bader.inbox.message",
+                [["conversation_id", "=", conv.id]],
+                ["id", "content", "create_date", "direction", "message_type", "status"],
+                { order: "create_date asc", limit: 0 }
+            );
+        } catch (e) {
+            allMessages = this.state.messages.filter(m => m._type !== "note");
+        }
+
+        if (!allMessages.length) {
+            this.notification.add(_t("Sem mensagens para exportar"), { type: "warning" });
+            return;
+        }
+
+        const typeLabel = {
+            text: "Texto", image: "Imagen", audio: "Audio",
+            video: "Video", document: "Documento", sticker: "Sticker",
+            location: "Ubicación", contact: "Contacto",
+        };
+        const dirLabel = { out: "Enviado", in: "Recibido" };
+
+        // CSV with BOM for Excel compatibility
+        const header = ["Fecha", "Dirección", "Tipo", "Contacto", "Agente", "Contenido", "Estado"];
+        const rows = allMessages.map(m => {
+            const date = (m.create_date || "").replace("T", " ").substring(0, 19);
+            const dir = dirLabel[m.direction] || m.direction || "";
+            const type = typeLabel[m.message_type] || m.message_type || "text";
+            const content = (m.content || m.message_type || "").replace(/"/g, '""').replace(/\n/g, " ");
+            const status = m.status || "";
+            return [date, dir, type, contactName, agentName, content, status]
+                .map(v => `"${v}"`).join(";");
+        });
+        const csv = "\uFEFF" + header.map(h => `"${h}"`).join(";") + "\n" + rows.join("\n");
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `conversa_${contactName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `historial_${contactName.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        this.notification.add(_t("Conversa exportada com sucesso!"), { type: "success" });
+        this.notification.add(
+            _t("Historial exportado: %s mensajes", allMessages.length),
+            { type: "success" }
+        );
     }
 
     triggerFileInput() {
@@ -1551,13 +1704,21 @@ export class BaderInboxMain extends Component {
         const telefono = conv.phone || "";
         const agente = this.user?.name || "";
 
-        // Async fetch: CRM + Presupuesto in parallel
+        // Resolve only vars that appear in the text (avoid unnecessary API calls)
         const needsCrm = text.includes("{crm}");
         const needsPresupuesto = text.includes("{presupuesto}");
+        const needsUltimaCompra = text.includes("{ultima_compra}");
+        const needsMontoPendiente = text.includes("{monto_pendiente}");
+        const needsLinkPago = text.includes("{link_pago}");
+        const needsEstadoPedido = text.includes("{estado_pedido}");
 
-        const [crm, presupuesto] = await Promise.all([
+        const [crm, presupuesto, ultimaCompra, montoPendiente, linkPago, estadoPedido] = await Promise.all([
             needsCrm ? this._resolvePartnerCRM() : Promise.resolve(null),
             needsPresupuesto ? this._resolvePresupuesto() : Promise.resolve(null),
+            needsUltimaCompra ? this._resolveUltimaCompra() : Promise.resolve(null),
+            needsMontoPendiente ? this._resolveMontoPendiente() : Promise.resolve(null),
+            needsLinkPago ? this._resolveLinkPago() : Promise.resolve(null),
+            needsEstadoPedido ? this._resolveEstadoPedido() : Promise.resolve(null),
         ]);
 
         const vars = {
@@ -1567,6 +1728,10 @@ export class BaderInboxMain extends Component {
             "{empresa}": `*Bader*`,
             "{crm}": `*${crm || "N/A"}*`,
             "{presupuesto}": presupuesto || "*N/A*",
+            "{ultima_compra}": ultimaCompra || "*N/A*",
+            "{monto_pendiente}": montoPendiente || "*0,00 €*",
+            "{link_pago}": linkPago || "*N/A*",
+            "{estado_pedido}": estadoPedido || "*N/A*",
         };
 
         let result = text;
@@ -1574,6 +1739,94 @@ export class BaderInboxMain extends Component {
             result = result.replaceAll(key, val);
         }
         return result;
+    }
+
+    /** #17 — Fecha de la última compra confirmada */
+    async _resolveUltimaCompra() {
+        const conv = this.state.selectedConversation;
+        if (!conv?.partner_id) return null;
+        try {
+            const partnerId = Array.isArray(conv.partner_id) ? conv.partner_id[0] : conv.partner_id;
+            const orders = await this.orm.searchRead(
+                "sale.order",
+                [["partner_id", "=", partnerId], ["state", "in", ["sale", "done"]]],
+                ["name", "date_order"],
+                { order: "date_order desc", limit: 1 }
+            );
+            if (!orders.length) return null;
+            const d = new Date(orders[0].date_order);
+            return `${orders[0].name} (${d.toLocaleDateString("es-AR")})`;
+        } catch { return null; }
+    }
+
+    /** #17 — Importe total de facturas pendientes de cobro */
+    async _resolveMontoPendiente() {
+        const conv = this.state.selectedConversation;
+        if (!conv?.partner_id) return null;
+        try {
+            const partnerId = Array.isArray(conv.partner_id) ? conv.partner_id[0] : conv.partner_id;
+            const invoices = await this.orm.searchRead(
+                "account.move",
+                [
+                    ["partner_id", "=", partnerId],
+                    ["move_type", "=", "out_invoice"],
+                    ["payment_state", "in", ["not_paid", "partial"]],
+                    ["state", "=", "posted"],
+                ],
+                ["amount_residual", "currency_id"],
+                { limit: 50 }
+            );
+            if (!invoices.length) return "*0,00 €*";
+            const total = invoices.reduce((s, i) => s + (i.amount_residual || 0), 0);
+            const currency = invoices[0].currency_id?.[1] || "€";
+            return `*${total.toFixed(2)} ${currency}*`;
+        } catch { return null; }
+    }
+
+    /** #17 — Link de pago de la factura más reciente pendiente */
+    async _resolveLinkPago() {
+        const conv = this.state.selectedConversation;
+        if (!conv?.partner_id) return null;
+        try {
+            const partnerId = Array.isArray(conv.partner_id) ? conv.partner_id[0] : conv.partner_id;
+            const invoices = await this.orm.searchRead(
+                "account.move",
+                [
+                    ["partner_id", "=", partnerId],
+                    ["move_type", "=", "out_invoice"],
+                    ["payment_state", "in", ["not_paid", "partial"]],
+                    ["state", "=", "posted"],
+                ],
+                ["name", "access_token", "id"],
+                { order: "invoice_date desc", limit: 1 }
+            );
+            if (!invoices.length) return null;
+            const inv = invoices[0];
+            const host = window.location.host;
+            const token = inv.access_token || "";
+            const url = token
+                ? `${host}/my/invoices/${inv.id}?access_token=${token}`
+                : `${host}/my/invoices/${inv.id}`;
+            return `${inv.name}: ${url}`;
+        } catch { return null; }
+    }
+
+    /** #17 — Estado del pedido de venta más reciente */
+    async _resolveEstadoPedido() {
+        const conv = this.state.selectedConversation;
+        if (!conv?.partner_id) return null;
+        try {
+            const partnerId = Array.isArray(conv.partner_id) ? conv.partner_id[0] : conv.partner_id;
+            const orders = await this.orm.searchRead(
+                "sale.order",
+                [["partner_id", "=", partnerId]],
+                ["name", "state"],
+                { order: "create_date desc", limit: 1 }
+            );
+            if (!orders.length) return null;
+            const labels = { draft: "Borrador", sent: "Enviado", sale: "Confirmado", done: "Completado", cancel: "Cancelado" };
+            return `${orders[0].name} — ${labels[orders[0].state] || orders[0].state}`;
+        } catch { return null; }
     }
 
     /**
@@ -1635,6 +1888,10 @@ export class BaderInboxMain extends Component {
             { key: "empresa", label: "{empresa}", desc: "Nombre de la empresa", icon: "fa-building" },
             { key: "crm", label: "{crm}", desc: "Nº CRM más reciente", icon: "fa-briefcase" },
             { key: "presupuesto", label: "{presupuesto}", desc: "Nº presupuesto más reciente", icon: "fa-file-text-o" },
+            { key: "ultima_compra", label: "{ultima_compra}", desc: "Última compra confirmada", icon: "fa-shopping-cart" },
+            { key: "monto_pendiente", label: "{monto_pendiente}", desc: "Monto total de facturas pendientes", icon: "fa-money" },
+            { key: "link_pago", label: "{link_pago}", desc: "Link de pago de la última factura", icon: "fa-link" },
+            { key: "estado_pedido", label: "{estado_pedido}", desc: "Estado del pedido más reciente", icon: "fa-truck" },
         ];
     }
 
@@ -1744,12 +2001,14 @@ export class BaderInboxMain extends Component {
     selectChannelFromPopover(channelId) {
         this.state.channelFilter = channelId;
         this.state.showChannelPopover = false;
+        this._persistUIState("channelFilter", channelId);
         this.loadConversations();
     }
 
     selectTagFromPopover(tagId) {
         this.state.activeTagFilter = tagId === this.state.activeTagFilter ? null : tagId;
         this.state.showTagPopover = false;
+        this._persistUIState("activeTagFilter", this.state.activeTagFilter);
         this.loadConversations();
     }
 
@@ -1757,6 +2016,71 @@ export class BaderInboxMain extends Component {
     toggleReadStatus(conv) {
         if (!conv) return;
         conv.unread_count = conv.unread_count > 0 ? 0 : 1;
+    }
+
+    // ──── F7: FORWARD MESSAGE ────
+    forwardMessage(msg) {
+        this.state.forwardingMsg = msg;
+        this.state.forwardSearch = "";
+        this.state.forwardResults = [];
+        this.state.forwardingTo = null;
+        this.state.showForwardModal = true;
+        this._searchForwardConversations("");
+    }
+
+    async _searchForwardConversations(q) {
+        const domain = [["state", "=", "open"]];
+        if (q) domain.push(["computed_name", "ilike", q]);
+        if (this.state.channelFilter) domain.push(["channel_id", "=", this.state.channelFilter]);
+        const convs = await this.orm.searchRead(
+            "bader.inbox.conversation",
+            domain,
+            ["id", "computed_name", "phone", "channel_id", "profile_pic_url"],
+            { limit: 20, order: "last_message_date desc" }
+        );
+        this.state.forwardResults = convs.filter(
+            c => c.id !== this.state.selectedConversation?.id
+        );
+    }
+
+    onForwardSearchInput(ev) {
+        this.state.forwardSearch = ev.target.value;
+        clearTimeout(this._forwardSearchTimer);
+        this._forwardSearchTimer = setTimeout(
+            () => this._searchForwardConversations(this.state.forwardSearch),
+            300
+        );
+    }
+
+    async sendForward(targetConv) {
+        const msg = this.state.forwardingMsg;
+        if (!msg || !targetConv) return;
+        this.state.forwardingTo = targetConv.id;
+        try {
+            const content = msg.content || "";
+            await this.orm.call("bader.inbox.message", "send_message", [], {
+                conversation_id: targetConv.id,
+                content: content ? `↪️ ${content}` : "↪️",
+                msg_type: "text",
+            });
+            this.notification.add(
+                _t("Mensaje reenviado a %s", targetConv.computed_name || targetConv.phone),
+                { type: "success" }
+            );
+            this.closeForwardModal();
+        } catch (e) {
+            console.error("Forward error:", e);
+            this.notification.add(_t("Error al reenviar el mensaje"), { type: "danger" });
+        } finally {
+            this.state.forwardingTo = null;
+        }
+    }
+
+    closeForwardModal() {
+        this.state.showForwardModal = false;
+        this.state.forwardingMsg = null;
+        this.state.forwardSearch = "";
+        this.state.forwardResults = [];
     }
 
     // ──── F10: REPLY IN CONTEXT ────
@@ -1771,7 +2095,8 @@ export class BaderInboxMain extends Component {
         this.state.showReactionPicker = this.state.showReactionPicker === msgId ? null : msgId;
     }
 
-    addReaction(msgId, emoji) {
+    async addReaction(msgId, emoji) {
+        // Optimistic update
         const msg = this.state.messages.find(m => m.id === msgId);
         if (msg) {
             if (!msg.reactions) msg.reactions = [];
@@ -1783,19 +2108,17 @@ export class BaderInboxMain extends Component {
             }
         }
         this.state.showReactionPicker = null;
-    }
 
-    // ──── F17: FORWARD MESSAGE ────
-    async forwardMessage(msg) {
-        if (!msg || !msg.content) {
-            this.notification.add(_t("Não é possível encaminhar esta mensagem"), { type: "warning" });
-            return;
-        }
-        try {
-            await navigator.clipboard.writeText(msg.content);
-            this.notification.add(_t("Mensagem copiada! Cole numa outra conversa para encaminhar."), { type: "info" });
-        } catch (e) {
-            this.notification.add(_t("Erro ao copiar mensagem"), { type: "danger" });
+        // Send to WhatsApp via API (only for real messages, not pending/notes)
+        if (typeof msgId === "number") {
+            try {
+                await this.orm.call("bader.inbox.message", "send_reaction", [], {
+                    message_id: msgId,
+                    emoji: emoji,
+                });
+            } catch (e) {
+                console.debug("Reaction send failed (non-critical):", e);
+            }
         }
     }
 
@@ -2140,38 +2463,57 @@ export class BaderInboxMain extends Component {
     async stopVoiceRecording() {
         if (!this._mediaRecorder || this._mediaRecorder.state !== "recording") return;
         return new Promise((resolve) => {
-            this._mediaRecorder.onstop = async () => {
+            this._mediaRecorder.onstop = () => {
                 clearInterval(this._recordingInterval);
                 this.state.isRecording = false;
                 this._cleanupWaveform();
                 const blob = new Blob(this._audioChunks, { type: "audio/webm" });
-                // Convert to base64 and send
-                const reader = new FileReader();
-                reader.onloadend = async () => {
-                    const base64 = reader.result.split(",")[1];
-                    if (this.state.selectedConversation) {
-                        try {
-                            await this.orm.call("bader.inbox.message", "send_message", [], {
-                                conversation_id: this.state.selectedConversation.id,
-                                content: "🎤 Mensagem de voz",
-                                msg_type: "audio",
-                                media_data: base64,
-                            });
-                            this.notification.add(_t("Áudio enviado!"), { type: "success" });
-                        } catch (e) {
-                            this.notification.add(_t("Erro ao enviar áudio"), { type: "danger" });
-                        }
-                    }
-                    // Cleanup
-                    this._mediaRecorder.stream.getTracks().forEach(t => t.stop());
-                    this._mediaRecorder = null;
-                    this._audioChunks = [];
-                    resolve();
-                };
-                reader.readAsDataURL(blob);
+                // Store blob for preview — don't send yet
+                this._pendingAudioBlob = blob;
+                if (this.state.audioPreviewUrl) {
+                    URL.revokeObjectURL(this.state.audioPreviewUrl);
+                }
+                this.state.audioPreviewUrl = URL.createObjectURL(blob);
+                // Release mic tracks now that recording is done
+                this._mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                this._mediaRecorder = null;
+                this._audioChunks = [];
+                resolve();
             };
             this._mediaRecorder.stop();
         });
+    }
+
+    async sendPendingAudio() {
+        if (!this._pendingAudioBlob || !this.state.selectedConversation) return;
+        this.state.sendingAudio = true;
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+            const base64 = reader.result.split(",")[1];
+            try {
+                await this.orm.call("bader.inbox.message", "send_message", [], {
+                    conversation_id: this.state.selectedConversation.id,
+                    content: "🎤 Mensagem de voz",
+                    msg_type: "audio",
+                    media_data: base64,
+                });
+                this.notification.add(_t("Áudio enviado!"), { type: "success" });
+            } catch (e) {
+                this.notification.add(_t("Erro ao enviar áudio"), { type: "danger" });
+            } finally {
+                this.discardAudioPreview();
+                this.state.sendingAudio = false;
+            }
+        };
+        reader.readAsDataURL(this._pendingAudioBlob);
+    }
+
+    discardAudioPreview() {
+        if (this.state.audioPreviewUrl) {
+            URL.revokeObjectURL(this.state.audioPreviewUrl);
+            this.state.audioPreviewUrl = null;
+        }
+        this._pendingAudioBlob = null;
     }
 
     cancelVoiceRecording() {
@@ -2238,6 +2580,37 @@ export class BaderInboxMain extends Component {
         this._notificationsEnabled = "Notification" in window && Notification.permission === "granted";
     }
 
+    // ──── #10: UI STATE PERSISTENCE ────
+    _storageKey(key) { return `bader_inbox_ui_${this.user?.userId || 0}_${key}`; }
+
+    _persistUIState(key, value) {
+        try {
+            if (value === null || value === undefined) {
+                sessionStorage.removeItem(this._storageKey(key));
+            } else {
+                sessionStorage.setItem(this._storageKey(key), JSON.stringify(value));
+            }
+        } catch (_e) { /* storage not available */ }
+    }
+
+    _getPersistedState(key) {
+        try {
+            const raw = sessionStorage.getItem(this._storageKey(key));
+            return raw !== null ? JSON.parse(raw) : null;
+        } catch (_e) { return null; }
+    }
+
+    _restoreUIState() {
+        const channelFilter = this._getPersistedState("channelFilter");
+        if (channelFilter !== null) this.state.channelFilter = channelFilter;
+        const tagFilter = this._getPersistedState("activeTagFilter");
+        if (tagFilter !== null) this.state.activeTagFilter = tagFilter;
+        const activeTab = this._getPersistedState("activeTab");
+        if (activeTab) this.state.activeTab = activeTab;
+        const filter = this._getPersistedState("filter");
+        if (filter) this.state.filter = filter;
+    }
+
     _showDesktopNotification(title, body, conversationId) {
         if (!this._notificationsEnabled || document.hasFocus()) return;
         try {
@@ -2263,6 +2636,8 @@ export class BaderInboxMain extends Component {
         this.state.showMessageSearch = false;
         this.state.messageSearchResults = [];
         this.state.notesTab = "info";
+        // #10: Persist last opened conversation
+        this._persistUIState("lastConversationId", conv.id);
         await this.loadMessages(conv.id);
         this.loadConvPipelines(conv.id);
 
@@ -2455,22 +2830,39 @@ export class BaderInboxMain extends Component {
             this.state.messageSearchQuery = "";
             this.state.messageSearchResults = [];
             this.state.messageSearchIndex = -1;
+            this.state.msgSearchType = "";
+            this.state.msgSearchDirection = "";
+            this.state.msgSearchDateFrom = "";
+            this.state.msgSearchDateTo = "";
         }
     }
 
     async searchMessages() {
         const q = this.state.messageSearchQuery.trim();
-        if (!q || q.length < 2 || !this.state.selectedConversation) return;
+        const hasFilters = this.state.msgSearchType || this.state.msgSearchDirection ||
+                           this.state.msgSearchDateFrom || this.state.msgSearchDateTo;
+        if ((!q || q.length < 2) && !hasFilters) return;
+        if (!this.state.selectedConversation) return;
         try {
+            const domain = [["conversation_id", "=", this.state.selectedConversation.id]];
+            if (q) domain.push(["content", "ilike", q]);
+            if (this.state.msgSearchType) {
+                domain.push(["message_type", "=", this.state.msgSearchType]);
+            }
+            if (this.state.msgSearchDirection) {
+                domain.push(["direction", "=", this.state.msgSearchDirection]);
+            }
+            if (this.state.msgSearchDateFrom) {
+                domain.push(["create_date", ">=", this.state.msgSearchDateFrom + " 00:00:00"]);
+            }
+            if (this.state.msgSearchDateTo) {
+                domain.push(["create_date", "<=", this.state.msgSearchDateTo + " 23:59:59"]);
+            }
             this.state.messageSearchResults = await this.orm.searchRead(
                 "bader.inbox.message",
-                [
-                    ["conversation_id", "=", this.state.selectedConversation.id],
-                    ["content", "ilike", q],
-                    ["message_type", "=", "text"],
-                ],
-                ["id", "content", "create_date", "direction"],
-                { order: "create_date desc", limit: 50 }
+                domain,
+                ["id", "content", "create_date", "direction", "message_type"],
+                { order: "create_date desc", limit: 100 }
             );
             this.state.messageSearchIndex = this.state.messageSearchResults.length > 0 ? 0 : -1;
             if (this.state.messageSearchIndex >= 0) {
@@ -2817,9 +3209,58 @@ export class BaderInboxMain extends Component {
         return this.state.pipelines.filter(p => !assignedIds.includes(p.id));
     }
 
+    /**
+     * Ensure the conversation has a linked Odoo partner.
+     * Tries auto_link_partner first; if still no partner, looks up res.partner
+     * by phone so we never pass an empty partner_id to CRM / sale.order forms.
+     * Returns the partner_id (integer) or null.
+     */
+    async _ensurePartnerLinked(conv) {
+        let partnerId = conv.partner_id?.[0];
+        if (partnerId) return partnerId;
+
+        // Try the server-side auto-link
+        try {
+            const linked = await this.orm.call(
+                "bader.inbox.conversation", "auto_link_partner", [conv.id]
+            );
+            if (linked) {
+                const fresh = await this.orm.searchRead(
+                    "bader.inbox.conversation", [["id", "=", conv.id]],
+                    ["partner_id"], { limit: 1 }
+                );
+                if (fresh.length && fresh[0].partner_id?.[0]) {
+                    partnerId = fresh[0].partner_id[0];
+                    this.state.selectedConversation.partner_id = fresh[0].partner_id;
+                    return partnerId;
+                }
+            }
+        } catch (_e) { /* ignore */ }
+
+        // Last resort: search res.partner by phone
+        if (conv.phone) {
+            try {
+                const partners = await this.orm.searchRead(
+                    "res.partner",
+                    ["|", ["phone", "=", conv.phone], ["mobile", "=", conv.phone]],
+                    ["id"],
+                    { limit: 1 }
+                );
+                if (partners.length) {
+                    partnerId = partners[0].id;
+                }
+            } catch (_e) { /* ignore */ }
+        }
+
+        return partnerId || null;
+    }
+
     async createOpportunity() {
         if (!this.state.selectedConversation) return;
         const conv = this.state.selectedConversation;
+
+        const partnerId = await this._ensurePartnerLinked(conv);
+
         this.action.doAction({
             type: "ir.actions.act_window",
             res_model: "crm.lead",
@@ -2828,7 +3269,7 @@ export class BaderInboxMain extends Component {
             context: {
                 default_name: `WhatsApp - ${conv.computed_name || conv.phone}`,
                 default_phone: conv.phone,
-                default_partner_id: conv.partner_id?.[0],
+                default_partner_id: partnerId || undefined,
             }
         }, {
             onClose: async () => {
@@ -3045,13 +3486,16 @@ export class BaderInboxMain extends Component {
     async createQuotation() {
         if (!this.state.selectedConversation) return;
         const conv = this.state.selectedConversation;
+
+        const partnerId = await this._ensurePartnerLinked(conv);
+
         this.action.doAction({
             type: "ir.actions.act_window",
             res_model: "sale.order",
             views: [[false, "form"]],
             target: "new",
             context: {
-                default_partner_id: conv.partner_id?.[0],
+                default_partner_id: partnerId || undefined,
             }
         }, {
             onClose: async () => {
@@ -3145,29 +3589,63 @@ export class BaderInboxMain extends Component {
         if (!this.state.selectedConversation) return;
         const conv = this.state.selectedConversation;
 
+        // Ensure partner is linked before creating the activity
+        let partnerId = conv.partner_id?.[0];
+        if (!partnerId) {
+            try {
+                const linked = await this.orm.call(
+                    "bader.inbox.conversation", "auto_link_partner", [conv.id]
+                );
+                if (linked) {
+                    const fresh = await this.orm.searchRead(
+                        "bader.inbox.conversation", [["id", "=", conv.id]],
+                        ["partner_id"], { limit: 1 }
+                    );
+                    if (fresh.length) {
+                        partnerId = fresh[0].partner_id?.[0];
+                        this.state.selectedConversation.partner_id = fresh[0].partner_id;
+                    }
+                }
+            } catch (_e) { /* ignore */ }
+        }
+
         // Determine which record to attach the activity to
         let resModel = "res.partner";
-        let resId = conv.partner_id?.[0];
+        let resId = partnerId;
 
-        // If there are CRM opportunities, link activity to the first one
+        // If there are CRM opportunities, link activity to the most recent one
         if (this.state.contactOpportunities && this.state.contactOpportunities.length > 0) {
             resModel = "crm.lead";
             resId = this.state.contactOpportunities[0].id;
         }
 
         if (!resId) {
-            this.notification.add("No hay contacto vinculado para crear actividad", { type: "warning" });
+            this.notification.add(
+                "No hay contacto vinculado. Creá o vinculá un contacto primero.",
+                { type: "warning" }
+            );
             return;
         }
 
-        // Get the res_model id for mail.activity
-        const modelIds = await this.orm.call("ir.model", "search_read", [], {
-            domain: [["model", "=", resModel]],
-            fields: ["id"],
-            limit: 1,
-        });
+        // Get the ir.model record id needed by mail.activity
+        let modelRecordId;
+        try {
+            const modelIds = await this.orm.searchRead(
+                "ir.model", [["model", "=", resModel]], ["id"], { limit: 1 }
+            );
+            if (!modelIds.length) {
+                this.notification.add("Error al obtener modelo de actividad", { type: "danger" });
+                return;
+            }
+            modelRecordId = modelIds[0].id;
+        } catch (e) {
+            console.error("createOdooTask: ir.model lookup failed", e);
+            this.notification.add("Error al crear actividad", { type: "danger" });
+            return;
+        }
 
-        if (!modelIds.length) return;
+        // Today in YYYY-MM-DD for default deadline
+        const today = new Date().toISOString().split("T")[0];
 
         this.action.doAction({
             type: "ir.actions.act_window",
@@ -3175,9 +3653,11 @@ export class BaderInboxMain extends Component {
             views: [[false, "form"]],
             target: "new",
             context: {
-                default_res_model_id: modelIds[0].id,
+                default_res_model: resModel,
+                default_res_model_id: modelRecordId,
                 default_res_id: resId,
                 default_user_id: this.user.userId,
+                default_date_deadline: today,
                 default_summary: `WhatsApp - ${conv.computed_name || conv.phone}`,
                 default_note: `Conversación WhatsApp: ${conv.phone}`,
             }
@@ -3241,6 +3721,50 @@ export class BaderInboxMain extends Component {
                 }
             });
         }
+    }
+
+    /**
+     * #8 — Desvincular el contacto Odoo de esta conversación.
+     * No elimina el res.partner, solo rompe la relación.
+     */
+    async unlinkPartner() {
+        if (!this.state.selectedConversation) return;
+        const conv = this.state.selectedConversation;
+        if (!conv.partner_id) return;
+        try {
+            await this.orm.write("bader.inbox.conversation", [conv.id], { partner_id: false });
+            conv.partner_id = false;
+            this.state.contactOpportunities = [];
+            this.state.contactActivities = [];
+            this.state.contactQuotations = [];
+            this.state.contactOrders = [];
+            this.notification.add("Contacto desvinculado", { type: "info" });
+        } catch (e) {
+            console.error("unlinkPartner failed", e);
+            this.notification.add("Error al desvincular contacto", { type: "danger" });
+        }
+    }
+
+    /**
+     * #8 — Buscar y vincular un contacto Odoo diferente.
+     * Abre el selector de contactos de Odoo con el teléfono pre-filtrado.
+     */
+    async changePartner() {
+        if (!this.state.selectedConversation) return;
+        const conv = this.state.selectedConversation;
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            res_model: "res.partner",
+            views: [[false, "list"], [false, "form"]],
+            target: "new",
+            name: "Seleccionar contacto",
+            domain: [],
+        }, {
+            onClose: async () => {
+                // After closing, try to auto-link by phone or let the user trigger it manually
+                await this._refreshConversationAndCRM(conv.id);
+            }
+        });
     }
 
     // ──── REFRESH AFTER CRM DIALOG ────
@@ -3398,7 +3922,19 @@ export class BaderInboxMain extends Component {
             contact: "👤 Contacto",
             reaction: "💬 Reacción",
         };
-        return mediaIcons[lastMessage] || lastMessage;
+        if (mediaIcons[lastMessage]) return mediaIcons[lastMessage];
+        // If the snippet is a JSON contact blob, show a friendly preview
+        if (lastMessage.startsWith('{"contacts":')) {
+            try {
+                const data = JSON.parse(lastMessage);
+                if (Array.isArray(data.contacts) && data.contacts.length) {
+                    const name = data.contacts[0].displayName || "Contacto";
+                    return `👤 ${name}${data.contacts.length > 1 ? ` +${data.contacts.length - 1}` : ""}`;
+                }
+            } catch (_e) { /* fall through */ }
+            return "👤 Contacto";
+        }
+        return lastMessage;
     }
 
     onImageError(ev, msg) {
@@ -3543,6 +4079,26 @@ export class BaderInboxMain extends Component {
                         msg.is_edited = true;
                     }
                 }
+            } else if (type === "bader_inbox_typing") {
+                // F18: Contact typing indicator
+                const convId = payload.conversation_id;
+                const typing = new Set(this.state.typingConversations);
+                if (payload.is_composing) {
+                    typing.add(convId);
+                    // Auto-clear after 8s in case we miss the "paused" event
+                    clearTimeout(this._typingTimers[convId]);
+                    this._typingTimers[convId] = setTimeout(() => {
+                        const t = new Set(this.state.typingConversations);
+                        t.delete(convId);
+                        this.state.typingConversations = t;
+                        delete this._typingTimers[convId];
+                    }, 8000);
+                } else {
+                    typing.delete(convId);
+                    clearTimeout(this._typingTimers[convId]);
+                    delete this._typingTimers[convId];
+                }
+                this.state.typingConversations = typing;
             }
         }
 
@@ -4035,10 +4591,20 @@ export class BaderInboxMain extends Component {
     parseContactCard(msg) {
         if (!msg || !msg.content || msg.message_type !== "contact") return null;
         try {
-            return JSON.parse(msg.content);
-        } catch (e) {
-            // Fallback: treat content as display name
-            return { displayName: msg.content, phone: "" };
+            const parsed = JSON.parse(msg.content);
+            // New format: { contacts: [{displayName, phone}, ...] }
+            if (parsed && Array.isArray(parsed.contacts)) return parsed;
+            // Old JSON format that might have been stored differently
+            return parsed;
+        } catch (_e) {
+            // Legacy plain-text format: "📇 Name\n📞 +54..."
+            // Extract name and phone from the formatted string
+            const lines = msg.content.split("\n");
+            const nameLine = lines.find(l => l.startsWith("📇"));
+            const phoneLine = lines.find(l => l.startsWith("📞"));
+            const displayName = nameLine ? nameLine.replace("📇", "").trim() : msg.content;
+            const phone = phoneLine ? phoneLine.replace("📞", "").trim() : "";
+            return { contacts: [{ displayName, phone }] };
         }
     }
 

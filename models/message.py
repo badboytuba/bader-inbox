@@ -192,3 +192,29 @@ class BaderInboxMessage(models.Model):
         )
 
         return message
+
+    @api.model
+    def send_reaction(self, message_id, emoji):
+        """Send emoji reaction to a WhatsApp message via Evolution API.
+
+        F16: Returns {"success": bool}
+        """
+        msg = self.browse(message_id)
+        if not msg.exists():
+            return {"success": False, "error": "Message not found"}
+
+        conv = msg.conversation_id
+        channel = conv.channel_id
+        if not channel or not channel.evolution_instance_name:
+            return {"success": False, "error": "No channel"}
+
+        # WhatsApp message ID needed for reaction (stored in wa_message_id field if available)
+        wa_msg_id = getattr(msg, "wa_message_id", None) or msg.id
+        api = self.env["bader.inbox.evolution_api"]
+        result = api.send_reaction(
+            channel.evolution_instance_name,
+            conv.phone,
+            str(wa_msg_id),
+            emoji,
+        )
+        return result

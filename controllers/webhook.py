@@ -238,7 +238,9 @@ class BaderInboxWebhook(http.Controller):
                 return self._handle_connection_update(channel, data)
             elif event == "qrcode.updated":
                 return self._handle_qrcode_update(channel, data)
-            
+            elif event == "presence.update":
+                return self._handle_presence_update(channel, data)
+
             _logger.info(f"Ignoring event: {event}")
             return _json_ok({"status": "ignored"})
             
@@ -429,8 +431,8 @@ class BaderInboxWebhook(http.Controller):
                 ("evolution_instance_name", "!=", False),
             ], limit=5)
             
-            api = request.env["bader.inbox.evolution.api"].sudo()
-            
+            api = request.env["bader.inbox.evolution_api"].sudo()
+
             for channel in channels:
                 try:
                     result = api._request(
@@ -623,8 +625,8 @@ class BaderInboxWebhook(http.Controller):
                 # Outgoing message: try to fetch the recipient's WhatsApp name
                 resolved_contact_name = None
                 try:
-                    EvolutionAPI = request.env["bader.inbox.evolution.api"].sudo()
-                    instance_name = channel.evolution_instance
+                    EvolutionAPI = request.env["bader.inbox.evolution_api"].sudo()
+                    instance_name = channel.evolution_instance_name
                     if instance_name:
                         resolved_contact_name = EvolutionAPI.fetch_contact_name(instance_name, phone)
                         if resolved_contact_name:
@@ -1383,38 +1385,32 @@ class BaderInboxWebhook(http.Controller):
             # Extract phone from vCard (TEL field)
             phone = ""
             if vcard:
-                import re
-                tel_match = re.search(r'TEL[^:]*:([\+\d\s\-]+)', vcard)
+                import re as _re
+                tel_match = _re.search(r'TEL[^:]*:([\+\d\s\-\(\)]+)', vcard)
                 if tel_match:
                     phone = tel_match.group(1).strip()
-            # Human-readable text for preview + full metadata in media_info
-            parts = []
-            if display_name:
-                parts.append(f"📇 {display_name}")
-            if phone:
-                parts.append(f"📞 {phone}")
-            text = "\n".join(parts) if parts else "📇 Contacto compartido"
-            media_info = {"displayName": display_name, "phone": phone, "vcard": vcard}
+            # Store as JSON so the frontend can render a proper contact card.
+            # The JSON structure mirrors contactsArrayMessage for uniform parsing.
+            text = json.dumps({"contacts": [{"displayName": display_name, "phone": phone}]})
+            media_info = {}
         elif "contactsArrayMessage" in content:
             msg_type = "contact"
             arr = content["contactsArrayMessage"]
             contacts = arr.get("contacts", [])
             parsed = []
-            names = []
             for c in contacts:
                 display_name = c.get("displayName", "")
                 vcard = c.get("vcard", "")
                 phone = ""
                 if vcard:
-                    import re
-                    tel_match = re.search(r'TEL[^:]*:([\+\d\s\-]+)', vcard)
+                    import re as _re
+                    tel_match = _re.search(r'TEL[^:]*:([\+\d\s\-\(\)]+)', vcard)
                     if tel_match:
                         phone = tel_match.group(1).strip()
                 parsed.append({"displayName": display_name, "phone": phone})
-                if display_name:
-                    names.append(display_name)
-            text = f"📇 {len(parsed)} contactos: {', '.join(names)}" if names else f"📇 {len(parsed)} contactos compartidos"
-            media_info = {"contacts": parsed, "count": len(parsed)}
+            # Store as JSON for uniform frontend rendering
+            text = json.dumps({"contacts": parsed})
+            media_info = {}
         else:
             # Unknown content type — log it for debugging
             _logger.warning(f"Unknown message content format. Keys: {list(content.keys())}")
@@ -1606,4 +1602,63 @@ class BaderInboxWebhook(http.Controller):
             return _json_ok()
         except Exception as e:
             _logger.error(f"QR update error: {e}", exc_info=True)
+            return _json_error(str(e))
+
+    def _handle_presence_update(self, channel, data):
+        """Handle presence.update events from Evolution API.
+
+        Payload example:
+          {"id": "5491112223333@s.whatsapp.net", "presences": {"5491112223333@s.whatsapp.net": {"lastKnownPresence": "composing"}}}
+        or
+          {"id": "5491112223333@s.whatsapp.net", "presences": [{"participant": "...", "lastKnownPresence": "composing"}]}
+        """
+        try:
+            presences = data.get("presences", {})
+
+            # Normalize to a flat dict {jid: presence_str}
+            if isinstance(presences, dict):
+                flat = presences  # {jid: {"lastKnownPresence": "composing"}}
+            elif isinstance(presences, list):
+                flat = {entry.get("participant", ""): entry for entry in presences if isinstance(entry, dict)}
+            else:
+                return _json_ok({"status": "ignored"})
+
+            env = request.env
+            bus_notifications = []
+
+            for jid, pres_info in flat.items():
+                if isinstance(pres_info, dict):
+                    presence_str = pres_info.get("lastKnownPresence", "")
+                else:
+                    presence_str = str(pres_info)
+
+                is_composing = presence_str in ("composing", "recording")
+
+                # Find phone from JID (strip @s.whatsapp.net / @c.us)
+                phone = jid.split("@")[0] if "@" in jid else jid
+
+                conv = env["bader.inbox.conversation"].sudo().search([
+                    ("phone", "=", phone),
+                    ("channel_id", "=", channel.id),
+                ], limit=1)
+                if not conv:
+                    continue
+
+                # Notify all agents watching this conversation
+                bus_notifications.append((
+                    "bader_inbox",
+                    "bader_inbox_typing",
+                    {
+                        "conversation_id": conv.id,
+                        "is_composing": is_composing,
+                        "phone": phone,
+                    },
+                ))
+
+            if bus_notifications:
+                env["bus.bus"]._sendmany(bus_notifications)
+
+            return _json_ok()
+        except Exception as e:
+            _logger.error(f"Presence update error: {e}", exc_info=True)
             return _json_error(str(e))

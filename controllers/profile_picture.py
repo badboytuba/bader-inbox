@@ -175,9 +175,11 @@ class BaderInboxProfilePictureController(http.Controller):
         except Exception as e:
             _logger.debug(f"Profile pic download error for {conv.phone}: {e}")
 
-        # Fallback: store the WA URL directly (may expire)
+        # Download failed — mark as checked (no pic) so we retry later.
+        # Do NOT store the WA CDN URL directly: it expires in a few hours and
+        # would show broken images until the next retry cycle.
         conv.sudo().write({
-            "profile_pic_url": wa_url,
+            "profile_pic_url": False,
             "profile_pic_date": fields.Datetime.now(),
         })
-        return wa_url
+        return None

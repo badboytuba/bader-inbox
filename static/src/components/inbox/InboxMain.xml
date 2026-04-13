@@ -176,7 +176,11 @@
                                         <span t-attf-class="conv-time {{ conv.unread_count > 0 ? 'unread-time' : '' }}" t-esc="formatTime(conv.last_message_date)"/>
                                     </div>
                                     <div class="conv-preview">
-                                        <span t-attf-class="conv-message {{ conv.unread_count > 0 ? 'unread-msg' : '' }}" t-esc="formatLastMessage(conv.last_message)"/>
+                                        <!-- F18: typing indicator in list -->
+                                        <span t-if="state.typingConversations.has(conv.id)" class="conv-typing-label">
+                                            <span class="conv-typing-dot"/><span class="conv-typing-dot"/><span class="conv-typing-dot"/> escribiendo...
+                                        </span>
+                                        <span t-else="" t-attf-class="conv-message {{ conv.unread_count > 0 ? 'unread-msg' : '' }}" t-esc="formatLastMessage(conv.last_message)"/>
                                         <div class="conv-preview-right">
                                             <!-- Assignee avatar -->
                                             <span t-if="conv.assigned_user_id" class="conv-assignee" 
@@ -302,27 +306,50 @@
                             </div>
                         </div>
 
-                        <!-- Message Search Bar -->
-                        <div t-if="state.showMessageSearch" class="message-search-bar">
-                            <div class="search-input-wrapper">
-                                <i class="fa fa-search"/>
-                                <input type="text" placeholder="Buscar mensaje..." 
-                                       t-model="state.messageSearchQuery"
-                                       t-on-keydown="onSearchKeydown"/>
-                                <span t-if="state.messageSearchResults.length" class="search-count">
-                                    <t t-esc="state.messageSearchIndex + 1"/> de <t t-esc="state.messageSearchResults.length"/>
-                                </span>
+                        <!-- Message Search Bar (#9 advanced) -->
+                        <div t-if="state.showMessageSearch" class="message-search-bar advanced-search-bar">
+                            <div class="search-row-main">
+                                <div class="search-input-wrapper">
+                                    <i class="fa fa-search"/>
+                                    <input type="text" placeholder="Buscar mensaje..."
+                                           t-model="state.messageSearchQuery"
+                                           t-on-keydown="onSearchKeydown"/>
+                                    <span t-if="state.messageSearchResults.length" class="search-count">
+                                        <t t-esc="state.messageSearchIndex + 1"/> de <t t-esc="state.messageSearchResults.length"/>
+                                    </span>
+                                </div>
+                                <div class="search-nav">
+                                    <button class="btn-search-nav" t-on-click="() => navigateSearchResult('prev')" t-att-disabled="state.messageSearchIndex === 0">
+                                        <i class="fa fa-chevron-up"/>
+                                    </button>
+                                    <button class="btn-search-nav" t-on-click="() => navigateSearchResult('next')" t-att-disabled="state.messageSearchIndex >= state.messageSearchResults.length - 1">
+                                        <i class="fa fa-chevron-down"/>
+                                    </button>
+                                    <button class="btn-search-btn" t-on-click="searchMessages">
+                                        <i class="fa fa-filter"/>
+                                    </button>
+                                    <button class="btn-search-nav" t-on-click="toggleMessageSearch">
+                                        <i class="fa fa-times"/>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="search-nav">
-                                <button class="btn-search-nav" t-on-click="() => navigateSearchResult('prev')" t-att-disabled="state.messageSearchIndex === 0">
-                                    <i class="fa fa-chevron-up"/>
-                                </button>
-                                <button class="btn-search-nav" t-on-click="() => navigateSearchResult('next')" t-att-disabled="state.messageSearchIndex >= state.messageSearchResults.length - 1">
-                                    <i class="fa fa-chevron-down"/>
-                                </button>
-                                <button class="btn-search-nav" t-on-click="toggleMessageSearch">
-                                    <i class="fa fa-times"/>
-                                </button>
+                            <!-- Advanced filters row -->
+                            <div class="search-filters-row">
+                                <select class="search-filter-select" t-model="state.msgSearchType">
+                                    <option value="">Tipo: Todos</option>
+                                    <option value="text">Texto</option>
+                                    <option value="image">Imagen</option>
+                                    <option value="audio">Audio</option>
+                                    <option value="video">Video</option>
+                                    <option value="document">Documento</option>
+                                </select>
+                                <select class="search-filter-select" t-model="state.msgSearchDirection">
+                                    <option value="">Dirección: Todos</option>
+                                    <option value="in">Recibido</option>
+                                    <option value="out">Enviado</option>
+                                </select>
+                                <input type="date" class="search-filter-date" t-model="state.msgSearchDateFrom" title="Desde"/>
+                                <input type="date" class="search-filter-date" t-model="state.msgSearchDateTo" title="Hasta"/>
                             </div>
                         </div>
 
@@ -399,6 +426,14 @@
                                 <div class="skeleton-msg skeleton-incoming"><div class="skeleton-msg-line" style="width:80%"/><div class="skeleton-msg-line" style="width:45%"/></div>
                             </div>
                             <div t-else="" class="messages-list">
+                                <!-- F2: Load older messages button -->
+                                <div t-if="state.hasMoreMessages" class="load-older-messages-bar">
+                                    <button class="load-older-btn" t-on-click="loadOlderMessages" t-att-disabled="state.loadingOlderMessages">
+                                        <i t-attf-class="fa {{ state.loadingOlderMessages ? 'fa-spinner fa-spin' : 'fa-chevron-up' }}"/>
+                                        <t t-if="!state.loadingOlderMessages">Cargar mensajes anteriores</t>
+                                        <t t-else="">Cargando...</t>
+                                    </button>
+                                </div>
                                 <t t-foreach="state.messages" t-as="msg" t-key="msg.id">
                                     <!-- Date separator (Hoy, Ayer, date) -->
                                     <div t-if="shouldShowDateSeparator(msg_index)" class="date-separator">
@@ -570,6 +605,16 @@
                                     </div>
                                     </t>
                                 </t>
+                                <!-- F18: Typing indicator -->
+                                <div t-if="state.selectedConversation and state.typingConversations.has(state.selectedConversation.id)"
+                                     class="typing-indicator">
+                                    <div class="typing-bubble">
+                                        <span class="typing-dot"/>
+                                        <span class="typing-dot"/>
+                                        <span class="typing-dot"/>
+                                    </div>
+                                    <span class="typing-label" t-esc="(state.selectedConversation.computed_name || state.selectedConversation.phone) + ' está escribiendo...'"/>
+                                </div>
                             </div>
                         </div>
 
@@ -678,10 +723,16 @@
                             </div>
 
                             <div class="composer-actions">
-                                <button class="btn-composer" title="Emoji" t-on-click="toggleEmojiPicker">
+                                <!-- F3: Quick note toggle -->
+                                <button t-attf-class="btn-composer btn-note-toggle {{ state.isNoteMode ? 'active' : '' }}"
+                                        title="Nota interna (no se envía al cliente)"
+                                        t-on-click="toggleNoteMode">
+                                    <i class="fa fa-sticky-note-o"/>
+                                </button>
+                                <button t-if="!state.isNoteMode" class="btn-composer" title="Emoji" t-on-click="toggleEmojiPicker">
                                     <i class="fa fa-smile-o"/>
                                 </button>
-                                <button class="btn-composer" title="Adjuntar archivo" t-on-click="triggerFileInput">
+                                <button t-if="!state.isNoteMode" class="btn-composer" title="Adjuntar archivo" t-on-click="triggerFileInput">
                                     <i class="fa fa-paperclip"/>
                                 </button>
                                 <button t-if="state.aiEnabled" class="btn-composer btn-ai" title="Sugerencias AI" t-on-click="getAISuggestions"
@@ -693,7 +744,14 @@
                                 </button>
                                 <input type="file" t-ref="fileInput" class="d-none" t-on-change="onFileSelected"/>
                             </div>
-                            <div class="composer-input">
+                            <div t-attf-class="composer-input {{ state.isNoteMode ? 'note-mode' : '' }}">
+                                <!-- F3: Note mode banner -->
+                                <div t-if="state.isNoteMode and !state.mentionedUsers.length" class="note-mode-banner">
+                                    <i class="fa fa-sticky-note-o"/> Nota interna — visible solo para el equipo
+                                    <button class="note-mode-close" t-on-click="toggleNoteMode" title="Volver a mensaje">
+                                        <i class="fa fa-times"/>
+                                    </button>
+                                </div>
                                 <!-- @Mention Dropdown -->
                                 <div t-if="state.showMentionDropdown" class="mention-dropdown">
                                     <div class="mention-dropdown-header">
@@ -738,24 +796,41 @@
                                     <span class="recording-timer" t-esc="Math.floor(state.recordingTime / 60) + ':' + ('' + (state.recordingTime % 60)).padStart(2, '0')"/>
                                     <span class="recording-dot"/>
                                 </div>
-                                <textarea t-else="" rows="1" placeholder="Escribe un mensaje... (/ para respuestas rápidas)" 
+                                <!-- F11: Audio Preview Player -->
+                                <div t-elif="state.audioPreviewUrl" class="audio-preview-bar">
+                                    <button class="audio-preview-discard" t-on-click="discardAudioPreview" title="Descartar">
+                                        <i class="fa fa-trash"/>
+                                    </button>
+                                    <audio controls="controls" t-att-src="state.audioPreviewUrl" class="audio-preview-player"/>
+                                </div>
+                                <textarea t-else="" rows="1"
+                                    t-att-placeholder="state.isNoteMode ? 'Escribe una nota interna... (solo visible para el equipo)' : 'Escribe un mensaje... (/ para respuestas rápidas)'"
                                     t-ref="composerTextarea"
-                                    t-model="state.composerText" 
+                                    t-model="state.composerText"
                                     t-on-keydown="onComposerKeydown"
                                     t-on-input="onComposerInput"/>
                             </div>
                             <div class="send-group">
                                 <!-- F9: Voice/Send toggle -->
                                 <t t-if="state.isRecording">
-                                    <button class="btn-send" t-on-click="stopVoiceRecording" title="Enviar audio">
-                                        <i class="fa fa-paper-plane"/>
+                                    <button class="btn-send" t-on-click="stopVoiceRecording" title="Detener y previsualizar">
+                                        <i class="fa fa-stop"/>
+                                    </button>
+                                </t>
+                                <!-- F11: Send pending audio -->
+                                <t t-elif="state.audioPreviewUrl">
+                                    <button class="btn-send" t-on-click="sendPendingAudio" t-att-disabled="state.sendingAudio" title="Enviar audio">
+                                        <i t-attf-class="fa {{ state.sendingAudio ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
                                     </button>
                                 </t>
                                 <t t-else="">
-                                    <button class="btn-send" t-on-click="sendMessage" t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)">
-                                        <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane' }}"/>
+                                    <button t-attf-class="btn-send {{ state.isNoteMode ? 'btn-send-note' : '' }}"
+                                            t-on-click="sendMessage"
+                                            t-att-disabled="state.sendingMessage || (!state.composerText.trim() and !state.attachment)"
+                                            t-att-title="state.isNoteMode ? 'Guardar nota interna' : 'Enviar mensaje'">
+                                        <i t-attf-class="fa {{ state.sendingMessage ? 'fa-spinner fa-spin' : (state.isNoteMode ? 'fa-sticky-note-o' : 'fa-paper-plane') }}"/>
                                     </button>
-                                    <button t-attf-class="voice-recorder-btn {{ state.isRecording ? 'recording' : '' }}" 
+                                    <button t-if="!state.isNoteMode" t-attf-class="voice-recorder-btn {{ state.isRecording ? 'recording' : '' }}"
                                             t-on-click="startVoiceRecording" title="Grabar audio">
                                         <i class="fa fa-microphone"/>
                                     </button>
@@ -1610,6 +1685,15 @@
                                     </span>
                                 </div>
                             </div>
+                            <!-- #8: Cambiar / Desvincular contacto -->
+                            <div t-if="state.selectedConversation?.partner_id" class="crm-partner-actions">
+                                <button class="crm-partner-action-btn" t-on-click.stop="changePartner" title="Cambiar contacto vinculado">
+                                    <i class="fa fa-exchange"/> Cambiar
+                                </button>
+                                <button class="crm-partner-action-btn crm-partner-action-unlink" t-on-click.stop="unlinkPartner" title="Desvincular contacto">
+                                    <i class="fa fa-chain-broken"/> Desvincular
+                                </button>
+                            </div>
 
                             <!-- Opportunities Header -->
                             <div class="crm-opp-header">
@@ -2117,6 +2201,59 @@
                                     </div>
                                 </t>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- F7: Forward Message Modal -->
+        <div t-if="state.showForwardModal" class="forward-modal-wrapper">
+            <div class="bader-modal-overlay" t-on-click="closeForwardModal">
+                <div class="bader-modal forward-modal" t-on-click.stop="" style="max-width: 480px;">
+                    <div class="bader-modal-header">
+                        <i class="fa fa-share"/> Reenviar mensaje
+                        <button class="btn-close" t-on-click="closeForwardModal"/>
+                    </div>
+                    <div class="bader-modal-body">
+                        <!-- Preview of message being forwarded -->
+                        <div t-if="state.forwardingMsg" class="forward-msg-preview">
+                            <span class="forward-msg-preview-label">Reenviando:</span>
+                            <span class="forward-msg-preview-text" t-esc="(state.forwardingMsg.content || state.forwardingMsg.message_type || '').substring(0, 80)"/>
+                        </div>
+                        <!-- Search conversations -->
+                        <div class="forward-search-wrap">
+                            <i class="fa fa-search forward-search-icon"/>
+                            <input type="text" class="forward-search-input"
+                                   placeholder="Buscar conversación..."
+                                   t-att-value="state.forwardSearch"
+                                   t-on-input="onForwardSearchInput"
+                                   autofocus="autofocus"/>
+                        </div>
+                        <!-- Conversation list -->
+                        <div class="forward-results">
+                            <div t-if="!state.forwardResults.length" class="forward-empty">
+                                <i class="fa fa-comments-o"/> Sin conversaciones
+                            </div>
+                            <t t-foreach="state.forwardResults" t-as="conv" t-key="conv.id">
+                                <div class="forward-result-item" t-on-click="() => this.sendForward(conv)">
+                                    <div t-attf-class="forward-avatar {{ getAvatarColor(conv.id) }}">
+                                        <img t-if="conv.profile_pic_url" t-att-src="conv.profile_pic_url" alt=""/>
+                                        <span t-else="" t-esc="getInitials(conv.computed_name || conv.phone)"/>
+                                    </div>
+                                    <div class="forward-conv-info">
+                                        <span class="forward-conv-name" t-esc="conv.computed_name || conv.phone"/>
+                                        <span class="forward-conv-phone" t-esc="conv.phone"/>
+                                    </div>
+                                    <div class="forward-send-btn">
+                                        <t t-if="state.forwardingTo === conv.id">
+                                            <i class="fa fa-spinner fa-spin"/>
+                                        </t>
+                                        <t t-else="">
+                                            <i class="fa fa-paper-plane"/>
+                                        </t>
+                                    </div>
+                                </div>
+                            </t>
                         </div>
                     </div>
                 </div>

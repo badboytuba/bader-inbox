@@ -283,7 +283,7 @@ class BaderInboxCampaignExecution(models.Model):
 
         # Typing simulation
         if throttle.typing_simulation:
-            api_helper = self.env["bader.inbox.evolution.api"]
+            api_helper = self.env["bader.inbox.evolution_api"]
             # We could simulate typing here if the API supports it
 
         # Send via Evolution API

@@ -451,6 +451,24 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
             _logger.error(f"Failed to acknowledge messages: {e}")
             return False
 
+    def send_reaction(self, instance_name, phone, message_id, emoji):
+        """Send emoji reaction to a message.
+
+        Evolution API endpoint: POST /api/message/reaction/{instance}
+        Body: {"number": "...", "key": {"id": "..."}, "reaction": "👍"}
+        """
+        data = {
+            "number": phone,
+            "key": {"id": message_id},
+            "reaction": emoji,
+        }
+        try:
+            result = self._request("POST", f"/api/message/reaction/{instance_name}", data)
+            return {"success": True, "result": result}
+        except Exception as e:
+            _logger.warning(f"Reaction send failed ({instance_name}, {phone}): {e}")
+            return {"success": False, "error": str(e)}
+
     # ── Group API Methods ──────────────────────────────────────────────
 
     def fetch_group_info(self, instance_name, group_jid):
