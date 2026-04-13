@@ -444,34 +444,34 @@ class BaderInboxConversation(models.Model):
 
     @api.model
     def _find_partner_by_phone(self, phone):
-        """Search res.partner by phone number with multiple matching strategies.
+        """Search res.partner by phone number, ignoring formatting.
 
-        Tries progressively shorter suffixes so different formats all match:
-          DB has +54 9 11 2233-4455, webhook sends 5491122334455 → match on last 10 digits.
+        Partners store phones as '+54 9 261 541-2778' while WhatsApp uses
+        '5492615412778'.  We strip non-digits on BOTH sides so they match.
+        Tries last-10, last-9, last-8 digit suffixes to cover country-code
+        variations.
         """
         if not phone:
             return self.env["res.partner"].browse()
         Partner = self.env["res.partner"]
         clean = self._clean_phone(phone)
-        if not clean:
+        if not clean or len(clean) < 6:
             return Partner.browse()
 
-        # Strategy 1: exact match on cleaned digits
-        partner = Partner.search([
-            "|", ("phone", "ilike", clean), ("mobile", "ilike", clean)
-        ], limit=1)
-        if partner:
-            return partner
-
-        # Strategy 2: try last 10 digits (covers country-code differences)
-        for suffix_len in (10, 9, 8):
-            if len(clean) > suffix_len:
-                suffix = clean[-suffix_len:]
-                partner = Partner.search([
-                    "|", ("phone", "ilike", suffix), ("mobile", "ilike", suffix)
-                ], limit=1)
-                if partner:
-                    return partner
+        # Use raw SQL: compare cleaned digits from both sides
+        for suffix_len in (0, 10, 9, 8):
+            suffix = clean if suffix_len == 0 else clean[-suffix_len:]
+            if not suffix:
+                continue
+            self.env.cr.execute("""
+                SELECT id FROM res_partner
+                WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                   OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s
+                LIMIT 1
+            """, [f'%{suffix}', f'%{suffix}'])
+            row = self.env.cr.fetchone()
+            if row:
+                return Partner.browse(row[0])
 
         return Partner.browse()
 
