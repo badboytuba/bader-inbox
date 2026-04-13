@@ -2415,7 +2415,7 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
             display: flex;
             gap: 8px;
             padding: 6px 16px;
-            border-bottom: 1px solid rgba($teal-light, 0.08);
+            border-bottom: 1px solid rgba($bader-dark-light, 0.08);
 
             .crm-partner-action-btn {
                 flex: 1;
@@ -2424,24 +2424,24 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                 justify-content: center;
                 gap: 6px;
                 padding: 5px 10px;
-                border: 1px solid rgba($teal-light, 0.15);
+                border: 1px solid rgba($bader-dark-light, 0.15);
                 border-radius: 6px;
                 background: transparent;
-                color: $teal-light;
+                color: $bader-dark-light;
                 font-size: 12px;
                 cursor: pointer;
                 transition: all 0.15s ease;
 
                 &:hover {
-                    background: rgba($teal-light, 0.08);
+                    background: rgba($bader-dark-light, 0.08);
                 }
 
                 &.crm-partner-action-unlink {
-                    color: $coral;
-                    border-color: rgba($coral, 0.2);
+                    color: #E74C3C;
+                    border-color: rgba(#E74C3C, 0.2);
 
                     &:hover {
-                        background: rgba($coral, 0.08);
+                        background: rgba(#E74C3C, 0.08);
                     }
                 }
             }
