@@ -22,7 +22,7 @@
         <field name="name">Channel: Managers see all</field>
         <field name="model_id" ref="model_bader_inbox_channel"/>
         <field name="domain_force">[(1, '=', 1)]</field>
-        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Users see only channels they are assigned to -->
@@ -46,7 +46,7 @@
         <field name="name">Conversation: Managers see all</field>
         <field name="model_id" ref="model_bader_inbox_conversation"/>
         <field name="domain_force">[(1, '=', 1)]</field>
-        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Users see conversations ONLY from their assigned channels + @mentions -->
@@ -70,7 +70,7 @@
         <field name="name">Pipeline: Managers see all</field>
         <field name="model_id" ref="model_bader_inbox_pipeline"/>
         <field name="domain_force">[(1, '=', 1)]</field>
-        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Users see only their own pipelines -->
@@ -86,7 +86,7 @@
         <field name="name">Pipeline Assignment: Managers see all</field>
         <field name="model_id" ref="model_bader_inbox_conversation_pipeline"/>
         <field name="domain_force">[(1, '=', 1)]</field>
-        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Users see only assignments in their own pipelines -->
@@ -106,7 +106,7 @@
         <field name="name">Message: Managers see all</field>
         <field name="model_id" ref="model_bader_inbox_message"/>
         <field name="domain_force">[(1, '=', 1)]</field>
-        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Users see messages only from conversations in their channels -->
@@ -126,7 +126,7 @@
         <field name="name">Note: Managers see all</field>
         <field name="model_id" ref="model_bader_inbox_note"/>
         <field name="domain_force">[(1, '=', 1)]</field>
-        <field name="groups" eval="[(4, ref('group_bader_inbox_manager'))]"/>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
     </record>
 
     <!-- Users see notes only from conversations in their channels or where mentioned -->
@@ -137,6 +137,30 @@
             '|',
             ('conversation_id.channel_id.allowed_user_ids', 'in', [user.id]),
             ('mentioned_user_ids', 'in', [user.id])
+        ]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- Record Rules: Ticket visibility                     -->
+    <!-- ═══════════════════════════════════════════════════ -->
+
+    <!-- Managers + System admins see ALL tickets -->
+    <record id="rule_ticket_manager_all" model="ir.rule">
+        <field name="name">Ticket: Managers/Admins see all</field>
+        <field name="model_id" ref="model_bader_inbox_ticket"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_bader_inbox_manager')), (4, ref('base.group_system'))]"/>
+    </record>
+
+    <!-- Users see only tickets they created or that are assigned to them -->
+    <record id="rule_ticket_user_own" model="ir.rule">
+        <field name="name">Ticket: Users see own</field>
+        <field name="model_id" ref="model_bader_inbox_ticket"/>
+        <field name="domain_force">[
+            '|',
+            ('user_id', '=', user.id),
+            ('assigned_to_id', '=', user.id)
         ]</field>
         <field name="groups" eval="[(4, ref('group_bader_inbox_user'))]"/>
     </record>

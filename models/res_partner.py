@@ -1,7 +1,12 @@
 # Copyright 2026 Bader Business
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
+import logging
+import re
+
 from odoo import api, fields, models
+
+_logger = logging.getLogger(__name__)
 
 
 class ResPartner(models.Model):
@@ -22,6 +27,48 @@ class ResPartner(models.Model):
     # AI Agent memory - persists between conversation sessions
     ai_memory = fields.Text(string="AI Memory",
         help="JSON data with customer preferences, interests, and notes collected by the AI agent")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        partners = super().create(vals_list)
+        partners._auto_link_inbox_conversations()
+        return partners
+
+    def write(self, vals):
+        res = super().write(vals)
+        if "phone" in vals or "mobile" in vals:
+            self._auto_link_inbox_conversations()
+        return res
+
+    def _auto_link_inbox_conversations(self):
+        """Auto-link unlinked inbox conversations when partner phone matches."""
+        Conversation = self.env["bader.inbox.conversation"]
+        for partner in self:
+            phones = [partner.phone, partner.mobile]
+            for phone in phones:
+                if not phone:
+                    continue
+                clean = re.sub(r"[^0-9]", "", phone)
+                if not clean or len(clean) < 6:
+                    continue
+                # Find unlinked conversations matching this phone
+                for suffix_len in (0, 10, 9, 8):
+                    suffix = clean if suffix_len == 0 else clean[-suffix_len:]
+                    if not suffix:
+                        continue
+                    convos = Conversation.search([
+                        ("partner_id", "=", False),
+                        ("is_group", "=", False),
+                        ("phone", "like", suffix),
+                    ])
+                    for conv in convos:
+                        conv.write({"partner_id": partner.id})
+                        _logger.info(
+                            "Auto-linked partner %s (%s) to conversation %s (phone=%s) on partner create/write",
+                            partner.id, partner.name, conv.id, conv.phone,
+                        )
+                    if convos:
+                        break  # Found matches with this phone, skip shorter suffixes
 
 
 class CrmLead(models.Model):

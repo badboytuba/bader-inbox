@@ -54,3 +54,7 @@ access_bader_inbox_group_member_all,bader.inbox.group.member.all,model_bader_inb
 access_bader_inbox_group_member_user,bader.inbox.group.member.user,model_bader_inbox_group_member,base.group_user,1,0,0,0
 access_bader_inbox_assignment_log_all,bader.inbox.assignment.log.all,model_bader_inbox_assignment_log,bader_inbox.group_bader_inbox_user,1,1,1,1
 access_bader_inbox_assignment_log_user,bader.inbox.assignment.log.user,model_bader_inbox_assignment_log,base.group_user,1,0,0,0
+access_bader_inbox_duplicate_group_all,bader.inbox.duplicate.group.all,model_bader_inbox_duplicate_group,bader_inbox.group_bader_inbox_user,1,1,1,1
+access_bader_inbox_duplicate_group_user,bader.inbox.duplicate.group.user,model_bader_inbox_duplicate_group,base.group_user,1,0,0,0
+access_bader_inbox_ticket_user,bader.inbox.ticket.user,model_bader_inbox_ticket,bader_inbox.group_bader_inbox_user,1,1,1,0
+access_bader_inbox_ticket_manager,bader.inbox.ticket.manager,model_bader_inbox_ticket,bader_inbox.group_bader_inbox_manager,1,1,1,1

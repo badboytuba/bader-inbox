@@ -306,6 +306,21 @@
                             </div>
                         </div>
 
+                        <!-- ═══ DUPLICATE CONTACT BANNER (below chat header) ═══ -->
+                        <div t-if="state.duplicatePartners.length > 1 and !state.selectedConversation.is_group"
+                             class="duplicate-banner" t-on-click="openDuplicateModal">
+                            <div class="duplicate-banner-icon">
+                                <i class="fa fa-exclamation-triangle"/>
+                            </div>
+                            <div class="duplicate-banner-text">
+                                <strong><t t-esc="state.duplicatePartners.length"/> contactos duplicados</strong>
+                                con este número de telefone
+                            </div>
+                            <button class="duplicate-banner-btn" t-on-click="openDuplicateModal">
+                                <i class="fa fa-compress"/> Unificar
+                            </button>
+                        </div>
+
                         <!-- Message Search Bar (#9 advanced) -->
                         <div t-if="state.showMessageSearch" class="message-search-bar advanced-search-bar">
                             <div class="search-row-main">
@@ -1416,6 +1431,11 @@
                                     </span>
                                 </div>
                                 <span class="c360-phone"><i class="fa fa-phone"/> <t t-esc="state.selectedConversation.phone"/></span>
+                                <!-- Duplicate indicator (small, next to phone) -->
+                                <span t-if="state.duplicatePartners.length > 1" class="c360-duplicate-dot"
+                                      t-on-click="openDuplicateModal" title="Contactos duplicados detectados">
+                                    <i class="fa fa-clone"/>
+                                </span>
                                 <div class="c360-meta">
                                     <span t-if="state.selectedConversation.channel_id"><i class="fa fa-whatsapp"/> <t t-esc="state.selectedConversation.channel_id[1]"/></span>
                                     <span t-if="state.selectedConversation.assigned_user_id"><i class="fa fa-user"/> <t t-esc="state.selectedConversation.assigned_user_id[1]"/></span>
@@ -1684,6 +1704,11 @@
                                         <i class="fa fa-plus"/> Crear
                                     </span>
                                 </div>
+                            </div>
+                            <!-- Duplicate Warning in CRM tab -->
+                            <div t-if="state.duplicatePartners.length > 1" class="crm-duplicate-warning" t-on-click="openDuplicateModal">
+                                <i class="fa fa-exclamation-triangle"/>
+                                <span><t t-esc="state.duplicatePartners.length"/> contactos con el mismo número — <strong>clic para fusionar</strong></span>
                             </div>
                             <!-- #8: Cambiar / Desvincular contacto -->
                             <div t-if="state.selectedConversation?.partner_id" class="crm-partner-actions">
@@ -2259,5 +2284,143 @@
                 </div>
             </div>
         </div>
+        <!-- ═══ DUPLICATE PARTNERS MERGE MODAL ═══ -->
+        <div t-if="state.showDuplicateModal" class="bader-modal-overlay" t-on-click="closeDuplicateModal">
+            <div class="dup-modal" t-on-click.stop="() => {}">
+                <div class="new-conv-modal-header dup-modal-header">
+                    <h3><i class="fa fa-clone" style="color: #f59e0b; margin-right: 8px;"/>Contactos Duplicados</h3>
+                    <button class="new-conv-modal-close" t-on-click="closeDuplicateModal">
+                        <i class="fa fa-times"/>
+                    </button>
+                </div>
+
+                <!-- Explanation -->
+                <div class="dup-modal-info">
+                    <i class="fa fa-info-circle"/>
+                    <span>Se encontraron <strong><t t-esc="state.duplicatePartners.length"/></strong> contactos con el mismo número.
+                    Seleccione cuál <strong>mantener</strong> — los demás serán archivados y sus datos transferidos automaticamente.</span>
+                </div>
+
+                <!-- Partner Cards Grid -->
+                <div class="dup-cards-scroll">
+                    <t t-foreach="state.duplicatePartners" t-as="partner" t-key="partner.id">
+                        <div t-attf-class="dup-card {{ state.duplicateKeepId === partner.id ? 'dup-card-selected' : 'dup-card-archive' }}"
+                             t-on-click="() => this.selectKeepPartner(partner.id)">
+
+                            <!-- Card Header with selection -->
+                            <div class="dup-card-header">
+                                <div class="dup-card-radio">
+                                    <i t-attf-class="fa {{ state.duplicateKeepId === partner.id ? 'fa-check-circle' : 'fa-circle-o' }}"/>
+                                </div>
+                                <div class="dup-card-name">
+                                    <strong t-esc="partner.name || 'Sin nombre'"/>
+                                    <span t-if="partner.company_name" class="dup-card-company">
+                                        <t t-esc="partner.company_name"/>
+                                    </span>
+                                </div>
+                                <span t-if="state.duplicateKeepId === partner.id" class="dup-label-keep">
+                                    <i class="fa fa-check"/> MANTENER
+                                </span>
+                                <span t-else="" class="dup-label-archive">
+                                    <i class="fa fa-archive"/> ARCHIVAR
+                                </span>
+                            </div>
+
+                            <!-- Contact Details -->
+                            <div class="dup-card-body">
+                                <div class="dup-card-fields">
+                                    <div t-if="partner.phone" class="dup-field">
+                                        <i class="fa fa-phone"/>
+                                        <span class="dup-field-label">Teléfono</span>
+                                        <span class="dup-field-value" t-esc="partner.phone"/>
+                                    </div>
+                                    <div t-if="partner.mobile" class="dup-field">
+                                        <i class="fa fa-mobile"/>
+                                        <span class="dup-field-label">Móvil</span>
+                                        <span class="dup-field-value" t-esc="partner.mobile"/>
+                                    </div>
+                                    <div t-if="partner.email" class="dup-field">
+                                        <i class="fa fa-envelope-o"/>
+                                        <span class="dup-field-label">Email</span>
+                                        <span class="dup-field-value" t-esc="partner.email"/>
+                                    </div>
+                                    <div t-if="partner.vat" class="dup-field">
+                                        <i class="fa fa-id-card-o"/>
+                                        <span class="dup-field-label">NIF/CUIT</span>
+                                        <span class="dup-field-value" t-esc="partner.vat"/>
+                                    </div>
+                                    <div t-if="partner.street or partner.city" class="dup-field">
+                                        <i class="fa fa-map-marker"/>
+                                        <span class="dup-field-label">Dirección</span>
+                                        <span class="dup-field-value">
+                                            <t t-if="partner.street" t-esc="partner.street"/>
+                                            <t t-if="partner.street and partner.city">, </t>
+                                            <t t-if="partner.city" t-esc="partner.city"/>
+                                            <t t-if="partner.state_name"> (<t t-esc="partner.state_name"/>)</t>
+                                        </span>
+                                    </div>
+                                    <div t-if="partner.country_name" class="dup-field">
+                                        <i class="fa fa-globe"/>
+                                        <span class="dup-field-label">País</span>
+                                        <span class="dup-field-value" t-esc="partner.country_name"/>
+                                    </div>
+                                    <div t-if="partner.create_date" class="dup-field">
+                                        <i class="fa fa-calendar"/>
+                                        <span class="dup-field-label">Creado</span>
+                                        <span class="dup-field-value" t-esc="partner.create_date"/>
+                                    </div>
+                                </div>
+
+                                <!-- Activity Badges -->
+                                <div class="dup-card-stats">
+                                    <div t-if="partner.lead_count" class="dup-stat dup-stat-leads">
+                                        <i class="fa fa-line-chart"/>
+                                        <span class="dup-stat-num" t-esc="partner.lead_count"/>
+                                        <span class="dup-stat-lbl">Leads</span>
+                                    </div>
+                                    <div t-if="partner.sale_count" class="dup-stat dup-stat-sales">
+                                        <i class="fa fa-shopping-cart"/>
+                                        <span class="dup-stat-num" t-esc="partner.sale_count"/>
+                                        <span class="dup-stat-lbl">Ventas</span>
+                                    </div>
+                                    <div t-if="partner.conv_count" class="dup-stat dup-stat-conv">
+                                        <i class="fa fa-comments"/>
+                                        <span class="dup-stat-num" t-esc="partner.conv_count"/>
+                                        <span class="dup-stat-lbl">Chats</span>
+                                    </div>
+                                    <div t-if="partner.total_revenue" class="dup-stat dup-stat-revenue">
+                                        <i class="fa fa-usd"/>
+                                        <span class="dup-stat-num" t-esc="Math.round(partner.total_revenue).toLocaleString()"/>
+                                        <span class="dup-stat-lbl">Facturado</span>
+                                    </div>
+                                </div>
+
+                                <!-- Internal notes -->
+                                <div t-if="partner.comment" class="dup-card-notes">
+                                    <i class="fa fa-sticky-note-o"/>
+                                    <span t-esc="(partner.comment || '').substring(0, 120)"/>
+                                    <span t-if="partner.comment.length > 120">...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </div>
+
+                <!-- Footer -->
+                <div class="dup-modal-footer">
+                    <div class="dup-footer-hint">
+                        <i class="fa fa-lightbulb-o"/>
+                        Los leads, ventas y conversaciones serán transferidos al contacto seleccionado.
+                    </div>
+                    <div class="dup-footer-actions">
+                        <button class="btn btn-secondary btn-sm" t-on-click="closeDuplicateModal">Cancelar</button>
+                        <button class="btn btn-sm dup-btn-merge" t-on-click="mergeDuplicatePartners">
+                            <i class="fa fa-compress"/> Unificar Contactos
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </t>
 </templates>

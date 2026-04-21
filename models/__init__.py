@@ -20,3 +20,5 @@ from . import campaign_throttle
 from . import campaign_audience
 from . import campaign_triggers
 from . import group_member
+from . import duplicate_partner
+from . import ticket

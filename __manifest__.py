@@ -14,7 +14,7 @@
         - Full synchronization with your phone
         - CRM integration (contacts, opportunities)
     """,
-    "version": "16.0.6.0.0",
+    "version": "16.0.6.1.0",
     "license": "AGPL-3",
     "author": "Bader Business",
     "website": "https://github.com/badboytuba/bader-inbox",
@@ -35,6 +35,8 @@
         "views/ai_assistant_views.xml",
         "views/phone_widget_views.xml",
         "views/translation_views.xml",
+        "views/duplicate_partner_views.xml",
+        "views/ticket_views.xml",
         "views/menus.xml",
         "views/campaign_views.xml",
         "data/chatbot_cron.xml",

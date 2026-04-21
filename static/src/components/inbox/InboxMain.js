@@ -212,6 +212,11 @@ export class BaderInboxMain extends Component {
             salesTotalQuoted: 0,
             salesTotalOrdered: 0,
 
+            // Duplicate Partners
+            duplicatePartners: [],
+            showDuplicateModal: false,
+            duplicateKeepId: null,
+
             // Customer 360° Stats
             customerStats: {
                 totalMessages: 0,
@@ -2686,6 +2691,7 @@ export class BaderInboxMain extends Component {
             this.loadContactActivities(conv),
         ]);
         this.loadCustomerStats(conv);
+        this.checkDuplicatePartners(conv);
         const idx = this.state.conversations.findIndex(c => c.id === conv.id);
         if (idx >= 0) {
             this.state.conversations[idx].unread_count = 0;
@@ -3680,6 +3686,83 @@ export class BaderInboxMain extends Component {
                 default_partner_id: this.state.selectedConversation.partner_id?.[0],
             }
         });
+    }
+
+    // ──── DUPLICATE PARTNERS ────
+    async checkDuplicatePartners(conv) {
+        if (!conv || !conv.phone || conv.is_group) {
+            this.state.duplicatePartners = [];
+            return;
+        }
+        try {
+            const dupes = await this.orm.call(
+                "bader.inbox.conversation",
+                "get_duplicate_partners",
+                [conv.phone]
+            );
+            this.state.duplicatePartners = dupes || [];
+            if (dupes && dupes.length > 1) {
+                // Pre-select the currently linked partner, or the one with most data
+                this.state.duplicateKeepId = conv.partner_id?.[0] || dupes[0].id;
+            }
+        } catch (e) {
+            console.debug("checkDuplicatePartners failed:", e);
+            this.state.duplicatePartners = [];
+        }
+    }
+
+    openDuplicateModal() {
+        console.log("[DUP] openDuplicateModal called, partners:", this.state.duplicatePartners.length);
+        if (this.state.duplicatePartners.length > 1) {
+            this.state.showDuplicateModal = true;
+            console.log("[DUP] showDuplicateModal set to true");
+        }
+    }
+
+    closeDuplicateModal() {
+        this.state.showDuplicateModal = false;
+    }
+
+    selectKeepPartner(partnerId) {
+        this.state.duplicateKeepId = partnerId;
+    }
+
+    async mergeDuplicatePartners() {
+        const keepId = this.state.duplicateKeepId;
+        if (!keepId) {
+            this.notification.add("Seleccione el contacto a mantener", { type: "warning" });
+            return;
+        }
+        const archiveIds = this.state.duplicatePartners
+            .filter(p => p.id !== keepId)
+            .map(p => p.id);
+        if (!archiveIds.length) return;
+
+        try {
+            const result = await this.orm.call(
+                "bader.inbox.conversation",
+                "merge_duplicate_partners",
+                [keepId, archiveIds]
+            );
+            if (result.error) {
+                this.notification.add(result.error, { type: "danger" });
+                return;
+            }
+            this.notification.add(
+                `Fusión completa: se mantuvo "${result.kept}" y se archivaron ${result.merged} duplicados`,
+                { type: "success" }
+            );
+            this.state.showDuplicateModal = false;
+            this.state.duplicatePartners = [];
+            // Refresh conversation and CRM data
+            const conv = this.state.selectedConversation;
+            if (conv) {
+                await this._refreshConversationAndCRM(conv.id);
+            }
+        } catch (e) {
+            console.error("mergeDuplicatePartners failed:", e);
+            this.notification.add("Error al fusionar contactos", { type: "danger" });
+        }
     }
 
     async viewPartner() {

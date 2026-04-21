@@ -54,23 +54,36 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
 
         _logger.info(f"Evolution API: {method} {url}")
 
-        try:
-            response = requests.request(
-                method, url, json=data, headers=headers, timeout=timeout,
-                params=params,
-            )
-            response.raise_for_status()
-            # Handle empty responses (some endpoints return 200 with no body)
-            if not response.content or not response.text.strip():
-                return {}
+        last_error = None
+        max_retries = 2 if method == "GET" else 1
+        for attempt in range(max_retries):
             try:
-                return response.json()
-            except ValueError:
-                _logger.warning(f"Non-JSON response from {url}: {response.text[:200]}")
-                return {}
-        except requests.exceptions.RequestException as e:
-            _logger.error(f"API request failed: {e}")
-            return {"success": False, "error": str(e)}
+                response = requests.request(
+                    method, url, json=data, headers=headers, timeout=timeout,
+                    params=params,
+                )
+                response.raise_for_status()
+                # Handle empty responses (some endpoints return 200 with no body)
+                if not response.content or not response.text.strip():
+                    return {}
+                try:
+                    return response.json()
+                except ValueError:
+                    _logger.warning(f"Non-JSON response from {url}: {response.text[:200]}")
+                    return {}
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2)
+                    _logger.info(f"Retrying {method} {url} after timeout (attempt {attempt + 2})")
+                    continue
+                _logger.error(f"API request failed after {max_retries} attempts: {e}")
+                return {"success": False, "error": str(e)}
+            except requests.exceptions.RequestException as e:
+                _logger.error(f"API request failed: {e}")
+                return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(last_error)}
 
     def create_instance(self, instance_name, webhook_url=None):
         """Create new WhatsApp instance with webhook configured"""

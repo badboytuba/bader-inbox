@@ -450,6 +450,8 @@ class BaderInboxConversation(models.Model):
         '5492615412778'.  We strip non-digits on BOTH sides so they match.
         Tries last-10, last-9, last-8 digit suffixes to cover country-code
         variations.
+
+        When multiple partners match, picks the best one based on CRM/sales data.
         """
         if not phone:
             return self.env["res.partner"].browse()
@@ -465,15 +467,57 @@ class BaderInboxConversation(models.Model):
                 continue
             self.env.cr.execute("""
                 SELECT id FROM res_partner
-                WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
-                   OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s
-                LIMIT 1
+                WHERE active = true
+                  AND (regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE %s
+                   OR regexp_replace(COALESCE(mobile, ''), '[^0-9]', '', 'g') LIKE %s)
+                LIMIT 10
             """, [f'%{suffix}', f'%{suffix}'])
-            row = self.env.cr.fetchone()
-            if row:
-                return Partner.browse(row[0])
+            rows = self.env.cr.fetchall()
+            if not rows:
+                continue
+            if len(rows) == 1:
+                return Partner.browse(rows[0][0])
+            # Multiple matches: pick the best partner
+            partners = Partner.browse([r[0] for r in rows])
+            if len(partners) > 1:
+                _logger.warning(
+                    "Multiple partners match phone %s: %s",
+                    phone, ", ".join(f"{p.name} (ID {p.id})" for p in partners),
+                )
+            return self._pick_best_partner(partners)
 
         return Partner.browse()
+
+    @api.model
+    def _pick_best_partner(self, partners):
+        """From multiple partner matches, pick the one with most business data."""
+        if not partners:
+            return self.env["res.partner"].browse()
+        if len(partners) == 1:
+            return partners[0]
+
+        best = partners[0]
+        best_score = -1
+        CrmLead = self.env["crm.lead"].sudo()
+        SaleOrder = self.env["sale.order"].sudo()
+
+        for p in partners:
+            score = 0
+            if CrmLead.search_count([("partner_id", "=", p.id)], limit=1):
+                score += 100
+            if SaleOrder.search_count([("partner_id", "=", p.id)], limit=1):
+                score += 50
+            if p.email:
+                score += 10
+            if p.phone and p.mobile:
+                score += 5
+            # Prefer older records (lower ID = created first)
+            score += max(0, 10 - (p.id - partners[0].id) // 100)
+            if score > best_score:
+                best_score = score
+                best = p
+
+        return best
 
     @api.model
     def get_or_create(self, channel_id, phone, whatsapp_id=None, contact_name=None,
@@ -490,9 +534,13 @@ class BaderInboxConversation(models.Model):
         phone = self._clean_phone(phone)
         if not phone:
             return self.browse()
-        
+
         # Advisory lock: serialize concurrent requests for same channel+phone
-        lock_key = hash((channel_id, phone)) % (2**31)
+        # Use hashlib (deterministic across processes) instead of hash() which
+        # returns different values per Python process (PYTHONHASHSEED).
+        import hashlib
+        lock_str = f"{channel_id}:{phone}"
+        lock_key = int(hashlib.md5(lock_str.encode()).hexdigest()[:8], 16) % (2**31)
         self.env.cr.execute("SELECT pg_advisory_xact_lock(%s)", [lock_key])
         
         # 1. Try exact match: same channel + phone
@@ -533,11 +581,24 @@ class BaderInboxConversation(models.Model):
                         except Exception as sync_err:
                             _logger.warning(f"Auto group sync failed for {group_jid}: {sync_err}")
             except Exception as e:
-                _logger.warning(f"Create failed (unique constraint), fetching existing: {e}")
-                conversation = self.search(
-                    [("channel_id", "=", channel_id), ("phone", "=", phone)], limit=1
-                )
-                if not conversation:
+                if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                    _logger.info(f"Concurrent create for {phone} on channel {channel_id}, fetching existing")
+                    # Savepoint was rolled back, search is safe
+                    conversation = self.search(
+                        [("channel_id", "=", channel_id), ("phone", "=", phone)], limit=1
+                    )
+                    if not conversation:
+                        # Last resort: raw SQL to bypass ORM cache
+                        self.env.cr.execute(
+                            "SELECT id FROM bader_inbox_conversation WHERE channel_id = %s AND phone = %s LIMIT 1",
+                            [channel_id, phone]
+                        )
+                        row = self.env.cr.fetchone()
+                        if row:
+                            conversation = self.browse(row[0])
+                    if not conversation:
+                        raise
+                else:
                     raise
         else:
             # Existing conversation: auto-link partner if not already linked
@@ -565,6 +626,104 @@ class BaderInboxConversation(models.Model):
                     _logger.debug(f"Auto group sync skipped: {sync_err}")
         
         return conversation
+
+    @api.model
+    def get_duplicate_partners(self, phone):
+        """Find all partners matching a phone number (for duplicate detection in UI).
+
+        Returns list of dicts with full partner info, or empty list if 0-1 matches.
+        """
+        if not phone:
+            return []
+        clean = self._clean_phone(phone)
+        if not clean or len(clean) < 6:
+            return []
+
+        # Try suffix matching with decreasing specificity
+        for suffix_len in (0, 10, 9, 8):
+            suffix = clean if suffix_len == 0 else clean[-suffix_len:]
+            if not suffix:
+                continue
+            self.env.cr.execute("""
+                SELECT p.id, COALESCE(p.name, '') AS name, p.phone, p.mobile, p.email,
+                       p.street, p.city, p.vat, p.comment,
+                       p.create_date,
+                       COALESCE(comp.name, '') AS company_name,
+                       COALESCE(country.name::varchar, '') AS country_name,
+                       COALESCE(state.name::varchar, '') AS state_name,
+                       (SELECT COUNT(*) FROM crm_lead WHERE partner_id = p.id) AS lead_count,
+                       (SELECT COUNT(*) FROM sale_order WHERE partner_id = p.id) AS sale_count,
+                       (SELECT COUNT(*) FROM bader_inbox_conversation WHERE partner_id = p.id) AS conv_count,
+                       (SELECT SUM(amount_total) FROM sale_order WHERE partner_id = p.id AND state IN ('sale', 'done')) AS total_revenue
+                FROM res_partner p
+                LEFT JOIN res_company comp ON comp.id = p.company_id
+                LEFT JOIN res_country country ON country.id = p.country_id
+                LEFT JOIN res_country_state state ON state.id = p.state_id
+                WHERE p.active = true
+                  AND (regexp_replace(COALESCE(p.phone, ''), '[^0-9]', '', 'g') LIKE %s
+                   OR regexp_replace(COALESCE(p.mobile, ''), '[^0-9]', '', 'g') LIKE %s)
+                ORDER BY p.id
+                LIMIT 20
+            """, [f'%{suffix}', f'%{suffix}'])
+            rows = self.env.cr.dictfetchall()
+            if len(rows) > 1:
+                # Format dates and revenue for JSON serialization
+                for row in rows:
+                    if row.get("create_date"):
+                        row["create_date"] = str(row["create_date"])[:10]
+                    row["total_revenue"] = float(row.get("total_revenue") or 0)
+                return rows
+            if rows:
+                return []  # Only 1 match = no duplicates
+        return []
+
+    @api.model
+    def merge_duplicate_partners(self, keep_id, archive_ids):
+        """Merge duplicate partners: keep one, archive others, transfer data."""
+        Partner = self.env["res.partner"].sudo()
+        keep = Partner.browse(keep_id)
+        if not keep.exists():
+            return {"error": "Partner to keep not found"}
+
+        others = Partner.browse(archive_ids).exists()
+        if not others:
+            return {"error": "No partners to archive"}
+
+        CrmLead = self.env["crm.lead"].sudo()
+        SaleOrder = self.env["sale.order"].sudo()
+        Conversation = self.env["bader.inbox.conversation"].sudo()
+
+        merged_count = 0
+        for other in others:
+            Conversation.search([("partner_id", "=", other.id)]).write({"partner_id": keep.id})
+            CrmLead.search([("partner_id", "=", other.id)]).write({"partner_id": keep.id})
+            SaleOrder.search([("partner_id", "=", other.id)]).write({"partner_id": keep.id})
+
+            # Fill missing fields from archived partner
+            if not keep.email and other.email:
+                keep.email = other.email
+            if not keep.phone and other.phone:
+                keep.phone = other.phone
+            if not keep.mobile and other.mobile:
+                keep.mobile = other.mobile
+            if not keep.street and other.street:
+                keep.street = other.street
+            if not keep.city and other.city:
+                keep.city = other.city
+            if not keep.country_id and other.country_id:
+                keep.country_id = other.country_id
+            if not keep.state_id and other.state_id:
+                keep.state_id = other.state_id
+            if not keep.vat and other.vat:
+                keep.vat = other.vat
+            if not keep.comment and other.comment:
+                keep.comment = other.comment
+
+            other.active = False
+            merged_count += 1
+            _logger.info("Merged partner %s (ID %s) into %s (ID %s)", other.name, other.id, keep.name, keep.id)
+
+        return {"success": True, "kept": keep.name, "merged": merged_count}
 
     @api.model
     def auto_link_partners(self):
@@ -702,7 +861,7 @@ class BaderInboxConversation(models.Model):
 
     @api.model
     def action_assign_user(self, conversation_id, user_id):
-        """Assign a specific user to a conversation."""
+        """Assign a specific user to a conversation and notify them."""
         conv = self.browse(conversation_id)
         if not conv.exists():
             return False
@@ -717,6 +876,26 @@ class BaderInboxConversation(models.Model):
             'user_id': user_id,
             'performed_by_id': self.env.uid,
         })
+        new_user = self.env['res.users'].browse(user_id)
+        if new_user.exists() and new_user.id != self.env.uid:
+            assigner = self.env.user.name
+            contact = conv.contact_name or conv.phone or _('Conversa')
+            conv.message_post(
+                body=_("%(assigner)s atribuiu-te esta conversa com %(contact)s.") % {
+                    'assigner': assigner, 'contact': contact,
+                },
+                message_type="notification",
+                subtype_xmlid="mail.mt_comment",
+                partner_ids=[new_user.partner_id.id],
+            )
+            conv.activity_schedule(
+                'mail.mail_activity_data_todo',
+                user_id=new_user.id,
+                summary=_("Conversa atribuída: %s") % contact,
+                note=_("%(assigner)s atribuiu-te a conversa com %(contact)s.") % {
+                    'assigner': assigner, 'contact': contact,
+                },
+            )
         return True
 
     @api.model

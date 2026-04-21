@@ -649,13 +649,13 @@ class BaderInboxWebhook(http.Controller):
                     break
                 except Exception as retry_err:
                     err_str = str(retry_err).lower()
-                    if "serialize" in err_str or "concurrent" in err_str:
-                        if attempt < max_retries - 1:
-                            request.env.cr.rollback()
-                            wait_time = 0.1 * (attempt + 1)
-                            _logger.warning(f"Serialization retry {attempt + 1}/{max_retries} for phone {phone}, waiting {wait_time}s")
-                            time.sleep(wait_time)
-                            continue
+                    retryable = any(kw in err_str for kw in ("serialize", "concurrent", "unique", "duplicate"))
+                    if retryable and attempt < max_retries - 1:
+                        request.env.cr.rollback()
+                        wait_time = 0.1 * (attempt + 1)
+                        _logger.warning(f"Retry {attempt + 1}/{max_retries} for phone {phone}: {str(retry_err)[:80]}")
+                        time.sleep(wait_time)
+                        continue
                     raise
             
             # For groups without a subject: try extracting name from webhook payload

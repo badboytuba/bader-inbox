@@ -43,9 +43,22 @@
         sequence="50"
         groups="bader_inbox.group_bader_inbox_manager"/>
 
-    <menuitem id="menu_bader_inbox_templates" name="⚡ Respuestas Rápidas" 
-        parent="menu_bader_inbox_config" 
-        action="action_bader_inbox_template" 
+    <menuitem id="menu_bader_inbox_templates" name="⚡ Respuestas Rápidas"
+        parent="menu_bader_inbox_config"
+        action="action_bader_inbox_template"
         sequence="60"
         groups="bader_inbox.group_bader_inbox_manager"/>
+
+    <menuitem id="menu_bader_inbox_duplicates" name="👥 Contactos Duplicados"
+        parent="menu_bader_inbox_config"
+        action="action_bader_inbox_duplicate_scan_and_open"
+        sequence="70"
+        groups="bader_inbox.group_bader_inbox_manager"/>
+
+    <!-- 🎫 Tickets (menu top-level, depois de Configuração) -->
+    <menuitem id="menu_bader_inbox_tickets" name="🎫 Tickets"
+        parent="menu_bader_inbox_root"
+        action="action_bader_inbox_ticket"
+        sequence="200"
+        groups="bader_inbox.group_bader_inbox_user"/>
 </odoo>

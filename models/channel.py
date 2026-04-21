@@ -241,11 +241,15 @@ class BaderInboxChannel(models.Model):
             ("evolution_instance_name", "!=", False),
         ])
 
-        for channel in channels:
-            try:
-                instance_name = channel.evolution_instance_name
-                webhook_url = channel.webhook_url
+        # Pre-fetch channel data to avoid ORM reads during iteration
+        # (reduces serialization conflicts with concurrent webhook writes)
+        channel_data = [
+            (c.id, c.name, c.evolution_instance_name, c.webhook_url, c.reconnect_attempts)
+            for c in channels
+        ]
 
+        for ch_id, ch_name, instance_name, webhook_url, reconnect_attempts in channel_data:
+            try:
                 if not instance_name or not webhook_url:
                     continue
 
@@ -254,30 +258,30 @@ class BaderInboxChannel(models.Model):
 
                 if result.get("error"):
                     _logger.warning(
-                        f"Health check failed for channel {channel.name} "
-                        f"(#{channel.id}): {result['error']}"
+                        f"Health check failed for channel {ch_name} "
+                        f"(#{ch_id}): {result['error']}"
                     )
-                    self._health_check_update_raw(channel.id, now, "error", channel.reconnect_attempts + 1)
+                    self._health_check_update_raw(ch_id, now, "error", reconnect_attempts + 1)
                 elif result.get("created"):
                     _logger.info(
-                        f"Auto-recreated instance for channel {channel.name} "
-                        f"(#{channel.id}). User must scan QR again."
+                        f"Auto-recreated instance for channel {ch_name} "
+                        f"(#{ch_id}). User must scan QR again."
                     )
                     self._health_check_update_raw(
-                        channel.id, now, "warning",
-                        channel.reconnect_attempts + 1,
+                        ch_id, now, "warning",
+                        reconnect_attempts + 1,
                         state="connecting", clear_qr=True,
                     )
                 else:
-                    self._health_check_update_raw(channel.id, now, "ok", 0)
+                    self._health_check_update_raw(ch_id, now, "ok", 0)
 
             except Exception as e:
                 _logger.error(
-                    f"Health check error for channel {channel.name}: {e}",
+                    f"Health check error for channel {ch_name}: {e}",
                     exc_info=True
                 )
                 try:
-                    self._health_check_update_raw(channel.id, now, "error")
+                    self._health_check_update_raw(ch_id, now, "error")
                 except Exception:
                     pass
 
@@ -288,32 +292,34 @@ class BaderInboxChannel(models.Model):
             ("webhook_url", "!=", False),
             ("reconnect_attempts", "<", 3),
         ])
-        for channel in disconnected:
+        disc_data = [
+            (c.id, c.name, c.evolution_instance_name, c.webhook_url, c.reconnect_attempts)
+            for c in disconnected
+        ]
+        for ch_id, ch_name, instance_name, webhook_url, reconnect_attempts in disc_data:
             try:
                 _logger.info(
                     f"Auto-recovery: attempting reconnect for channel "
-                    f"{channel.name} (#{channel.id}), attempt {channel.reconnect_attempts + 1}"
+                    f"{ch_name} (#{ch_id}), attempt {reconnect_attempts + 1}"
                 )
-                result = api.ensure_instance(
-                    channel.evolution_instance_name, channel.webhook_url
-                )
+                result = api.ensure_instance(instance_name, webhook_url)
                 if result.get("error"):
                     self._health_check_update_raw(
-                        channel.id, now, "error",
-                        channel.reconnect_attempts + 1,
+                        ch_id, now, "error",
+                        reconnect_attempts + 1,
                     )
                 else:
                     self._health_check_update_raw(
-                        channel.id, now, "warning",
-                        channel.reconnect_attempts + 1,
+                        ch_id, now, "warning",
+                        reconnect_attempts + 1,
                         state="connecting",
                     )
             except Exception as e:
-                _logger.error(f"Auto-recovery error for channel {channel.name}: {e}")
+                _logger.error(f"Auto-recovery error for channel {ch_name}: {e}")
                 try:
                     self._health_check_update_raw(
-                        channel.id, now, "error",
-                        channel.reconnect_attempts + 1,
+                        ch_id, now, "error",
+                        reconnect_attempts + 1,
                     )
                 except Exception:
                     pass
