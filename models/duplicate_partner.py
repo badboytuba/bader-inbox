@@ -84,12 +84,36 @@ class BaderInboxDuplicateGroup(models.Model):
             partners = self.env["res.partner"].browse(partner_ids).exists()
             if len(partners) < 2:
                 continue
-            # Use full phone from first partner for display
-            display = partners[0].phone or partners[0].mobile or suffix
+
+            # Skip partners that belong to the same commercial entity.
+            # commercial_partner_id points to the top of a company hierarchy —
+            # a company and its contacts/delivery/invoice addresses all share
+            # the same commercial_partner_id, so a shared phone between them
+            # is expected, not a duplicate.
+            commercial_ids = {
+                (p.commercial_partner_id.id or p.id) for p in partners
+            }
+            if len(commercial_ids) <= 1:
+                continue
+
+            # Across different commercial entities, collapse to one
+            # representative per entity (prefer type='contact' over
+            # invoice/delivery/other addresses, oldest id as tiebreak).
+            reps = {}
+            for p in partners.sorted(
+                key=lambda x: (0 if x.type == "contact" else 1, x.id)
+            ):
+                cid = p.commercial_partner_id.id or p.id
+                reps.setdefault(cid, p)
+            real_dupes = self.env["res.partner"].browse([r.id for r in reps.values()])
+            if len(real_dupes) < 2:
+                continue
+
+            display = real_dupes[0].phone or real_dupes[0].mobile or suffix
             self.create({
                 "phone_normalized": suffix,
                 "phone_display": display,
-                "partner_ids": [(6, 0, partners.ids)],
+                "partner_ids": [(6, 0, real_dupes.ids)],
             })
             created += 1
 
