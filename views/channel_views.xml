@@ -8,7 +8,10 @@
             <tree>
                 <field name="name"/>
                 <field name="phone"/>
-                <field name="state" widget="badge" decoration-success="state == 'connected'" decoration-warning="state == 'qr_ready'" decoration-danger="state == 'error'"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'connected'"
+                       decoration-warning="state in ('qr_ready', 'reconnecting', 'connecting')"
+                       decoration-danger="state in ('error', 'disconnected')"/>
                 <field name="conversation_count"/>
             </tree>
         </field>

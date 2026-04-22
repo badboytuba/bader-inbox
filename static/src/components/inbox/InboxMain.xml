@@ -26,8 +26,9 @@
                                         <div class="popover-item" t-on-click="() => this.selectChannelFromPopover(ch.id)">
                                             <span class="popover-dot" t-attf-style="background: {{ getChannelColor(ch.id) }}"/>
                                             <span t-esc="ch.name"/>
-                                            <span t-if="ch.state === 'connected'" class="popover-status connected">●</span>
-                                            <span t-else="" class="popover-status disconnected">●</span>
+                                            <span t-if="ch.state === 'connected'" class="popover-status connected" t-att-title="ch.state">●</span>
+                                            <span t-elif="ch.state === 'reconnecting' || ch.state === 'connecting' || ch.state === 'qr_ready'" class="popover-status reconnecting" t-att-title="ch.state">●</span>
+                                            <span t-else="" class="popover-status disconnected" t-att-title="ch.state">●</span>
                                             <i t-if="state.channelFilter === ch.id" class="fa fa-check popover-check"/>
                                         </div>
                                     </t>

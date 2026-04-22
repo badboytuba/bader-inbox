@@ -459,6 +459,11 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
                 color: #22c55e;
             }
 
+            &.reconnecting {
+                color: #eab308;
+                animation: bader-status-pulse 1.2s ease-in-out infinite;
+            }
+
             &.disconnected {
                 color: #ef4444;
             }
@@ -6928,6 +6933,11 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
     }
 }
 
+@keyframes bader-status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
 // ═══════════════════════════════════
 // PRODUCT CATALOG SEND
 // ═══════════════════════════════════
@@ -7352,6 +7362,11 @@ $shadow-lg: 0 10px 25px rgba(0, 56, 65, 0.12);
 
             &.connected {
                 color: $bader-green;
+            }
+
+            &.reconnecting {
+                color: #eab308;
+                animation: bader-status-pulse 1.2s ease-in-out infinite;
             }
 
             &.disconnected {

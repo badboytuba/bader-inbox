@@ -1526,9 +1526,11 @@ class BaderInboxWebhook(http.Controller):
             _logger.info(f"Connection update: state={state}")
             
             state_map = {
-                "open": "connected", 
+                "open": "connected",
                 "connected": "connected",
-                "connecting": "connecting", 
+                "connecting": "connecting",
+                "reconnecting": "reconnecting",
+                "qr_ready": "qr_ready",
                 "close": "disconnected",
                 "disconnected": "disconnected",
             }

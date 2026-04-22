@@ -26,6 +26,7 @@ class BaderInboxChannel(models.Model):
         ("connecting", "Connecting"),
         ("qr_ready", "QR Ready"),
         ("connected", "Connected"),
+        ("reconnecting", "Reconnecting"),
         ("disconnected", "Disconnected"),
         ("error", "Error"),
     ], default="draft", string="Status")
@@ -220,6 +221,50 @@ class BaderInboxChannel(models.Model):
             rec.state = "disconnected"
 
     # ── Health Check & Auto-Reconnect ──────────────────────────────
+
+    @api.model
+    def cron_sync_channel_states(self):
+        """Fast pull (1 min) from Evolution /api/health to keep channel.state
+        in sync with the live Baileys status — bounded fallback for when the
+        connection.update webhook is missed (Evolution unreachable, rapid
+        reconnect bursts, etc.). Emits bus.bus notifications so the OWL
+        frontend updates dots/badges in real time.
+        """
+        api = self.env["bader.inbox.evolution_api"]
+        try:
+            live_status = api.fetch_health_summary()
+        except Exception as e:
+            _logger.warning("cron_sync_channel_states: fetch failed: %s", e)
+            return
+        if not live_status:
+            return
+        state_map = {
+            "connected": "connected",
+            "reconnecting": "reconnecting",
+            "connecting": "connecting",
+            "qr_ready": "qr_ready",
+            "disconnected": "disconnected",
+        }
+        channels = self.search([("evolution_instance_name", "!=", False)])
+        for ch in channels:
+            live = live_status.get(ch.evolution_instance_name)
+            if not live:
+                continue
+            new_state = state_map.get(live)
+            if not new_state or new_state == ch.state:
+                continue
+            ch.sudo().write({"state": new_state})
+            _logger.info(
+                "Channel %s (#%s) state synced %s -> %s (live: %s)",
+                ch.name, ch.id, ch.state, new_state, live,
+            )
+            try:
+                self.env["bus.bus"]._sendone(
+                    "bader_inbox", "bader_inbox_channel_update",
+                    {"channel_id": ch.id, "state": new_state},
+                )
+            except Exception:
+                pass
 
     @api.model
     def cron_health_check(self):

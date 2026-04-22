@@ -116,6 +116,18 @@ class BaderInboxEvolutionAPI(models.AbstractModel):
         return {"qrcode": qr, "status": result.get("status", "unknown")}
 
 
+    def fetch_health_summary(self):
+        """Fetch /api/health and return dict {instance_name: status_string}.
+
+        status_string is one of the Baileys statuses: connected, reconnecting,
+        disconnected, qr_ready, connecting. Returns {} on error.
+        """
+        result = self._request("GET", "/api/health")
+        if result.get("success") is False:
+            return {}
+        details = (result.get("instances") or {}).get("details") or []
+        return {i.get("name"): i.get("status") for i in details if i.get("name")}
+
     def get_instance_status(self, instance_name):
         """Get instance connection status.
         
