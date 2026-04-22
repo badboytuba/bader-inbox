@@ -139,7 +139,17 @@ class BaderInboxMessage(models.Model):
         channel = conversation.channel_id
         if channel.state != "connected":
             return False
-        
+
+        # Credit automated sends (cron, chatbot, AI agent, campaign) to the
+        # NancyAI user instead of the generic system/OdooBot so the chat UI
+        # shows "NancyAI" as the author. Manual sends keep the real operator
+        # identity.
+        author = self.env.user
+        if author.id == self.env.ref("base.user_root").id or (hasattr(author, "_is_system") and author._is_system()):
+            nancy = self.env.ref("bader_inbox.user_nancy_ai", raise_if_not_found=False)
+            if nancy and nancy.active:
+                author = nancy
+
         # Create message record
         message_vals = {
             "conversation_id": conversation_id,
@@ -147,7 +157,7 @@ class BaderInboxMessage(models.Model):
             "message_type": msg_type,
             "content": content,
             "status": "pending",
-            "author_id": self.env.user.id,
+            "author_id": author.id,
         }
         
         if media_data:

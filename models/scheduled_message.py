@@ -37,14 +37,23 @@ class BaderInboxScheduledMessage(models.Model):
 
     @api.model
     def _cron_send_scheduled(self):
-        """Send all messages whose scheduled_datetime has passed"""
+        """Send all messages whose scheduled_datetime has passed.
+
+        Automated sends are credited to the NancyAI user so the chat shows
+        "NancyAI" as author instead of the generic OdooBot system account.
+        Falls back to the default env user if the NancyAI user record is
+        missing (e.g. before first upgrade ran).
+        """
         now = fields.Datetime.now()
         messages = self.search([
             ("status", "=", "pending"),
             ("scheduled_datetime", "<=", now),
         ])
         _logger.info(f"Scheduled messages cron: {len(messages)} messages to send")
+        nancy = self.env.ref("bader_inbox.user_nancy_ai", raise_if_not_found=False)
         Message = self.env["bader.inbox.message"]
+        if nancy and nancy.active:
+            Message = Message.with_user(nancy)
         for sm in messages:
             try:
                 Message.send_message(

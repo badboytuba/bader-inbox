@@ -25,6 +25,7 @@
         "security/security.xml",
         "security/ir.model.access.csv",
         "data/system_parameters.xml",
+        "data/nancy_ai_user.xml",
         "data/campaign_data.xml",
         "views/settings_views.xml",
         "views/channel_views.xml",
