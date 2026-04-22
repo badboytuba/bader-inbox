@@ -253,10 +253,11 @@ class BaderInboxChannel(models.Model):
             new_state = state_map.get(live)
             if not new_state or new_state == ch.state:
                 continue
+            old_state = ch.state
             ch.sudo().write({"state": new_state})
             _logger.info(
                 "Channel %s (#%s) state synced %s -> %s (live: %s)",
-                ch.name, ch.id, ch.state, new_state, live,
+                ch.name, ch.id, old_state, new_state, live,
             )
             try:
                 self.env["bus.bus"]._sendone(
@@ -265,6 +266,19 @@ class BaderInboxChannel(models.Model):
                 )
             except Exception:
                 pass
+
+            # Immediate backfill of any pending messages sitting on the
+            # Evolution queue — covers webhook deliveries that failed while
+            # the channel was flapping. Runs only on the *transition* to
+            # connected, not on every tick, to avoid redundant work.
+            if new_state == "connected" and old_state != "connected":
+                try:
+                    self._cron_sync_pending_messages(channel_ids=[ch.id])
+                except Exception as e:
+                    _logger.warning(
+                        "Immediate pending-sync failed for channel %s: %s",
+                        ch.name, e,
+                    )
 
     @api.model
     def cron_health_check(self):
@@ -463,20 +477,31 @@ class BaderInboxChannel(models.Model):
     # ── Pending Message Sync ────────────────────────────────────────
 
     @api.model
-    def _cron_sync_pending_messages(self):
-        """Cron job: fetch and process messages that arrived while Odoo was offline.
-        
-        Calls the Evolution API /messages/pending/:instance endpoint,
-        processes each message (reusing webhook parsing logic),
-        then acknowledges receipt so they are not fetched again.
-        
-        Deduplication is handled by whatsapp_message_id check in _create_message.
+    def _cron_sync_pending_messages(self, channel_ids=None):
+        """Fetch and process messages that arrived while Odoo was offline or
+        while the channel was disconnected.
+
+        Scheduled mode (channel_ids=None): runs every 2 minutes against every
+        connected channel.
+
+        Targeted mode (channel_ids=[...]): called inline after a state
+        transition to 'connected' so the backfill happens within seconds of
+        reconnection instead of waiting up to the next scheduled tick.
+
+        Calls GET /api/messages/pending/:instance, creates any message the
+        Odoo DB doesn't yet have (dedup by whatsapp_message_id), and ACKs
+        the queue so the Evolution server drops them.
         """
-        channels = self.search([
-            ("state", "=", "connected"),
-            ("evolution_instance_name", "!=", False),
-        ])
-        
+        if channel_ids:
+            channels = self.browse(channel_ids).filtered(
+                lambda c: c.state == "connected" and c.evolution_instance_name
+            )
+        else:
+            channels = self.search([
+                ("state", "=", "connected"),
+                ("evolution_instance_name", "!=", False),
+            ])
+
         if not channels:
             return
 
