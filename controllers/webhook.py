@@ -544,6 +544,15 @@ class BaderInboxWebhook(http.Controller):
     def _handle_message(self, channel, data):
         """Handle incoming/outgoing message"""
         try:
+            # isHistorical is set by Evolution when replaying a
+            # messaging-history.set event through the normal messages.upsert
+            # pipeline (i.e. backfill of messages missed while offline).
+            # Historical messages must be *persisted* for the conversation
+            # history to be complete, but they should NOT trigger reactive
+            # side effects (bus notifications, chatbot, AI agent, auto-
+            # reopen) because those belong to real-time delivery.
+            is_historical = bool(data.get("isHistorical"))
+
             # Evolution API wraps message in data.data or sends flat
             # Format: {event, instance, data: {key, message, pushName, ...}}
             msg_obj = data.get("data") or data.get("message")
@@ -827,17 +836,24 @@ class BaderInboxWebhook(http.Controller):
                     pass
 
             # Send bus notification for ALL messages (incoming + outgoing from phone)
-            self._send_bus_notification(conversation, new_message, push_name, phone)
+            if is_historical:
+                _logger.info(
+                    "Historical message ingested id=%s conv=%s dir=%s — "
+                    "skipping bus/chatbot/ai side-effects",
+                    new_message.id, conversation.id, direction,
+                )
+            else:
+                self._send_bus_notification(conversation, new_message, push_name, phone)
 
-            if direction == "in":
-                # Auto-reopen resolved conversations when customer replies
-                if conversation.state == "resolved":
-                    conversation.sudo().write({"state": "open"})
-                    _logger.info(f"Auto-reopened resolved conversation {conversation.id}")
-                self._trigger_chatbot(conversation, new_message)
-                # AI Agent auto-reply
-                self._trigger_ai_agent(channel, conversation, content)
-            
+                if direction == "in":
+                    # Auto-reopen resolved conversations when customer replies
+                    if conversation.state == "resolved":
+                        conversation.sudo().write({"state": "open"})
+                        _logger.info(f"Auto-reopened resolved conversation {conversation.id}")
+                    self._trigger_chatbot(conversation, new_message)
+                    # AI Agent auto-reply
+                    self._trigger_ai_agent(channel, conversation, content)
+
             return _json_ok()
             
         except Exception as e:
