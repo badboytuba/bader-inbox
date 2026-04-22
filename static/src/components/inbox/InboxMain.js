@@ -4367,14 +4367,24 @@ export class BaderInboxMain extends Component {
         if (this.state.showScheduleModal) {
             const now = new Date();
             now.setHours(now.getHours() + 1);
-            this.state.scheduleDate = now.toISOString().split("T")[0];
-            this.state.scheduleTime = now.toTimeString().slice(0, 5);
+            const pad = (n) => String(n).padStart(2, "0");
+            this.state.scheduleDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+            this.state.scheduleTime = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
         }
     }
 
     async scheduleMessage() {
         if (!this.state.composerText.trim() || !this.state.selectedConversation) return;
-        const dt = `${this.state.scheduleDate} ${this.state.scheduleTime}:00`;
+        const local = new Date(`${this.state.scheduleDate}T${this.state.scheduleTime}:00`);
+        if (isNaN(local.getTime())) {
+            this.notification.add("Data/hora inválida", { type: "danger" });
+            return;
+        }
+        if (local.getTime() <= Date.now()) {
+            this.notification.add("A data/hora tem de estar no futuro", { type: "danger" });
+            return;
+        }
+        const dt = local.toISOString().slice(0, 19).replace("T", " ");
         try {
             await this.orm.create("bader.inbox.scheduled.message", [{
                 conversation_id: this.state.selectedConversation.id,
