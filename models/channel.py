@@ -245,12 +245,21 @@ class BaderInboxChannel(models.Model):
                          self._HEALTH_ALERT_USER_LOGIN)
             return
 
+        # Activities must attach to a record whose model inherits mail.thread.
+        # res.users does not, but res.partner does, so target the admin's
+        # partner directly — activities still show up on the admin user's
+        # activity widget because it tracks partner_id.
+        admin_partner_id = admin.partner_id.id
+        model_partner_id = self.env.ref('base.model_res_partner').id
+
         # Clear previous BIHEALTH activities on this admin before reposting
         # only what is still relevant — keeps the dashboard free of stale
         # warnings once a problem is fixed.
         Activity = self.env['mail.activity'].sudo()
         old = Activity.search([
             ('user_id', '=', admin.id),
+            ('res_model', '=', 'res.partner'),
+            ('res_id', '=', admin_partner_id),
             ('summary', 'ilike', self._HEALTH_ALERT_MARKER),
         ])
         old.unlink()
@@ -258,7 +267,6 @@ class BaderInboxChannel(models.Model):
         warning_type = self.env.ref('mail.mail_activity_data_warning',
                                      raise_if_not_found=False)
         activity_type_id = warning_type.id if warning_type else False
-        model_users_id = self.env.ref('base.model_res_users').id
 
         now = fields.Datetime.now()
         channels = self.search([('evolution_instance_name', '!=', False)])
@@ -309,9 +317,9 @@ class BaderInboxChannel(models.Model):
 
         for ch, summary, note in alerts:
             Activity.create({
-                'res_model': 'res.users',
-                'res_model_id': model_users_id,
-                'res_id': admin.id,
+                'res_model': 'res.partner',
+                'res_model_id': model_partner_id,
+                'res_id': admin_partner_id,
                 'activity_type_id': activity_type_id,
                 'summary': summary,
                 'note': note,
