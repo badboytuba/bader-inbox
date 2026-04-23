@@ -220,6 +220,101 @@ class BaderInboxChannel(models.Model):
         elif status.get("status") == "disconnected" and rec.state not in ("qr_ready", "connecting"):
             rec.state = "disconnected"
 
+    # ── Health Alert Cron ──────────────────────────────────────────
+
+    _HEALTH_ALERT_MARKER = "[BIHEALTH]"
+    _HEALTH_ALERT_USER_LOGIN = "ralf@bader.es"
+    _HEALTH_ZOMBIE_THRESHOLD_MIN = 60
+
+    @api.model
+    def cron_health_alert(self):
+        """Detect channel problems and raise mail.activity on the main
+        admin user. Runs every 10 min. Non-destructive: re-evaluates
+        state each tick and replaces previous [BIHEALTH] activities.
+
+        Rules:
+          * channel.state != 'connected' → warning
+          * channel.state == 'connected' BUT last_message_date older than
+            _HEALTH_ZOMBIE_THRESHOLD_MIN minutes AND channel has history
+            of traffic (>5 msgs past 24h) → zombie suspect warning
+        """
+        User = self.env['res.users'].sudo()
+        admin = User.search([('login', '=', self._HEALTH_ALERT_USER_LOGIN)], limit=1)
+        if not admin:
+            _logger.info("cron_health_alert: admin %s not found; skipping",
+                         self._HEALTH_ALERT_USER_LOGIN)
+            return
+
+        # Clear previous BIHEALTH activities on this admin before reposting
+        # only what is still relevant — keeps the dashboard free of stale
+        # warnings once a problem is fixed.
+        Activity = self.env['mail.activity'].sudo()
+        old = Activity.search([
+            ('user_id', '=', admin.id),
+            ('summary', 'ilike', self._HEALTH_ALERT_MARKER),
+        ])
+        old.unlink()
+
+        warning_type = self.env.ref('mail.mail_activity_data_warning',
+                                     raise_if_not_found=False)
+        activity_type_id = warning_type.id if warning_type else False
+        model_users_id = self.env.ref('base.model_res_users').id
+
+        now = fields.Datetime.now()
+        channels = self.search([('evolution_instance_name', '!=', False)])
+        alerts = []
+        for ch in channels:
+            if ch.state != 'connected':
+                alerts.append((
+                    ch,
+                    f"{self._HEALTH_ALERT_MARKER} Canal {ch.name} en estado '{ch.state}'",
+                    f"<p>El canal <b>{ch.name}</b> (id {ch.id}) está en estado "
+                    f"<b>{ch.state}</b> desde el último health check "
+                    f"({ch.last_health_check}).</p>"
+                    f"<p>Revisa el dashboard de Evolution API: "
+                    f"https://whatsapp.bader.es</p>",
+                ))
+                continue
+            # Connected but zombie?
+            threshold = now - timedelta(minutes=self._HEALTH_ZOMBIE_THRESHOLD_MIN)
+            if ch.last_message_date and ch.last_message_date > threshold:
+                continue  # recent traffic, not zombie
+            # Only flag if channel has normal volume (>5 msgs past 24h)
+            day_ago = now - timedelta(hours=24)
+            msg_count = self.env['bader.inbox.message'].sudo().search_count([
+                ('conversation_id.channel_id', '=', ch.id),
+                ('create_date', '>', day_ago),
+            ])
+            if msg_count < 5:
+                continue  # low-traffic channel, ignore silence
+            last_ts = ch.last_message_date or ch.last_health_check or 'nunca'
+            alerts.append((
+                ch,
+                f"{self._HEALTH_ALERT_MARKER} Canal {ch.name} posible zombie",
+                f"<p>El canal <b>{ch.name}</b> (id {ch.id}) está marcado como "
+                f"<b>connected</b> pero no ha procesado mensajes en más de "
+                f"{self._HEALTH_ZOMBIE_THRESHOLD_MIN} min "
+                f"(último: {last_ts}, {msg_count} mensajes en 24h).</p>"
+                f"<p>Posible socket zombie. Considera reiniciar el servicio "
+                f"Evolution.</p>",
+            ))
+
+        for ch, summary, note in alerts:
+            Activity.create({
+                'res_model': 'res.users',
+                'res_model_id': model_users_id,
+                'res_id': admin.id,
+                'activity_type_id': activity_type_id,
+                'summary': summary,
+                'note': note,
+                'user_id': admin.id,
+                'date_deadline': fields.Date.today(),
+            })
+            _logger.info("cron_health_alert: raised activity '%s'", summary)
+
+        if not alerts:
+            _logger.info("cron_health_alert: all 6 channels healthy")
+
     # ── Health Check & Auto-Reconnect ──────────────────────────────
 
     @api.model
