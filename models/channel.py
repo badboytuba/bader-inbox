@@ -275,19 +275,27 @@ class BaderInboxChannel(models.Model):
                     f"https://whatsapp.bader.es</p>",
                 ))
                 continue
-            # Connected but zombie?
+            # Connected but zombie? Look up the latest message by joining
+            # through conversation (channel itself has no last_message_date).
+            Message = self.env['bader.inbox.message'].sudo()
+            last_msg = Message.search(
+                [('conversation_id.channel_id', '=', ch.id)],
+                order='create_date desc',
+                limit=1,
+            )
+            last_date = last_msg.create_date if last_msg else None
             threshold = now - timedelta(minutes=self._HEALTH_ZOMBIE_THRESHOLD_MIN)
-            if ch.last_message_date and ch.last_message_date > threshold:
+            if last_date and last_date > threshold:
                 continue  # recent traffic, not zombie
             # Only flag if channel has normal volume (>5 msgs past 24h)
             day_ago = now - timedelta(hours=24)
-            msg_count = self.env['bader.inbox.message'].sudo().search_count([
+            msg_count = Message.search_count([
                 ('conversation_id.channel_id', '=', ch.id),
                 ('create_date', '>', day_ago),
             ])
             if msg_count < 5:
                 continue  # low-traffic channel, ignore silence
-            last_ts = ch.last_message_date or ch.last_health_check or 'nunca'
+            last_ts = last_date or ch.last_health_check or 'nunca'
             alerts.append((
                 ch,
                 f"{self._HEALTH_ALERT_MARKER} Canal {ch.name} posible zombie",
