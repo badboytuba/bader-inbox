@@ -44,6 +44,7 @@
         "data/channel_health_cron.xml",
         "data/channel_state_sync_cron.xml",
         "data/health_alert_cron.xml",
+        "data/hourly_analysis_cron.xml",
         "data/scheduled_message_cron.xml",
         "data/campaign_cron.xml",
         "data/message_sync_cron.xml",

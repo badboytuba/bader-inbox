@@ -223,8 +223,170 @@ class BaderInboxChannel(models.Model):
     # ── Health Alert Cron ──────────────────────────────────────────
 
     _HEALTH_ALERT_MARKER = "[BIHEALTH]"
+    _HOURLY_ANALYSIS_MARKER = "[BIHEALTH-HOURLY]"
     _HEALTH_ALERT_USER_LOGIN = "ralf@bader.es"
     _HEALTH_ZOMBIE_THRESHOLD_MIN = 60
+
+    @api.model
+    def cron_hourly_analysis(self):
+        """Hourly comprehensive system snapshot. Runs every 1 h.
+
+        Builds an HTML report covering: Evolution health, channel state
+        in DB, message volume current vs prior hour, failed outbound,
+        active crons, recent tickets. Posts as a single mail.activity
+        on the admin partner with marker [BIHEALTH-HOURLY] so each run
+        replaces the previous one (dashboard never accumulates noise).
+
+        If anomalies are detected (channel disconnected, message volume
+        dropped >70 % vs prior hour, Evolution unreachable), the activity
+        summary is prefixed with '⚠' to flag urgency.
+        """
+        User = self.env['res.users'].sudo()
+        admin = User.search([('login', '=', self._HEALTH_ALERT_USER_LOGIN)], limit=1)
+        if not admin:
+            _logger.info("cron_hourly_analysis: admin not found, skipping")
+            return
+        admin_partner_id = admin.partner_id.id
+        model_partner_id = self.env.ref('base.model_res_partner').id
+
+        # Replace previous hourly analysis activity (only one ever)
+        Activity = self.env['mail.activity'].sudo()
+        Activity.search([
+            ('user_id', '=', admin.id),
+            ('res_model', '=', 'res.partner'),
+            ('res_id', '=', admin_partner_id),
+            ('summary', 'ilike', self._HOURLY_ANALYSIS_MARKER),
+        ]).unlink()
+
+        anomalies = []
+        sections = []
+        now = fields.Datetime.now()
+
+        # === 1. Evolution health ===
+        api = self.env["bader.inbox.evolution_api"]
+        try:
+            live = api.fetch_health_summary() or {}
+        except Exception as e:
+            live = {}
+            anomalies.append(f"Evolution API unreachable: {e}")
+        evo_lines = []
+        for ch in self.search([], order='id'):
+            if not ch.evolution_instance_name:
+                continue
+            live_state = live.get(ch.evolution_instance_name, '?')
+            db_state = ch.state
+            match = '✅' if live_state == db_state == 'connected' else '⚠'
+            evo_lines.append(
+                f"{match} {ch.name} (id {ch.id}): Odoo={db_state} Evolution={live_state}"
+            )
+            if live_state and live_state != 'connected':
+                anomalies.append(f"Channel {ch.name} not connected (live={live_state})")
+        sections.append(("Canais", "<br>".join(evo_lines)))
+
+        # === 2. Volume hora a hora ===
+        Message = self.env['bader.inbox.message'].sudo()
+        prev_h_start = now - timedelta(hours=2)
+        prev_h_end = now - timedelta(hours=1)
+        cur_h_start = now - timedelta(hours=1)
+        prev_count = Message.search_count([
+            ('create_date', '>=', prev_h_start),
+            ('create_date', '<', prev_h_end),
+        ])
+        cur_count = Message.search_count([('create_date', '>=', cur_h_start)])
+        delta_pct = ((cur_count - prev_count) / prev_count * 100) if prev_count else 0
+        delta_str = f"{delta_pct:+.0f}%" if prev_count else "n/a"
+        sections.append((
+            "Volume",
+            f"Última hora: <b>{cur_count}</b> msgs &nbsp; · &nbsp; "
+            f"Hora anterior: {prev_count} msgs &nbsp; · &nbsp; Delta: {delta_str}",
+        ))
+        if prev_count >= 10 and cur_count < prev_count * 0.3:
+            anomalies.append(
+                f"Volume caiu >70% ({prev_count} → {cur_count} msgs/h)"
+            )
+
+        # === 3. Outbound falhadas última hora ===
+        failed = Message.search_count([
+            ('create_date', '>=', cur_h_start),
+            ('direction', '=', 'out'),
+            ('status', '=', 'failed'),
+        ])
+        out_total = Message.search_count([
+            ('create_date', '>=', cur_h_start),
+            ('direction', '=', 'out'),
+        ])
+        if failed:
+            sections.append((
+                "Falhas saída",
+                f"<b>{failed}</b> failed de {out_total} outbound ({failed/max(out_total,1)*100:.0f}%)",
+            ))
+            if failed >= 3 and failed >= out_total * 0.1:
+                anomalies.append(f"{failed} mensagens falhadas última hora")
+
+        # === 4. Crons bader_inbox ===
+        Cron = self.env['ir.cron'].sudo()
+        broken_crons = Cron.search([
+            ('model_id.model', 'like', 'bader_inbox'),
+            '|',
+            ('active', '=', False),
+            ('nextcall', '<', now - timedelta(minutes=15)),
+        ])
+        if broken_crons:
+            anomalies.append(f"{len(broken_crons)} cron(s) bader_inbox parado(s)")
+            sections.append((
+                "Crons",
+                "<br>".join(f"⚠ {c.name}" for c in broken_crons),
+            ))
+        else:
+            sections.append(("Crons", "✅ todos OK"))
+
+        # === 5. Tickets abertos ===
+        Ticket = self.env['bader.inbox.ticket'].sudo()
+        open_tickets = Ticket.search_count([
+            ('state', 'in', ['new', 'analyzing', 'in_progress', 'waiting_info']),
+        ])
+        sections.append((
+            "Tickets",
+            f"{open_tickets} abertos",
+        ))
+
+        # === 6. Webhooks pending Evolution ===
+        # Já incluído no health summary se existir, manter simples
+
+        # === Build note HTML ===
+        verdict = "🟢 OK" if not anomalies else f"🚨 {len(anomalies)} anomalia(s)"
+        prefix = "⚠ " if anomalies else ""
+        summary = (
+            f"{prefix}{self._HOURLY_ANALYSIS_MARKER} "
+            f"{now.strftime('%Y-%m-%d %H:%M UTC')} — {verdict}"
+        )
+
+        body = [f"<h3>Análise horária Bader Inbox — {verdict}</h3>"]
+        if anomalies:
+            body.append("<h4>⚠ Anomalias</h4><ul>")
+            for a in anomalies:
+                body.append(f"<li>{a}</li>")
+            body.append("</ul>")
+        for title, content in sections:
+            body.append(f"<h4>{title}</h4><p>{content}</p>")
+
+        warning_type = self.env.ref(
+            'mail.mail_activity_data_warning', raise_if_not_found=False
+        )
+        Activity.create({
+            'res_model': 'res.partner',
+            'res_model_id': model_partner_id,
+            'res_id': admin_partner_id,
+            'activity_type_id': warning_type.id if warning_type else False,
+            'summary': summary[:200],
+            'note': "".join(body),
+            'user_id': admin.id,
+            'date_deadline': fields.Date.today(),
+        })
+        _logger.info(
+            "cron_hourly_analysis: %s, %d anomalies, %d msgs in last hour",
+            verdict, len(anomalies), cur_count,
+        )
 
     @api.model
     def cron_health_alert(self):
